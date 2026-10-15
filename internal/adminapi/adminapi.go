@@ -58,6 +58,9 @@ type Deps struct {
 	Kicks DeviceKicker
 	// Events publishes live events such as device.updated (nil: none).
 	Events EventPublisher
+	// DeviceRate is the effective per-IP limit of the unauthenticated device
+	// endpoints (shown read-only in /settings).
+	DeviceRate DeviceRateInfo
 	// ---- stream B2b: address books, audit, server (hbbs/hbbr) ----
 	// PresenceSrc is the live device presence (nil: devices report offline and
 	// /server/health reports the heartbeat fallback).
@@ -70,6 +73,12 @@ type Deps struct {
 	// ConsoleLimit caps raw console commands per admin per minute (default 30).
 	ConsoleLimit int
 	// ---- end stream B2b ----
+}
+
+// DeviceRateInfo is a token bucket: Rate requests per second, bursts of Burst.
+type DeviceRateInfo struct {
+	Rate  float64
+	Burst int
 }
 
 // Register mounts the admin API on r (already scoped to /api/v1/admin).

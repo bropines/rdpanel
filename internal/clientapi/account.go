@@ -109,6 +109,13 @@ func (h *handler) login(w http.ResponseWriter, r *http.Request) {
 			fail(u, "disabled", "User is disabled")
 			return
 		}
+		if allowed, err := h.st.Settings.PasswordLoginAllowed(r.Context(), u); err != nil {
+			internalError(w)
+			return
+		} else if !allowed {
+			fail(u, "password_login_disabled", "Password login is disabled, sign in with an identity provider")
+			return
+		}
 		enrolled, err := h.TOTP.Enrolled(r.Context(), u.ID)
 		if err != nil {
 			h.log.ErrorContext(r.Context(), "totp enrolled", slog.Any("err", err))

@@ -115,6 +115,17 @@ func (c *authCore) registerAuth(r chi.Router) {
 	r.With(requireSession).Get("/auth/me", c.handleMe)
 	r.Get("/auth/providers", c.handleProviders)
 	r.Post("/auth/oidc/{slug}/start", c.handleOIDCStart)
+	r.Get("/auth/oidc/complete", c.handleOIDCComplete)
+}
+
+// handleOIDCComplete finishes a panel OIDC login/link on the admin host
+// (hand-off from the public-host callback, see oidc.Service.CompleteWeb).
+func (c *authCore) handleOIDCComplete(w http.ResponseWriter, r *http.Request) {
+	if c.d.OIDC == nil {
+		http.Redirect(w, r, "/login?error=oidc_failed", http.StatusFound)
+		return
+	}
+	c.d.OIDC.CompleteWeb(w, r)
 }
 
 func (c *authCore) handleCSRF(w http.ResponseWriter, r *http.Request) {
@@ -188,6 +199,17 @@ func (c *authCore) handleLogin(w http.ResponseWriter, r *http.Request) {
 		}
 		c.record(ctx, r, ev)
 		httpx.WriteError(w, http.StatusUnauthorized, "invalid_credentials", msgBadCredentials)
+		return
+	}
+	// Checked after the password so the answer reveals nothing to guessers.
+	if allowed, err := c.d.Store.Settings.PasswordLoginAllowed(ctx, user); err != nil {
+		internalError(w)
+		return
+	} else if !allowed {
+		c.record(ctx, r, loginlog.Event{UserID: &user.ID, Method: loginlog.MethodPassword,
+			UsernameAttempted: req.Username, FailureReason: "password_login_disabled"})
+		httpx.WriteError(w, http.StatusForbidden, "password_login_disabled",
+			"password sign-in is disabled; use an identity provider")
 		return
 	}
 	if c.d.Hasher.NeedsRehash(user.PasswordHash) {
@@ -333,7 +355,7 @@ func (c *authCore) handleProviders(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
-	httpx.WriteJSON(w, http.StatusOK, out)
+	httpx.WriteJSON(w, http.StatusOK, itemsDTO[providerOptionDTO]{Items: out})
 }
 
 type oidcStartRequest struct {

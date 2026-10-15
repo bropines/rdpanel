@@ -2,6 +2,8 @@ package oidc
 
 import (
 	"context"
+	"crypto/subtle"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"html"
@@ -11,7 +13,9 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
 
+	"github.com/bropines/rustdesk-panel/internal/auth"
 	"github.com/bropines/rustdesk-panel/internal/crypto"
 	"github.com/bropines/rustdesk-panel/internal/httpx"
 	"github.com/bropines/rustdesk-panel/internal/loginlog"
@@ -66,23 +70,20 @@ func (s *Service) HandleCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if st.Flow == store.OAuthFlowWeb {
-		c, cerr := r.Cookie(BindingCookie)
-		s.clearBinding(w)
-		if cerr != nil || !crypto.EqualString(c.Value, state) {
-			s.webFail(w, r, st, errMismatch)
+	if err := s.st.OAuthStates.Claim(ctx, st.ID); err != nil {
+		if st.Flow == store.OAuthFlowWeb {
+			s.webFail(w, r, s.adminURL, st, errExpired)
 			return
 		}
-		if err := s.st.OAuthStates.Consume(ctx, st.ID); err != nil {
-			s.webFail(w, r, st, errExpired)
-			return
-		}
-	} else if err := s.st.OAuthStates.Claim(ctx, st.ID); err != nil {
 		s.page(w, http.StatusBadRequest, errExpired.Msg)
 		return
 	}
 
 	prov, profile, err := s.complete(ctx, st, q)
+	if st.Flow == store.OAuthFlowWeb {
+		s.handoff(w, r, st, prov, profile, err)
+		return
+	}
 	if err == nil {
 		switch st.Action {
 		case store.OAuthLogin:
@@ -91,15 +92,20 @@ func (s *Service) HandleCallback(w http.ResponseWriter, r *http.Request) {
 				s.finishLogin(w, r, st, prov, user)
 				return
 			}
-		case store.OAuthBind:
-			if err = s.bind(ctx, st, prov, profile); err == nil {
-				http.Redirect(w, r, withQuery(SafeRedirectPath(st.RedirectPath, DefaultBindReturn), "linked", prov.Slug), http.StatusFound)
-				return
-			}
 		default:
 			err = errFailed
 		}
 	}
+	fe := s.failed(ctx, r, st, prov, profile, err)
+	if cerr := s.st.OAuthStates.Complete(ctx, st.ID, nil, fe.Msg); cerr != nil {
+		s.log.WarnContext(ctx, "oidc callback: complete state", slog.Any("err", cerr))
+	}
+	s.page(w, http.StatusOK, fe.Msg)
+}
+
+// failed logs and records a failed flow and returns its flowError.
+func (s *Service) failed(ctx context.Context, r *http.Request, st *store.OAuthState, prov *store.IdentityProvider,
+	profile *Profile, err error) *flowError {
 	fe := asFlowError(err)
 	if fe == errFailed {
 		s.log.WarnContext(ctx, "oidc login failed", slog.String("provider", provSlug(prov)), slog.Any("err", err))
@@ -111,14 +117,105 @@ func (s *Service) HandleCallback(w http.ResponseWriter, r *http.Request) {
 		}
 		s.recordEvent(ctx, st, nil, nil, uname, false, "oidc_"+fe.Code, r)
 	}
-	if st.Flow == store.OAuthFlowWeb {
-		s.webFail(w, r, st, fe)
+	return fe
+}
+
+// HandoffTTL bounds the hand-off ticket of a panel flow (callback on the
+// public host → GET /api/v1/admin/auth/oidc/complete on the admin host).
+const HandoffTTL = 2 * time.Minute
+
+// HandoffPath is the admin-host endpoint completing panel flows.
+const HandoffPath = "/api/v1/admin/auth/oidc/complete"
+
+// handoff ends the public-host half of a panel flow: on IdP success it stores
+// the profile with a single-use ticket and redirects the browser to the admin
+// host, which verifies the binding cookie (CompleteWeb). Nothing is linked and
+// no session is created here.
+func (s *Service) handoff(w http.ResponseWriter, r *http.Request, st *store.OAuthState, prov *store.IdentityProvider,
+	profile *Profile, err error) {
+	ctx := r.Context()
+	if err != nil {
+		fe := s.failed(ctx, r, st, prov, profile, err)
+		if cerr := s.st.OAuthStates.Complete(ctx, st.ID, nil, fe.Code); cerr != nil {
+			s.log.WarnContext(ctx, "oidc callback: complete state", slog.Any("err", cerr))
+		}
+		s.webFail(w, r, s.adminURL, st, fe)
 		return
 	}
-	if cerr := s.st.OAuthStates.Complete(ctx, st.ID, nil, fe.Msg); cerr != nil {
-		s.log.WarnContext(ctx, "oidc callback: complete state", slog.Any("err", cerr))
+	raw, err := json.Marshal(profile)
+	if err != nil {
+		s.webFail(w, r, s.adminURL, st, errFailed)
+		return
 	}
-	s.page(w, http.StatusOK, fe.Msg)
+	ticket, err := auth.NewOpaqueToken()
+	if err != nil {
+		s.webFail(w, r, s.adminURL, st, errFailed)
+		return
+	}
+	if err := s.st.OAuthStates.SetHandoff(ctx, st.ID, string(raw), "", ticket.Hash, s.now().Add(HandoffTTL)); err != nil {
+		s.webFail(w, r, s.adminURL, st, errExpired)
+		return
+	}
+	w.Header().Set("Cache-Control", "no-store")
+	w.Header().Set("Referrer-Policy", "no-referrer")
+	http.Redirect(w, r, s.adminURL+HandoffPath+"?ticket="+url.QueryEscape(ticket.Plain), http.StatusFound)
+}
+
+// CompleteWeb serves GET /api/v1/admin/auth/oidc/complete?ticket=… on the
+// admin host: it consumes the single-use ticket, verifies the browser-binding
+// cookie against the flow (constant time) and then signs the user in or links
+// the identity, redirecting into the SPA.
+func (s *Service) CompleteWeb(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	w.Header().Set("Cache-Control", "no-store")
+	w.Header().Set("Referrer-Policy", "no-referrer")
+	ticket := r.URL.Query().Get("ticket")
+	cookie, cerr := r.Cookie(BindingCookie)
+	s.clearBinding(w)
+	if ticket == "" || len(ticket) > 256 {
+		http.Redirect(w, r, withQuery(LoginErrorPath, "error", "oidc_"+errExpired.Code), http.StatusFound)
+		return
+	}
+	st, err := s.st.OAuthStates.TakeHandoff(ctx, crypto.HashToken(ticket))
+	if err != nil {
+		if !errors.Is(err, store.ErrNotFound) {
+			s.log.ErrorContext(ctx, "oidc complete: load state", slog.Any("err", err))
+		}
+		http.Redirect(w, r, withQuery(LoginErrorPath, "error", "oidc_"+errExpired.Code), http.StatusFound)
+		return
+	}
+	if st.Flow != store.OAuthFlowWeb || len(st.BindingSHA256) != 32 || cerr != nil || cookie.Value == "" ||
+		subtle.ConstantTimeCompare(crypto.HashToken(cookie.Value), st.BindingSHA256) != 1 {
+		s.webFail(w, r, "", st, errMismatch)
+		return
+	}
+	var profile Profile
+	var prov *store.IdentityProvider
+	if st.ProviderID != nil {
+		prov, err = s.st.IdentityProviders.Get(ctx, *st.ProviderID)
+	}
+	if st.ProviderID == nil || err != nil || !prov.Enabled || json.Unmarshal([]byte(st.ProfileJSON), &profile) != nil ||
+		profile.Subject == "" {
+		s.webFail(w, r, "", st, errFailed)
+		return
+	}
+	switch st.Action {
+	case store.OAuthLogin:
+		user, err := s.resolveLogin(ctx, prov, &profile)
+		if err == nil {
+			s.finishLogin(w, r, st, prov, user)
+			return
+		}
+		s.webFail(w, r, "", st, s.failed(ctx, r, st, prov, &profile, err))
+	case store.OAuthBind:
+		if err := s.bind(ctx, st, prov, &profile); err != nil {
+			s.webFail(w, r, "", st, s.failed(ctx, r, st, prov, &profile, err))
+			return
+		}
+		http.Redirect(w, r, withQuery(SafeRedirectPath(st.RedirectPath, DefaultBindReturn), "linked", prov.Slug), http.StatusFound)
+	default:
+		s.webFail(w, r, "", st, errFailed)
+	}
 }
 
 func provSlug(p *store.IdentityProvider) string {
@@ -318,7 +415,7 @@ func (s *Service) finishLogin(w http.ResponseWriter, r *http.Request, st *store.
 	if st.Flow == store.OAuthFlowWeb {
 		s.recordEvent(ctx, st, &user.ID, nil, user.Username, true, "", r)
 		if s.webLogin == nil {
-			s.webFail(w, r, st, errFailed)
+			s.webFail(w, r, "", st, errFailed)
 			return
 		}
 		s.webLogin(w, r, user, SafeRedirectPath(st.RedirectPath, "/"))
@@ -335,12 +432,14 @@ func (s *Service) finishLogin(w http.ResponseWriter, r *http.Request, st *store.
 // LoginErrorPath is the SPA route panel OIDC failures redirect to.
 const LoginErrorPath = "/login"
 
-func (s *Service) webFail(w http.ResponseWriter, r *http.Request, st *store.OAuthState, fe *flowError) {
+// webFail redirects a failed panel flow back into the SPA; base is the admin
+// URL when answering on the public host ("" = relative, same host).
+func (s *Service) webFail(w http.ResponseWriter, r *http.Request, base string, st *store.OAuthState, fe *flowError) {
 	if st.Action == store.OAuthBind {
-		http.Redirect(w, r, withQuery(SafeRedirectPath(st.RedirectPath, DefaultBindReturn), "link_error", fe.Code), http.StatusFound)
+		http.Redirect(w, r, base+withQuery(SafeRedirectPath(st.RedirectPath, DefaultBindReturn), "link_error", fe.Code), http.StatusFound)
 		return
 	}
-	http.Redirect(w, r, withQuery(LoginErrorPath, "error", "oidc_"+fe.Code), http.StatusFound)
+	http.Redirect(w, r, base+withQuery(LoginErrorPath, "error", "oidc_"+fe.Code), http.StatusFound)
 }
 
 func (s *Service) recordEvent(ctx context.Context, st *store.OAuthState, userID, tokenID *int64, username string,

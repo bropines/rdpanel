@@ -83,6 +83,27 @@ func TestAllowIPs(t *testing.T) {
 	if rec.Code != http.StatusForbidden {
 		t.Fatalf("external allowed: %d", rec.Code)
 	}
+	// A proxy sending a different header than real_ip_header is still denied.
+	for _, hv := range [][2]string{{"X-Real-Ip", "198.51.100.1"}, {"Forwarded", `for="198.51.100.1:443";proto=https`},
+		{"Cf-Connecting-Ip", "garbage"}, {"X-Forwarded-For", "127.0.0.1, 198.51.100.1"}} {
+		req := httptest.NewRequest(http.MethodGet, "/metrics", nil)
+		req.RemoteAddr = "127.0.0.1:9"
+		req.Header.Set(hv[0], hv[1])
+		rec = httptest.NewRecorder()
+		h.ServeHTTP(rec, req)
+		if rec.Code != http.StatusForbidden {
+			t.Fatalf("%s %s allowed: %d", hv[0], hv[1], rec.Code)
+		}
+	}
+	// A local scrape through the proxy (forwarded address is loopback) is fine.
+	req = httptest.NewRequest(http.MethodGet, "/metrics", nil)
+	req.RemoteAddr = "127.0.0.1:9"
+	req.Header.Set("X-Real-Ip", "127.0.0.1")
+	rec = httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	if rec.Code != http.StatusTeapot {
+		t.Fatalf("local proxied scrape denied: %d", rec.Code)
+	}
 }
 
 func TestRecovererAndLogger(t *testing.T) {

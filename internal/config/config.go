@@ -32,6 +32,10 @@ type Config struct {
 	// PublicURL is the externally visible base URL (scheme://host[:port][/prefix])
 	// that RustDesk clients use as "API server". Used for OIDC redirect URIs and HSTS.
 	PublicURL string `yaml:"public_url"`
+	// AdminURL is the base URL of the panel (SPA + /api/v1/*) when it is served
+	// from a different host than PublicURL (e.g. an internal-only admin vhost).
+	// Panel-facing redirects (OIDC login/linking) use it. Default: PublicURL.
+	AdminURL string `yaml:"admin_url"`
 	// DataDir holds panel.db, secret.key and (by default) jwt.key.
 	DataDir string `yaml:"data_dir"`
 	// DBPath is the SQLite database file. Default: <DataDir>/panel.db.
@@ -216,6 +220,7 @@ func (c *Config) envVars() []envVar {
 	return []envVar{
 		{"RDPANEL_LISTEN", str(&c.Listen)},
 		{"RDPANEL_PUBLIC_URL", str(&c.PublicURL)},
+		{"RDPANEL_ADMIN_URL", str(&c.AdminURL)},
 		{"RDPANEL_DATA_DIR", str(&c.DataDir)},
 		{"RDPANEL_DB_PATH", str(&c.DBPath)},
 		{"RDPANEL_SECRET_KEY", sec(&c.SecretKey)},
@@ -282,6 +287,10 @@ func (c *Config) fillDerived() {
 		c.Auth.JWTLifetime = c.Auth.TokenLifetime
 	}
 	c.PublicURL = strings.TrimRight(c.PublicURL, "/")
+	c.AdminURL = strings.TrimRight(c.AdminURL, "/")
+	if c.AdminURL == "" {
+		c.AdminURL = c.PublicURL
+	}
 	c.HTTP.RealIPHeader = http.CanonicalHeaderKey(c.HTTP.RealIPHeader)
 	c.Log.Level = strings.ToLower(c.Log.Level)
 	c.Log.Format = strings.ToLower(c.Log.Format)
@@ -295,18 +304,26 @@ func (c *Config) Validate() error {
 	if _, _, err := net.SplitHostPort(c.Listen); err != nil {
 		add("listen %q: %v", c.Listen, err)
 	}
-	if c.PublicURL != "" {
-		u, err := url.Parse(c.PublicURL)
+	checkURL := func(name, v string) {
+		if v == "" {
+			return
+		}
+		u, err := url.Parse(v)
 		switch {
 		case err != nil:
-			add("public_url: %v", err)
+			add("%s: %v", name, err)
 		case u.Scheme != "http" && u.Scheme != "https":
-			add("public_url %q: scheme must be http or https", c.PublicURL)
+			add("%s %q: scheme must be http or https", name, v)
 		case u.Host == "":
-			add("public_url %q: missing host", c.PublicURL)
+			add("%s %q: missing host", name, v)
 		case u.RawQuery != "" || u.Fragment != "" || u.User != nil:
-			add("public_url %q: must not contain userinfo, query or fragment", c.PublicURL)
+			add("%s %q: must not contain userinfo, query or fragment", name, v)
 		}
+	}
+	checkURL("public_url", c.PublicURL)
+	checkURL("admin_url", c.AdminURL)
+	if c.AdminURL != "" && c.PublicURL == "" {
+		add("admin_url requires public_url (the OIDC redirect URI host)")
 	}
 	if c.DataDir == "" {
 		add("data_dir must not be empty")
@@ -384,8 +401,14 @@ func (h HBBSConfig) AdminAddr() string {
 // RelayAdminAddr returns the hbbr loopback admin address (same as the relay port).
 func (h HBBSConfig) RelayAdminAddr() string { return h.RelayServer }
 
-// HTTPS reports whether the public URL uses https (enables HSTS, Secure cookies).
-func (c *Config) HTTPS() bool { return strings.HasPrefix(c.PublicURL, "https://") }
+// HTTPS reports whether the public or the admin URL uses https (enables HSTS).
+func (c *Config) HTTPS() bool {
+	return strings.HasPrefix(c.PublicURL, "https://") || strings.HasPrefix(c.AdminURL, "https://")
+}
+
+// AdminHTTPS reports whether the panel (admin) URL uses https: panel cookies
+// (session, CSRF, OIDC binding) get the Secure attribute.
+func (c *Config) AdminHTTPS() bool { return strings.HasPrefix(c.AdminURL, "https://") }
 
 // Redacted renders the effective configuration as YAML with secrets redacted.
 func (c *Config) Redacted() ([]byte, error) {

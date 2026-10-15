@@ -82,6 +82,24 @@ func TestEnvOverridesFile(t *testing.T) {
 	}
 }
 
+func TestAdminURL(t *testing.T) {
+	cfg, err := Load(env(map[string]string{"RDPANEL_PUBLIC_URL": "https://pub.example/"}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.AdminURL != "https://pub.example" || !cfg.AdminHTTPS() {
+		t.Errorf("admin url defaults to public url: %q", cfg.AdminURL)
+	}
+	cfg, err = Load(env(map[string]string{"RDPANEL_PUBLIC_URL": "https://pub.example",
+		"RDPANEL_ADMIN_URL": "http://admin.internal:8080/"}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.AdminURL != "http://admin.internal:8080" || cfg.AdminHTTPS() || !cfg.HTTPS() {
+		t.Errorf("admin url = %q", cfg.AdminURL)
+	}
+}
+
 func TestUnknownYAMLFieldRejected(t *testing.T) {
 	file := filepath.Join(t.TempDir(), "c.yaml")
 	_ = os.WriteFile(file, []byte("lisen: :1\n"), 0o600)
@@ -111,6 +129,8 @@ func TestValidation(t *testing.T) {
 		"bad hbbs":       {"RDPANEL_HBBS_ID_SERVER": "localhost"},
 		"bad level":      {"RDPANEL_LOG_LEVEL": "trace"},
 		"bad secret":     {"RDPANEL_SECRET_KEY": base64.StdEncoding.EncodeToString(make([]byte, 16))},
+		"bad admin url":  {"RDPANEL_PUBLIC_URL": "https://x", "RDPANEL_ADMIN_URL": "https://y/#f"},
+		"admin w/o pub":  {"RDPANEL_ADMIN_URL": "https://y"},
 	}
 	for name, e := range cases {
 		t.Run(name, func(t *testing.T) {

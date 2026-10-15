@@ -534,9 +534,10 @@ func TestListAndRevokeSessions(t *testing.T) {
 	bob.login("bob", "correct horse")
 	req, _ := http.NewRequest(http.MethodGet, e.srv.URL+"/api/v1/admin/me/security/sessions", nil)
 	resp, _ := a.hc.Do(req)
-	var list []map[string]any
-	_ = json.NewDecoder(resp.Body).Decode(&list)
+	var env struct{ Items []map[string]any }
+	_ = json.NewDecoder(resp.Body).Decode(&env)
 	resp.Body.Close()
+	list := env.Items
 	if len(list) != 2 {
 		t.Fatalf("sessions: %v", list)
 	}
@@ -600,7 +601,7 @@ func TestIdentityProvidersCRUD(t *testing.T) {
 	// Update without client_secret keeps it.
 	delete(body, "client_secret")
 	body["display_name"] = "Renamed"
-	code, m, _ = adm.do(http.MethodPut, "/identity-providers/"+id, body)
+	code, m, _ = adm.do(http.MethodPatch, "/identity-providers/"+id, map[string]any{"display_name": "Renamed"})
 	if code != 200 || m["display_name"] != "Renamed" || m["has_client_secret"] != true {
 		t.Fatalf("update: %d %v", code, m)
 	}
@@ -616,9 +617,10 @@ func TestIdentityProvidersCRUD(t *testing.T) {
 	}
 	// Public provider list for the login page.
 	resp, _ := anon.hc.Get(e.srv.URL + "/api/v1/admin/auth/providers")
-	var opts []map[string]any
-	_ = json.NewDecoder(resp.Body).Decode(&opts)
+	var optEnv struct{ Items []map[string]any }
+	_ = json.NewDecoder(resp.Body).Decode(&optEnv)
 	resp.Body.Close()
+	opts := optEnv.Items
 	if len(opts) != 1 || opts[0]["slug"] != "authentik" {
 		t.Fatalf("providers: %v", opts)
 	}
@@ -660,6 +662,22 @@ func (c *client) oidcLogin(next string, id oidctest.Identity) *http.Response {
 		c.e.t.Fatal(err)
 	}
 	resp, err := c.hc.Get(c.e.srv.URL + "/api/oidc/callback?" + q.Encode())
+	if err != nil {
+		c.e.t.Fatal(err)
+	}
+	resp.Body.Close()
+	return c.followHandoff(resp)
+}
+
+// followHandoff follows the callback's redirect to the admin-host completion
+// endpoint (the test server serves both hosts).
+func (c *client) followHandoff(resp *http.Response) *http.Response {
+	c.e.t.Helper()
+	loc, err := url.Parse(resp.Header.Get("Location"))
+	if err != nil || loc.Path != "/api/v1/admin/auth/oidc/complete" {
+		return resp
+	}
+	resp, err = c.hc.Get(c.e.srv.URL + loc.RequestURI())
 	if err != nil {
 		c.e.t.Fatal(err)
 	}
@@ -727,15 +745,18 @@ func TestLinkAndUnlinkIdentity(t *testing.T) {
 	q, _ := e.idp.Authorize(m["url"].(string), oidctest.Identity{Subject: "alice-sub", Email: "a@example.test", EmailVerified: true})
 	resp, _ := c.hc.Get(e.srv.URL + "/api/oidc/callback?" + q.Encode())
 	resp.Body.Close()
-	if resp.Header.Get("Location") != "/my/security?linked=authentik" {
+	resp = c.followHandoff(resp)
+	if resp.Header.Get("Location") != "/my/profile?linked=authentik" {
 		t.Fatalf("link: %s", resp.Header.Get("Location"))
 	}
 	req, _ := http.NewRequest(http.MethodGet, e.srv.URL+"/api/v1/admin/me/security/identities", nil)
 	resp, _ = c.hc.Do(req)
-	var ids []map[string]any
-	_ = json.NewDecoder(resp.Body).Decode(&ids)
+	var idEnv struct{ Items []map[string]any }
+	_ = json.NewDecoder(resp.Body).Decode(&idEnv)
 	resp.Body.Close()
-	if len(ids) != 1 || ids[0]["provider_slug"] != "authentik" || ids[0]["subject"] != "alice-sub" {
+	ids := idEnv.Items
+	if len(ids) != 1 || ids[0]["provider_slug"] != "authentik" || ids[0]["subject"] != "alice-sub" ||
+		ids[0]["provider_name"] == nil {
 		t.Fatalf("identities: %v", ids)
 	}
 	if code, _, _ := c.do(http.MethodDelete, "/me/security/identities/"+jsonNum(ids[0]["id"].(float64)), nil); code != 204 {
@@ -752,5 +773,68 @@ func TestLinkAndUnlinkIdentity(t *testing.T) {
 	list, _ := e.st.UserIdentities.ListForUser(ctx, only.ID)
 	if code, m, _ := c2.do(http.MethodDelete, "/me/security/identities/"+jsonNum(float64(list[0].ID)), nil); code != 409 {
 		t.Fatalf("last method: %d %v", code, m)
+	}
+}
+
+func TestRuntimeAuthSettingsEnforced(t *testing.T) {
+	e := newTEnv(t)
+	ctx := context.Background()
+	alice := e.user("alice", "correct horse", store.RoleUser)
+	e.user("root", "correct horse", store.RoleAdmin)
+
+	// Session lifetimes from the settings apply to new sessions.
+	_ = e.st.Settings.Set(ctx, store.SettingSessionAbsoluteDays, 2, nil)
+	_ = e.st.Settings.Set(ctx, store.SettingSessionIdleHours, 3, nil)
+	if code, _ := e.client().login("alice", "correct horse"); code != 200 {
+		t.Fatalf("login: %d", code)
+	}
+	toks, _ := e.st.AuthTokens.ListActiveForUser(ctx, alice.ID, store.TokenWeb)
+	if len(toks) != 1 || toks[0].AbsoluteExpiresAt == nil ||
+		!toks[0].AbsoluteExpiresAt.Equal(e.clk.now().Add(48*time.Hour)) || !toks[0].ExpiresAt.Equal(e.clk.now().Add(3*time.Hour)) {
+		t.Fatalf("lifetimes: %+v", toks)
+	}
+
+	// Password login disabled: users are refused (after the password check),
+	// admins keep break-glass access.
+	_ = e.st.Settings.Set(ctx, store.SettingPasswordLoginEnabled, false, nil)
+	if code, m := e.client().login("alice", "wrong"); code != 401 {
+		t.Fatalf("wrong password must stay generic: %d %v", code, m)
+	}
+	if code, m := e.client().login("alice", "correct horse"); code != 403 || errCode(m) != "password_login_disabled" {
+		t.Fatalf("disabled: %d %v", code, m)
+	}
+	if code, _ := e.client().login("root", "correct horse"); code != 200 {
+		t.Fatalf("admin break-glass: %d", code)
+	}
+}
+
+func TestProfileAndRevokeOthers(t *testing.T) {
+	e := newTEnv(t)
+	e.user("alice", "correct horse", store.RoleUser)
+	a, b := e.client(), e.client()
+	a.login("alice", "correct horse")
+	b.login("alice", "correct horse")
+	code, m, _ := a.do(http.MethodPatch, "/me", map[string]any{"display_name": " Alice A ", "email": "a@example.test"})
+	if code != 200 || m["display_name"] != "Alice A" || m["email"] != "a@example.test" {
+		t.Fatalf("profile: %d %v", code, m)
+	}
+	if code, m, _ := a.do(http.MethodPatch, "/me", map[string]any{"email": "not an email"}); code != 400 {
+		t.Fatalf("bad email: %d %v", code, m)
+	}
+	if code, m, _ := a.do(http.MethodPatch, "/me", map[string]any{"role": "admin"}); code != 400 {
+		t.Fatalf("role must not be settable: %d %v", code, m)
+	}
+	if code, m, _ := a.do(http.MethodPatch, "/me", map[string]any{"email": nil}); code != 200 || m["email"] != nil {
+		t.Fatalf("clear email: %d %v", code, m)
+	}
+	code, m, _ = a.do(http.MethodPost, "/me/security/sessions/revoke-others", nil)
+	if code != 200 || m["revoked"] != float64(1) {
+		t.Fatalf("revoke-others: %d %v", code, m)
+	}
+	if code, _, _ := b.do(http.MethodGet, "/auth/me", nil); code != 401 {
+		t.Fatalf("other session must be revoked: %d", code)
+	}
+	if code, _, _ := a.do(http.MethodGet, "/auth/me", nil); code != 200 {
+		t.Fatalf("current session must survive: %d", code)
 	}
 }

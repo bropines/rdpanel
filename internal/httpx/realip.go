@@ -118,19 +118,75 @@ func ClientIPString(r *http.Request) string {
 	return a.String()
 }
 
+// forwardingHeaders are the headers proxies use to pass the client address.
+var forwardingHeaders = []string{"X-Forwarded-For", "X-Real-Ip", "Cf-Connecting-Ip", "True-Client-Ip", "Forwarded"}
+
+// forwardedAddrs returns every address named by forwarding headers and
+// whether all of them could be parsed.
+func forwardedAddrs(h http.Header) ([]netip.Addr, bool) {
+	var out []netip.Addr
+	ok := true
+	for _, name := range forwardingHeaders {
+		for _, v := range h.Values(name) {
+			for _, part := range strings.Split(v, ",") {
+				if name == "Forwarded" {
+					// for=192.0.2.1;proto=https, for="[2001:db8::1]:443"
+					for _, kv := range strings.Split(part, ";") {
+						k, val, has := strings.Cut(strings.TrimSpace(kv), "=")
+						if !has || !strings.EqualFold(k, "for") {
+							continue
+						}
+						a, err := parseAddr(strings.Trim(val, `"`))
+						if err != nil {
+							ok = false // obfuscated identifiers ("_hidden", "unknown") are not local
+							continue
+						}
+						out = append(out, a)
+					}
+					continue
+				}
+				a, err := parseAddr(part)
+				if err != nil {
+					ok = false
+					continue
+				}
+				out = append(out, a)
+			}
+		}
+	}
+	return out, ok
+}
+
 // AllowIPs returns middleware rejecting (403) clients whose resolved IP is
-// outside allowed. Used for /metrics.
+// outside allowed. Used for /metrics. Defence in depth for deployments behind
+// a loopback reverse proxy: every address in any forwarding header
+// (X-Forwarded-For, X-Real-IP, CF-Connecting-IP, True-Client-IP, Forwarded)
+// must also be allowed, so a proxied request is never mistaken for a local
+// scraper even when the proxy uses a different header than real_ip_header.
 func AllowIPs(allowed []netip.Prefix) func(http.Handler) http.Handler {
+	in := func(ip netip.Addr) bool {
+		for _, p := range allowed {
+			if ip.IsValid() && p.Contains(ip) {
+				return true
+			}
+		}
+		return false
+	}
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			ip := ClientIP(r)
-			for _, p := range allowed {
-				if ip.IsValid() && p.Contains(ip) {
-					next.ServeHTTP(w, r)
-					return
+			ok := in(ClientIP(r))
+			if ok {
+				fwd, parsed := forwardedAddrs(r.Header)
+				ok = parsed
+				for _, a := range fwd {
+					ok = ok && in(a)
 				}
 			}
-			WriteError(w, http.StatusForbidden, "forbidden", "forbidden")
+			if !ok {
+				WriteError(w, http.StatusForbidden, "forbidden", "forbidden")
+				return
+			}
+			next.ServeHTTP(w, r)
 		})
 	}
 }

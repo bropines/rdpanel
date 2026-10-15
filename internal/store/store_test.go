@@ -249,20 +249,20 @@ func TestSettings(t *testing.T) {
 	if _, err := s.Settings.GetRaw(ctx, "nope"); !errors.Is(err, ErrNotFound) {
 		t.Fatal(err)
 	}
-	v, err := GetOr(ctx, s.Settings, SettingRetentionDays, 90)
+	v, err := GetOr(ctx, s.Settings, SettingSessionIdleHours, 90)
 	if err != nil || v != 90 {
 		t.Fatalf("default: %d %v", v, err)
 	}
-	if err := s.Settings.Set(ctx, SettingRetentionDays, 30, nil); err != nil {
+	if err := s.Settings.Set(ctx, SettingSessionIdleHours, 30, nil); err != nil {
 		t.Fatal(err)
 	}
 	if err := s.Settings.Set(ctx, SettingBrandingTitle, "My Desk", nil); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.Settings.Set(ctx, SettingRetentionDays, 14, nil); err != nil {
+	if err := s.Settings.Set(ctx, SettingSessionIdleHours, 14, nil); err != nil {
 		t.Fatal(err)
 	}
-	v, _ = GetOr(ctx, s.Settings, SettingRetentionDays, 90)
+	v, _ = GetOr(ctx, s.Settings, SettingSessionIdleHours, 90)
 	if v != 14 {
 		t.Fatalf("upsert: %d", v)
 	}

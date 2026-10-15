@@ -24,7 +24,10 @@ import (
 	"github.com/bropines/rustdesk-panel/internal/store"
 )
 
-const publicURL = "https://desk.example.test"
+const (
+	publicURL = "https://desk.example.test"
+	adminURL  = "https://admin.example.test"
+)
 
 type clock struct {
 	mu sync.Mutex
@@ -84,7 +87,7 @@ func newEnv(t *testing.T, mutate func(p *store.IdentityProvider)) *env {
 		PKCEEnabled: true, PKCEMethod: "S256", Enabled: true, AutoRegister: true, SortOrder: 1}
 	e.addProvider(aead, e.ghProv, "gh-secret")
 
-	e.svc = oidc.NewService(oidc.Options{Store: st, AEAD: aead, JWT: jwtSvc, PublicURL: publicURL,
+	e.svc = oidc.NewService(oidc.Options{Store: st, AEAD: aead, JWT: jwtSvc, PublicURL: publicURL, AdminURL: adminURL,
 		TokenLifetime: time.Hour, JWTLifetime: time.Hour,
 		GitHub: &oidc.GitHubEndpoints{AuthURL: e.gh.Server.URL + "/login/oauth/authorize",
 			TokenURL: e.gh.Server.URL + "/login/oauth/access_token", APIURL: e.gh.Server.URL},
@@ -439,15 +442,38 @@ func TestGitHubFlow(t *testing.T) {
 	}
 }
 
+// handoffTicket checks that a panel callback redirected to the admin host's
+// completion endpoint and returns the ticket.
+func handoffTicket(t *testing.T, rec *httptest.ResponseRecorder) string {
+	t.Helper()
+	loc := rec.Header().Get("Location")
+	u, err := url.Parse(loc)
+	if rec.Code != http.StatusFound || err != nil || adminURL+oidc.HandoffPath != u.Scheme+"://"+u.Host+u.Path {
+		t.Fatalf("callback must hand off to the admin host: %d %s", rec.Code, loc)
+	}
+	return u.Query().Get("ticket")
+}
+
+// complete calls the admin-host completion endpoint.
+func (e *env) complete(ticket string, cookies ...*http.Cookie) *httptest.ResponseRecorder {
+	req := httptest.NewRequest(http.MethodGet, oidc.HandoffPath+"?ticket="+url.QueryEscape(ticket), nil)
+	for _, c := range cookies {
+		req.AddCookie(c)
+	}
+	rec := httptest.NewRecorder()
+	e.svc.CompleteWeb(rec, req)
+	return rec
+}
+
 func TestWebFlowBrowserBinding(t *testing.T) {
 	e := newEnv(t, nil)
 	ctx := context.Background()
 	u := e.user("erin", "")
 	_ = e.st.UserIdentities.Create(ctx, &store.UserIdentity{UserID: u.ID, ProviderID: e.prov.ID, Subject: "erin"})
 
-	start := func() (string, *http.Cookie) {
+	start := func(next string) (string, *http.Cookie) {
 		rec := httptest.NewRecorder()
-		authURL, err := e.svc.BeginWebLogin(ctx, rec, "authentik", "/devices?x=1")
+		authURL, err := e.svc.BeginWebLogin(ctx, rec, "authentik", next)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -462,30 +488,61 @@ func TestWebFlowBrowserBinding(t *testing.T) {
 		}
 		return authURL, c
 	}
-	// Without the binding cookie (login CSRF): refused.
-	authURL, _ := start()
-	q, _ := e.idp.Authorize(authURL, oidctest.Identity{Subject: "erin"})
-	rec := e.callback(q)
-	if rec.Code != http.StatusFound || rec.Header().Get("Location") != "/login?error=oidc_session_mismatch" {
-		t.Fatalf("no cookie: %d %s", rec.Code, rec.Header().Get("Location"))
+	// The public-host callback never needs the cookie and never logs in.
+	callback := func(next string) (string, *http.Cookie) {
+		authURL, c := start(next)
+		q, _ := e.idp.Authorize(authURL, oidctest.Identity{Subject: "erin"})
+		return handoffTicket(t, e.callback(q)), c
 	}
-	// With it: WebLogin is called with the safe redirect path.
-	authURL, c := start()
-	q, _ = e.idp.Authorize(authURL, oidctest.Identity{Subject: "erin"})
-	rec = e.callback(q, c)
-	if rec.Code != http.StatusFound || rec.Header().Get("Location") != "/devices?x=1" || len(e.webUsers) != 1 || e.webUsers[0].ID != u.ID {
-		t.Fatalf("with cookie: %d %s %v", rec.Code, rec.Header().Get("Location"), e.webUsers)
+	loc := func(rec *httptest.ResponseRecorder) string { return rec.Header().Get("Location") }
+
+	// Missing cookie (login CSRF): refused, and the ticket is burnt.
+	ticket, c := callback("/devices?x=1")
+	if rec := e.complete(ticket); loc(rec) != "/login?error=oidc_session_mismatch" {
+		t.Fatalf("no cookie: %d %s", rec.Code, loc(rec))
+	}
+	if rec := e.complete(ticket, c); loc(rec) != "/login?error=oidc_expired" || len(e.webUsers) != 0 {
+		t.Fatalf("ticket reuse after mismatch: %s", loc(rec))
+	}
+	// Wrong cookie (another browser's flow).
+	ticket, _ = callback("/")
+	_, other := start("/")
+	if rec := e.complete(ticket, other); loc(rec) != "/login?error=oidc_session_mismatch" {
+		t.Fatalf("wrong cookie: %s", loc(rec))
+	}
+	// Expired ticket.
+	ticket, c = callback("/")
+	e.clk.advance(oidc.HandoffTTL + time.Second)
+	if rec := e.complete(ticket, c); loc(rec) != "/login?error=oidc_expired" {
+		t.Fatalf("expired: %s", loc(rec))
+	}
+	// Unknown ticket.
+	if rec := e.complete("nope", c); loc(rec) != "/login?error=oidc_expired" {
+		t.Fatalf("unknown: %s", loc(rec))
+	}
+	if len(e.webUsers) != 0 {
+		t.Fatalf("no login expected: %v", e.webUsers)
+	}
+	// Success: WebLogin is called with the safe redirect path; replay fails.
+	ticket, c = callback("/devices?x=1")
+	rec := e.complete(ticket, c)
+	if rec.Code != http.StatusFound || loc(rec) != "/devices?x=1" || len(e.webUsers) != 1 || e.webUsers[0].ID != u.ID {
+		t.Fatalf("with cookie: %d %s %v", rec.Code, loc(rec), e.webUsers)
+	}
+	if rec := e.complete(ticket, c); loc(rec) != "/login?error=oidc_expired" || len(e.webUsers) != 1 {
+		t.Fatalf("replay: %s", loc(rec))
 	}
 	// Open redirect attempt falls back to "/".
-	rec2 := httptest.NewRecorder()
-	authURL, err := e.svc.BeginWebLogin(ctx, rec2, "authentik", "//evil.example/x")
-	if err != nil {
-		t.Fatal(err)
+	ticket, c = callback("//evil.example/x")
+	if rec := e.complete(ticket, c); loc(rec) != "/" {
+		t.Fatalf("open redirect: %s", loc(rec))
 	}
-	q, _ = e.idp.Authorize(authURL, oidctest.Identity{Subject: "erin"})
-	rec = e.callback(q, rec2.Result().Cookies()[0])
-	if rec.Header().Get("Location") != "/" {
-		t.Fatalf("open redirect: %s", rec.Header().Get("Location"))
+	// IdP errors go straight back to the admin host's login page.
+	authURL, _ := start("/")
+	u2, _ := url.Parse(authURL)
+	rec = e.callback(url.Values{"state": {u2.Query().Get("state")}, "error": {"access_denied"}})
+	if loc(rec) != adminURL+"/login?error=oidc_denied" {
+		t.Fatalf("denied: %s", loc(rec))
 	}
 }
 
@@ -503,19 +560,20 @@ func TestBindFlow(t *testing.T) {
 			t.Fatal(err)
 		}
 		q, _ := e.idp.Authorize(authURL, oidctest.Identity{Subject: sub, Email: "f@example.test", EmailVerified: true})
-		return e.callback(q, rec.Result().Cookies()[0]).Header().Get("Location")
+		ticket := handoffTicket(t, e.callback(q))
+		return e.complete(ticket, rec.Result().Cookies()[0]).Header().Get("Location")
 	}
-	if loc := bind("taken"); loc != "/my/security?link_error=already_linked" {
+	if loc := bind("taken"); loc != "/my/profile?link_error=already_linked" {
 		t.Fatalf("taken: %s", loc)
 	}
-	if loc := bind("frank-sub"); loc != "/my/security?linked=authentik" {
+	if loc := bind("frank-sub"); loc != "/my/profile?linked=authentik" {
 		t.Fatalf("bind: %s", loc)
 	}
 	ident, err := e.st.UserIdentities.GetByProviderSubject(ctx, e.prov.ID, "frank-sub")
 	if err != nil || ident.UserID != frank.ID {
 		t.Fatalf("%v %+v", err, ident)
 	}
-	if loc := bind("frank-second"); loc != "/my/security?link_error=already_linked" {
+	if loc := bind("frank-second"); loc != "/my/profile?link_error=already_linked" {
 		t.Fatalf("second identity of same provider: %s", loc)
 	}
 }

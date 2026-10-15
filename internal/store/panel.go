@@ -13,7 +13,6 @@ import (
 // Panel settings keys managed by PATCH /settings (values are JSON). The
 // branding title/welcome and auth.require_admin_2fa keys are in settings.go.
 const (
-	SettingPublicURL              = "panel.public_url"
 	SettingBrandingWebClientURL   = "branding.web_client_url"
 	SettingPasswordLoginEnabled   = "auth.password_login_enabled"
 	SettingSessionIdleHours       = "auth.session_idle_hours"
@@ -25,10 +24,6 @@ const (
 	SettingRetentionAlarms        = "retention.alarm_audits_days"
 	SettingRetentionAdminAudit    = "retention.admin_audit_days"
 	SettingRetentionPunchRequests = "retention.punch_requests_days"
-	SettingRateLoginPerIP         = "rate_limits.login_per_ip_per_minute"
-	SettingRateLoginPerUser       = "rate_limits.login_per_user_per_minute"
-	SettingRateClientAPIPerIP     = "rate_limits.client_api_per_ip_per_minute"
-	SettingTrustedProxies         = "http.trusted_proxies"
 )
 
 // AssetLogo is the panel_assets name of the branding logo.

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"image"
 	_ "image/jpeg" // logo validation
@@ -16,6 +17,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/bropines/rustdesk-panel/internal/auth"
 	"github.com/bropines/rustdesk-panel/internal/config"
 	"github.com/bropines/rustdesk-panel/internal/httpx"
 	"github.com/bropines/rustdesk-panel/internal/store"
@@ -62,19 +64,27 @@ type retentionSettings struct {
 	PunchRequestsDays      int `json:"punch_requests_days"`
 }
 
-type rateLimitSettings struct {
-	LoginPerIPPerMinute     int `json:"login_per_ip_per_minute"`
-	LoginPerUserPerMinute   int `json:"login_per_user_per_minute"`
-	ClientAPIPerIPPerMinute int `json:"client_api_per_ip_per_minute"`
+// rateLimitInfo is the effective (read-only) rate limiting: exponential
+// backoff of failed logins (panel and client, per IP and per username) and the
+// token bucket of the unauthenticated device endpoints (per IP).
+type rateLimitInfo struct {
+	LoginFreeAttempts       int     `json:"login_free_attempts"`
+	LoginBaseDelaySeconds   int     `json:"login_base_delay_seconds"`
+	LoginMaxDelaySeconds    int     `json:"login_max_delay_seconds"`
+	DeviceRequestsPerSecond float64 `json:"device_requests_per_second"`
+	DeviceBurst             int     `json:"device_burst"`
 }
 
-// panelSettingsDTO is components.schemas.PanelSettings.
+// panelSettingsDTO is components.schemas.PanelSettings. public_url,
+// admin_url, trusted_proxies and rate_limits are read-only effective values
+// of the process configuration (environment / config file).
 type panelSettingsDTO struct {
 	PublicURL      string            `json:"public_url"`
+	AdminURL       string            `json:"admin_url"`
 	Branding       brandingSettings  `json:"branding"`
 	Auth           authSettings      `json:"auth"`
 	Retention      retentionSettings `json:"retention"`
-	RateLimits     rateLimitSettings `json:"rate_limits"`
+	RateLimits     rateLimitInfo     `json:"rate_limits"`
 	TrustedProxies []string          `json:"trusted_proxies"`
 }
 
@@ -89,10 +99,9 @@ type intSetting struct {
 func intSettings(cfg *config.Config) ([]intSetting, map[string]int) {
 	defs := map[string]int{
 		store.SettingSessionIdleHours: 12, store.SettingSessionAbsoluteDays: 7, store.SettingClientTokenLifetimeH: 4380,
-		store.SettingRetentionLoginEvents: 0, store.SettingRetentionConnections: 0,
-		store.SettingRetentionFileTransfers: 0, store.SettingRetentionAlarms: 0, store.SettingRetentionAdminAudit: 0,
-		store.SettingRetentionPunchRequests: 30,
-		store.SettingRateLoginPerIP:         10, store.SettingRateLoginPerUser: 5, store.SettingRateClientAPIPerIP: 120,
+	}
+	for c, d := range store.RetentionDefaults {
+		defs[store.RetentionSettingKey(c)] = d
 	}
 	if cfg != nil {
 		if h := int(cfg.Auth.SessionIdle / time.Hour); h >= 1 {
@@ -116,9 +125,6 @@ func intSettings(cfg *config.Config) ([]intSetting, map[string]int) {
 		{store.SettingRetentionAlarms, "retention.alarm_audits_days", 0, forever, func(s *panelSettingsDTO) *int { return &s.Retention.AlarmAuditsDays }},
 		{store.SettingRetentionAdminAudit, "retention.admin_audit_days", 0, forever, func(s *panelSettingsDTO) *int { return &s.Retention.AdminAuditDays }},
 		{store.SettingRetentionPunchRequests, "retention.punch_requests_days", 0, forever, func(s *panelSettingsDTO) *int { return &s.Retention.PunchRequestsDays }},
-		{store.SettingRateLoginPerIP, "rate_limits.login_per_ip_per_minute", 1, 100000, func(s *panelSettingsDTO) *int { return &s.RateLimits.LoginPerIPPerMinute }},
-		{store.SettingRateLoginPerUser, "rate_limits.login_per_user_per_minute", 1, 100000, func(s *panelSettingsDTO) *int { return &s.RateLimits.LoginPerUserPerMinute }},
-		{store.SettingRateClientAPIPerIP, "rate_limits.client_api_per_ip_per_minute", 1, 100000, func(s *panelSettingsDTO) *int { return &s.RateLimits.ClientAPIPerIPPerMinute }},
 	}, defs
 }
 
@@ -135,14 +141,18 @@ func (a *resources) loadSettings(ctx context.Context) (panelSettingsDTO, error) 
 			err = e
 		}
 	}
-	defURL := ""
-	var defProxies []string
 	if a.d.Config != nil {
-		defURL, defProxies = a.d.Config.PublicURL, a.d.Config.HTTP.TrustedProxies
+		s.PublicURL, s.AdminURL = a.d.Config.PublicURL, a.d.Config.AdminURL
+		if s.AdminURL == "" {
+			s.AdminURL = s.PublicURL
+		}
+		s.TrustedProxies = append([]string{}, a.d.Config.HTTP.TrustedProxies...)
 	}
+	bo := auth.DefaultBackoffConfig
+	s.RateLimits = rateLimitInfo{LoginFreeAttempts: bo.Free, LoginBaseDelaySeconds: int(bo.Base / time.Second),
+		LoginMaxDelaySeconds: int(bo.Max / time.Second), DeviceRequestsPerSecond: a.d.DeviceRate.Rate,
+		DeviceBurst: a.d.DeviceRate.Burst}
 	var e error
-	s.PublicURL, e = store.GetOr(ctx, st, store.SettingPublicURL, defURL)
-	errs(e)
 	s.Branding.Title, e = store.GetOr(ctx, st, store.SettingBrandingTitle, DefaultBrandingTitle)
 	errs(e)
 	s.Branding.WelcomeMarkdown, e = store.GetOr(ctx, st, store.SettingBrandingWelcome, "")
@@ -160,8 +170,6 @@ func (a *resources) loadSettings(ctx context.Context) (panelSettingsDTO, error) 
 		*is.field(&s), e = store.GetOr(ctx, st, is.key, defs[is.key])
 		errs(e)
 	}
-	s.TrustedProxies, e = store.GetOr(ctx, st, store.SettingTrustedProxies, defProxies)
-	errs(e)
 	if s.TrustedProxies == nil {
 		s.TrustedProxies = []string{}
 	}
@@ -179,8 +187,12 @@ func (a *resources) handleGetSettings(w http.ResponseWriter, r *http.Request) {
 
 // panelSettingsPatch is components.schemas.PanelSettingsPatch.
 type panelSettingsPatch struct {
-	PublicURL *string `json:"public_url"`
-	Branding  *struct {
+	// Read-only (configuration): present = 400 with a pointer to the env var.
+	PublicURL      json.RawMessage `json:"public_url"`
+	AdminURL       json.RawMessage `json:"admin_url"`
+	RateLimits     json.RawMessage `json:"rate_limits"`
+	TrustedProxies json.RawMessage `json:"trusted_proxies"`
+	Branding       *struct {
 		Title           *string     `json:"title"`
 		WelcomeMarkdown *string     `json:"welcome_markdown"`
 		WebClientURL    opt[string] `json:"web_client_url"`
@@ -200,12 +212,6 @@ type panelSettingsPatch struct {
 		AdminAuditDays         *int `json:"admin_audit_days"`
 		PunchRequestsDays      *int `json:"punch_requests_days"`
 	} `json:"retention"`
-	RateLimits *struct {
-		LoginPerIPPerMinute     *int `json:"login_per_ip_per_minute"`
-		LoginPerUserPerMinute   *int `json:"login_per_user_per_minute"`
-		ClientAPIPerIPPerMinute *int `json:"client_api_per_ip_per_minute"`
-	} `json:"rate_limits"`
-	TrustedProxies *[]string `json:"trusted_proxies"`
 }
 
 // intPatches maps the setting keys to the patched values (nil = unchanged).
@@ -219,10 +225,6 @@ func (p *panelSettingsPatch) intPatches() map[string]*int {
 		m[store.SettingRetentionLoginEvents], m[store.SettingRetentionConnections] = r.LoginEventsDays, r.ConnectionAuditsDays
 		m[store.SettingRetentionFileTransfers], m[store.SettingRetentionAlarms] = r.FileTransferAuditsDays, r.AlarmAuditsDays
 		m[store.SettingRetentionAdminAudit], m[store.SettingRetentionPunchRequests] = r.AdminAuditDays, r.PunchRequestsDays
-	}
-	if r := p.RateLimits; r != nil {
-		m[store.SettingRateLoginPerIP], m[store.SettingRateLoginPerUser] = r.LoginPerIPPerMinute, r.LoginPerUserPerMinute
-		m[store.SettingRateClientAPIPerIP] = r.ClientAPIPerIPPerMinute
 	}
 	return m
 }
@@ -244,12 +246,16 @@ func (a *resources) handleUpdateSettings(w http.ResponseWriter, r *http.Request)
 	f := map[string]string{}
 	set := map[string]any{} // key -> new value
 	var del []string        // keys to delete (reset to default)
-	if in.PublicURL != nil {
-		u := strings.TrimRight(strings.TrimSpace(*in.PublicURL), "/")
-		if !validHTTPURL(u, true) {
-			f["public_url"] = "must be an absolute http(s) URL without query or fragment"
+	for _, ro := range []struct {
+		field string
+		raw   json.RawMessage
+		env   string
+	}{{"public_url", in.PublicURL, "RDPANEL_PUBLIC_URL"}, {"admin_url", in.AdminURL, "RDPANEL_ADMIN_URL"},
+		{"trusted_proxies", in.TrustedProxies, "RDPANEL_TRUSTED_PROXIES"},
+		{"rate_limits", in.RateLimits, "the server configuration"}} {
+		if ro.raw != nil {
+			f[ro.field] = "read-only: set via " + ro.env
 		}
-		set[store.SettingPublicURL] = u
 	}
 	if b := in.Branding; b != nil {
 		if b.Title != nil {
@@ -297,19 +303,22 @@ func (a *resources) handleUpdateSettings(w http.ResponseWriter, r *http.Request)
 		}
 		set[is.key] = *v
 	}
-	if in.TrustedProxies != nil {
-		list := make([]string, 0, len(*in.TrustedProxies))
-		for _, p := range *in.TrustedProxies {
-			if p = strings.TrimSpace(p); p != "" {
-				list = append(list, p)
-			}
+	if idle, abs := patches[store.SettingSessionIdleHours], patches[store.SettingSessionAbsoluteDays]; idle != nil || abs != nil {
+		cur, err := a.loadSettings(ctx)
+		if err != nil {
+			a.fail500(w, r, "update settings", err)
+			return
 		}
-		if len(list) > 256 {
-			f["trusted_proxies"] = "at most 256 entries"
-		} else if _, err := config.ParsePrefixes(list); err != nil {
-			f["trusted_proxies"] = "every entry must be an IP address or CIDR"
+		i, d := cur.Auth.SessionIdleHours, cur.Auth.SessionAbsoluteDays
+		if idle != nil {
+			i = *idle
 		}
-		set[store.SettingTrustedProxies] = list
+		if abs != nil {
+			d = *abs
+		}
+		if i > d*24 {
+			f["auth.session_idle_hours"] = "must not exceed the absolute session lifetime"
+		}
 	}
 	if len(f) > 0 {
 		validationFailed(w, "invalid settings", f)

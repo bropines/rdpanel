@@ -12,8 +12,12 @@
 //   - the redirect URI is always <public_url>/api/oidc/callback, never derived
 //     from request headers;
 //   - client polls are bound to the requesting device id+uuid;
-//   - panel flows are bound to the browser by an HttpOnly cookie holding the
-//     state (login CSRF protection);
+//   - panel flows are bound to the browser by an HttpOnly cookie (only its
+//     sha256 is stored on the state row). The IdP returns to the public host;
+//     the callback stores the result and hands off to the admin host with a
+//     single-use ticket (HandoffTTL), where the cookie is verified before any
+//     session is created or identity linked (login CSRF protection, works when
+//     the panel and the client API are served from different hosts);
 //   - an identity is linked to an existing user by email only when the IdP
 //     asserts email_verified=true and the provider enables
 //     link_by_verified_email.
@@ -67,6 +71,9 @@ type Options struct {
 	Log   *slog.Logger
 	// PublicURL is the configured external base URL (no trailing slash).
 	PublicURL string
+	// AdminURL is the panel base URL (default PublicURL); panel flows are
+	// handed off there after the IdP callback.
+	AdminURL string
 	// TokenLifetime is the sliding lifetime of client tokens; JWTLifetime the
 	// fixed JWT exp lifetime (0 = TokenLifetime).
 	TokenLifetime time.Duration
@@ -93,6 +100,7 @@ type Service struct {
 	jwt           *auth.ClientJWT
 	log           *slog.Logger
 	publicURL     string
+	adminURL      string
 	tokenLifetime time.Duration
 	jwtLifetime   time.Duration
 	stateTTL      time.Duration
@@ -111,12 +119,16 @@ func NewService(o Options) *Service {
 	s := &Service{
 		st: o.Store, aead: o.AEAD, jwt: o.JWT, log: o.Log,
 		publicURL:     strings.TrimRight(o.PublicURL, "/"),
+		adminURL:      strings.TrimRight(o.AdminURL, "/"),
 		tokenLifetime: o.TokenLifetime, jwtLifetime: o.JWTLifetime, stateTTL: o.StateTTL,
 		hc: o.HTTPClient, secure: o.SecureCookies, webLogin: o.WebLogin, onClientLogin: o.OnClientLogin,
 		events: o.LoginEvents, github: DefaultGitHub, googleIssuer: GoogleIssuer, cache: newCache(),
 	}
 	if s.log == nil {
 		s.log = slog.New(slog.NewTextHandler(io.Discard, nil))
+	}
+	if s.adminURL == "" {
+		s.adminURL = s.publicURL
 	}
 	if s.stateTTL <= 0 {
 		s.stateTTL = DefaultStateTTL
@@ -162,8 +174,9 @@ type ClientDevice struct {
 }
 
 type begun struct {
-	state string
-	url   string
+	state   string
+	url     string
+	binding string // web flows: browser-binding cookie value
 }
 
 // begin creates a pending state for provider slug and returns the IdP URL.
@@ -191,8 +204,15 @@ func (s *Service) begin(ctx context.Context, slug string, tmpl store.OAuthState)
 	if err != nil {
 		return nil, err
 	}
-	var verifier string
+	var verifier, binding string
 	st := tmpl
+	if st.Flow == store.OAuthFlowWeb {
+		b, err := auth.NewOpaqueToken()
+		if err != nil {
+			return nil, err
+		}
+		binding, st.BindingSHA256 = b.Plain, b.Hash
+	}
 	st.StateSHA256 = state.Hash
 	st.ProviderID = &p.ID
 	st.Nonce = nonce
@@ -219,7 +239,7 @@ func (s *Service) begin(ctx context.Context, slug string, tmpl store.OAuthState)
 	if err != nil {
 		return nil, err
 	}
-	return &begun{state: state.Plain, url: cfg.authCodeURL(s.redirectURI(), state.Plain, nonce, verifier)}, nil
+	return &begun{state: state.Plain, binding: binding, url: cfg.authCodeURL(s.redirectURI(), state.Plain, nonce, verifier)}, nil
 }
 
 // BeginClient starts a RustDesk client login (POST /api/oidc/auth). The
@@ -244,7 +264,7 @@ func (s *Service) BeginWebLogin(ctx context.Context, w http.ResponseWriter, slug
 	if err != nil {
 		return "", err
 	}
-	s.setBinding(w, b.state)
+	s.setBinding(w, b.binding)
 	return b.url, nil
 }
 
@@ -255,13 +275,13 @@ func (s *Service) BeginBind(ctx context.Context, w http.ResponseWriter, slug str
 	if err != nil {
 		return "", err
 	}
-	s.setBinding(w, b.state)
+	s.setBinding(w, b.binding)
 	return b.url, nil
 }
 
-func (s *Service) setBinding(w http.ResponseWriter, state string) {
+func (s *Service) setBinding(w http.ResponseWriter, value string) {
 	http.SetCookie(w, &http.Cookie{
-		Name: BindingCookie, Value: state, Path: "/api/", MaxAge: int(s.stateTTL / time.Second),
+		Name: BindingCookie, Value: value, Path: "/api/", MaxAge: int((s.stateTTL + HandoffTTL) / time.Second),
 		HttpOnly: true, Secure: s.secure, SameSite: http.SameSiteLaxMode,
 	})
 }
@@ -272,7 +292,7 @@ func (s *Service) clearBinding(w http.ResponseWriter) {
 }
 
 // DefaultBindReturn is where the browser returns after linking an identity.
-const DefaultBindReturn = "/my/security"
+const DefaultBindReturn = "/my/profile"
 
 // SafeRedirectPath returns p when it is a same-origin relative path
 // ("/x?y#z", not "//host", "/\host" or anything with a scheme), else def.

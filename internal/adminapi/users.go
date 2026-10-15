@@ -7,7 +7,6 @@ import (
 	"net/mail"
 	"regexp"
 	"strings"
-	"time"
 	"unicode/utf8"
 
 	"github.com/bropines/rustdesk-panel/internal/auth"
@@ -31,26 +30,11 @@ type userListItemDTO struct {
 	IsLastAdmin bool         `json:"is_last_admin"`
 }
 
-// userIdentityDTO is components.schemas.UserIdentity.
-type userIdentityDTO struct {
-	ID            int64      `json:"id"`
-	ProviderID    int64      `json:"provider_id"`
-	ProviderSlug  string     `json:"provider_slug"`
-	ProviderKind  string     `json:"provider_kind"`
-	ProviderName  string     `json:"provider_name"`
-	Subject       string     `json:"subject"`
-	Email         *string    `json:"email"`
-	EmailVerified bool       `json:"email_verified"`
-	Username      *string    `json:"username"`
-	LastLoginAt   *time.Time `json:"last_login_at"`
-	CreatedAt     time.Time  `json:"created_at"`
-}
-
 // userDetailDTO is components.schemas.UserDetail.
 type userDetailDTO struct {
 	userListItemDTO
-	Identities       []userIdentityDTO `json:"identities"`
-	AddressBookCount int               `json:"address_book_count"`
+	Identities       []IdentityDTO `json:"identities"`
+	AddressBookCount int           `json:"address_book_count"`
 }
 
 func newUserListItem(u *store.UserRow, activeAdmins int) userListItemDTO {
@@ -260,17 +244,7 @@ func (a *resources) handleGetUser(w http.ResponseWriter, r *http.Request) {
 		a.fail500(w, r, "get user", err)
 		return
 	}
-	out := userDetailDTO{userListItemDTO: item, Identities: make([]userIdentityDTO, 0, len(ids))}
-	for _, i := range ids {
-		name := i.ProviderDisplayName
-		if name == "" {
-			name = i.ProviderSlug
-		}
-		out.Identities = append(out.Identities, userIdentityDTO{ID: i.ID, ProviderID: i.ProviderID,
-			ProviderSlug: i.ProviderSlug, ProviderKind: i.ProviderKind, ProviderName: name, Subject: i.Subject,
-			Email: i.Email, EmailVerified: i.EmailVerified, Username: strPtr(i.Username), LastLoginAt: i.LastLoginAt,
-			CreatedAt: i.CreatedAt})
-	}
+	out := userDetailDTO{userListItemDTO: item, Identities: ids}
 	if out.AddressBookCount, err = a.d.Store.AddressBooks.CountOwned(ctx, u.ID); err != nil {
 		a.fail500(w, r, "get user", err)
 		return

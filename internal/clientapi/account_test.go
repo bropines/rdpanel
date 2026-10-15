@@ -74,6 +74,18 @@ func TestLogin(t *testing.T) {
 	}
 }
 
+func TestLoginPasswordDisabledSetting(t *testing.T) {
+	e := newEnv(t)
+	e.user("carol", "secret-pass", nil)
+	e.user("boss", "secret-pass", func(u *store.User) { u.Role = store.RoleAdmin })
+	_ = e.st.Settings.Set(context.Background(), store.SettingPasswordLoginEnabled, false, nil)
+	r := e.do("POST", "/api/login", loginBody("carol", "secret-pass"), "")
+	if r.code != 400 || !strings.Contains(r.body, "Password login is disabled") {
+		t.Fatalf("user: %d %s", r.code, r.body)
+	}
+	e.mustDo("POST", "/api/login", loginBody("boss", "secret-pass"), "", 200)
+}
+
 func TestLoginRateLimit(t *testing.T) {
 	e := newEnv(t)
 	e.user("bob", "secret-pass", nil)

@@ -53,6 +53,10 @@ type OAuthState struct {
 	ResultUserID     *int64
 	ResultError      string
 	ProfileJSON      string
+	// BindingSHA256 is sha256 of the browser-binding cookie (web flows).
+	BindingSHA256 []byte
+	// HandoffExpiresAt bounds the hand-off ticket (web flows, after the callback).
+	HandoffExpiresAt *time.Time
 	ConsumedAt       *time.Time
 	CreatedAt        time.Time
 	ExpiresAt        time.Time
@@ -66,19 +70,20 @@ type OAuthStates struct {
 
 const oauthStateColumns = `id, state_sha256, action, flow, provider_id, pkce_verifier_enc, nonce, device_rustdesk_id,
 	device_uuid, device_name, device_os, device_type, redirect_path, initiator_user_id, result_user_id, result_error,
-	profile_json, consumed_at, created_at, expires_at`
+	profile_json, binding_sha256, handoff_expires_at, consumed_at, created_at, expires_at`
 
 func scanOAuthState(row interface{ Scan(...any) error }) (*OAuthState, error) {
 	var (
 		s                                         OAuthState
 		providerID, initiator, result, consumed   sql.NullInt64
+		handoffExp                                sql.NullInt64
 		nonce, devID, devUUID, devName, devOS     sql.NullString
 		devType, redirect, resultErr, profileJSON sql.NullString
 		createdAt, expiresAt                      int64
 	)
 	err := row.Scan(&s.ID, &s.StateSHA256, &s.Action, &s.Flow, &providerID, &s.PKCEVerifierEnc, &nonce, &devID,
-		&devUUID, &devName, &devOS, &devType, &redirect, &initiator, &result, &resultErr, &profileJSON, &consumed,
-		&createdAt, &expiresAt)
+		&devUUID, &devName, &devOS, &devType, &redirect, &initiator, &result, &resultErr, &profileJSON, &s.BindingSHA256,
+		&handoffExp, &consumed, &createdAt, &expiresAt)
 	if err != nil {
 		return nil, mapErr(err)
 	}
@@ -86,7 +91,7 @@ func scanOAuthState(row interface{ Scan(...any) error }) (*OAuthState, error) {
 	s.Nonce, s.DeviceRustdeskID, s.DeviceUUID, s.DeviceName = nonce.String, devID.String, devUUID.String, devName.String
 	s.DeviceOS, s.DeviceType, s.RedirectPath = devOS.String, devType.String, redirect.String
 	s.ResultError, s.ProfileJSON = resultErr.String, profileJSON.String
-	s.ConsumedAt = ptrMs(consumed)
+	s.ConsumedAt, s.HandoffExpiresAt = ptrMs(consumed), ptrMs(handoffExp)
 	s.CreatedAt, s.ExpiresAt = fromMs(createdAt), fromMs(expiresAt)
 	return &s, nil
 }
@@ -98,12 +103,12 @@ func (r *OAuthStates) Create(ctx context.Context, s *OAuthState) error {
 	}
 	return mapErr(r.q.QueryRowContext(ctx, `INSERT INTO oauth_states (state_sha256, action, flow, provider_id,
 		pkce_verifier_enc, nonce, device_rustdesk_id, device_uuid, device_name, device_os, device_type, redirect_path,
-		initiator_user_id, result_user_id, result_error, profile_json, consumed_at, created_at, expires_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`,
+		initiator_user_id, result_user_id, result_error, profile_json, binding_sha256, consumed_at, created_at, expires_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`,
 		s.StateSHA256, s.Action, s.Flow, nullID(s.ProviderID), s.PKCEVerifierEnc, nullStr(s.Nonce),
 		nullStr(s.DeviceRustdeskID), nullStr(s.DeviceUUID), nullStr(s.DeviceName), nullStr(s.DeviceOS),
 		nullStr(s.DeviceType), nullStr(s.RedirectPath), nullID(s.InitiatorUserID), nullID(s.ResultUserID),
-		nullStr(s.ResultError), nullStr(s.ProfileJSON), nullMs(s.ConsumedAt), toMs(s.CreatedAt),
+		nullStr(s.ResultError), nullStr(s.ProfileJSON), nullBytes(s.BindingSHA256), nullMs(s.ConsumedAt), toMs(s.CreatedAt),
 		toMs(s.ExpiresAt)).Scan(&s.ID))
 }
 
@@ -141,6 +146,26 @@ func (r *OAuthStates) Complete(ctx context.Context, id int64, userID *int64, err
 func (r *OAuthStates) Consume(ctx context.Context, id int64) error {
 	return expectOne(r.q.ExecContext(ctx, `UPDATE oauth_states SET consumed_at = ?, pkce_verifier_enc = NULL
 		WHERE id = ? AND consumed_at IS NULL AND expires_at > ?`, toMs(r.now()), id, toMs(r.now())))
+}
+
+// SetHandoff records the IdP result of a claimed web flow (profileJSON, or
+// errCode when the IdP step failed) and the single-use hand-off ticket digest
+// valid until expires.
+func (r *OAuthStates) SetHandoff(ctx context.Context, id int64, profileJSON, errCode string, ticketHash []byte, expires time.Time) error {
+	return expectOne(r.q.ExecContext(ctx, `UPDATE oauth_states SET profile_json = ?, result_error = ?,
+		handoff_sha256 = ?, handoff_expires_at = ?, pkce_verifier_enc = NULL
+		WHERE id = ? AND result_error = ? AND consumed_at IS NULL`,
+		nullStr(profileJSON), nullStr(errCode), ticketHash, toMs(expires), id, OAuthStateProcessing))
+}
+
+// TakeHandoff atomically consumes the web flow whose hand-off ticket digest is
+// ticketHash and returns it. ErrNotFound when the ticket is unknown, expired
+// or already used (single use: a second call always fails).
+func (r *OAuthStates) TakeHandoff(ctx context.Context, ticketHash []byte) (*OAuthState, error) {
+	now := toMs(r.now())
+	return scanOAuthState(r.q.QueryRowContext(ctx, `UPDATE oauth_states SET consumed_at = ?
+		WHERE handoff_sha256 = ? AND consumed_at IS NULL AND handoff_expires_at > ?
+		RETURNING `+oauthStateColumns, now, ticketHash, now))
 }
 
 // PurgeExpired deletes states that expired before cutoff.
