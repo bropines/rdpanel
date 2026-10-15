@@ -32,10 +32,13 @@ export interface paths {
         put?: never;
         /**
          * Password login (optionally with a TOTP or recovery code).
-         * @description On success sets the session cookie and returns the current user.
-         *     When the user has 2FA enabled and no `totp_code` was given, responds
-         *     401 with error code `totp_required`. Failed attempts are rate limited per
-         *     IP and per username (429 `rate_limited`, `Retry-After` header).
+         * @description On success rotates the session (any presented session is revoked), sets the
+         *     session and CSRF cookies and returns `{mfa_required: false, me}`.
+         *     When the user has TOTP enabled and no `totp_code` was given, a short-lived
+         *     (5 min) pending session is issued and the response is `{mfa_required: true}`;
+         *     finish with `POST /auth/mfa`. Errors are generic (`invalid_credentials`)
+         *     whether the user exists or not. Failed attempts are rate limited per IP and
+         *     per username with exponential backoff (429 `rate_limited`, `Retry-After`).
          */
         post: operations["login"];
         delete?: never;
@@ -53,8 +56,327 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Revoke the current session and clear cookies. */
+        /** Revoke the current session (if any) and clear the session cookie. Idempotent. */
         post: operations["logout"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/mfa": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Complete a pending login with a TOTP code or a recovery code.
+         * @description Requires the pending session issued by `/auth/login` (or an OIDC login of a user with TOTP). Rotates the session.
+         */
+        post: operations["completeMfa"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/providers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Enabled identity providers for the login page buttons. */
+        get: operations["listLoginProviders"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/oidc/{slug}/start": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Begin a panel login with an identity provider.
+         * @description Sets an HttpOnly browser-binding cookie and returns the IdP URL; the SPA must
+         *     navigate to it (`window.location`). The IdP redirects to `/api/oidc/callback`,
+         *     which then redirects the browser to:
+         *     `next` on success; `/login?mfa=1&next=<next>` when TOTP is enabled (finish with
+         *     `POST /auth/mfa`); `/login?error=oidc_<code>` on failure, where code is one of
+         *     `expired`, `denied`, `failed`, `no_account`, `disabled`, `ambiguous`,
+         *     `already_linked`, `session_mismatch`.
+         */
+        post: operations["startOidcLogin"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/security": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 2FA / password state of the current user.
+         * @description Reachable while a forced 2FA enrolment is pending (as are all /me/security routes).
+         */
+        get: operations["getMySecurity"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/security/totp/enroll": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Start (or restart) TOTP enrolment; returns the seed and otpauth URI (render it as a QR code). */
+        post: operations["enrollTotp"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/security/totp/confirm": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Confirm enrolment with a code; returns recovery codes (shown once). */
+        post: operations["confirmTotp"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/security/totp/disable": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Disable 2FA (requires the password or a TOTP/recovery code).
+         * @description Refused with 403 `totp_required` when policy requires 2FA for this account.
+         */
+        post: operations["disableTotp"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/security/recovery-codes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Replace recovery codes (requires the password or a TOTP code); shown once. */
+        post: operations["regenerateRecoveryCodes"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/security/sessions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Active panel sessions and client tokens of the current user. */
+        get: operations["listMySessions"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/security/sessions/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Revoke one of my sessions or client tokens. */
+        delete: operations["revokeMySession"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/security/password": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Change password; revokes every other session and client token.
+         * @description `current_password` is required when the account has a password.
+         */
+        post: operations["changeMyPassword"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/security/identities": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Identities (GitHub, Google, OIDC) linked to my account. */
+        get: operations["listMyIdentities"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/security/identities/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Unlink an identity (409 when it is the last sign-in method). */
+        delete: operations["unlinkMyIdentity"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/security/identities/link/{slug}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Begin linking an identity of provider {slug}.
+         * @description Returns the IdP URL to navigate to. After the IdP the browser is redirected to
+         *     `next` (default `/my/security`) with `?linked=<slug>` or `?link_error=<code>`.
+         */
+        post: operations["linkMyIdentity"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/identity-providers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** All identity providers (admin). Secrets are never returned. */
+        get: operations["listIdentityProviders"];
+        put?: never;
+        /** Create an identity provider (admin). */
+        post: operations["createIdentityProvider"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/identity-providers/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        /** One identity provider (admin). */
+        get: operations["getIdentityProvider"];
+        /** Replace an identity provider (admin). Omit `client_secret` to keep it. */
+        put: operations["updateIdentityProvider"];
+        post?: never;
+        /** Delete an identity provider and its linked identities (admin). */
+        delete: operations["deleteIdentityProvider"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/identity-providers/{id}/test": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Run OIDC discovery for the provider and report the endpoints (admin). */
+        post: operations["testIdentityProvider"];
         delete?: never;
         options?: never;
         head?: never;
@@ -102,6 +424,144 @@ export interface components {
             password: string;
             /** @description 6-digit TOTP code or a recovery code. */
             totp_code?: string;
+        };
+        LoginResponse: {
+            /** @description True when the password was accepted and POST /auth/mfa must follow. */
+            mfa_required: boolean;
+            me?: components["schemas"]["Me"];
+        };
+        CodeRequest: {
+            /** @description 6-digit TOTP code or a recovery code (xxxx-xxxx-xxxx-xxxx). */
+            code: string;
+        };
+        /** @description Provide the current password or a TOTP/recovery code. */
+        ReauthRequest: {
+            password?: string;
+            code?: string;
+        };
+        ChangePasswordRequest: {
+            current_password?: string;
+            new_password: string;
+        };
+        LoginProvider: {
+            slug: string;
+            display_name: string;
+            kind: components["schemas"]["ProviderKind"];
+        };
+        OidcStartRequest: {
+            /** @description Relative path to return to (anything else falls back to the default). */
+            next?: string;
+        };
+        UrlResponse: {
+            /** Format: uri */
+            url: string;
+        };
+        SecurityOverview: {
+            has_password: boolean;
+            totp_enabled: boolean;
+            /** @description An unconfirmed enrolment exists. */
+            totp_pending: boolean;
+            /** @description Policy (user flag or admin policy) requires 2FA. */
+            totp_required: boolean;
+            must_enroll_totp: boolean;
+            recovery_codes_remaining: number;
+        };
+        TotpEnrollment: {
+            /** @description Base32 seed for manual entry. */
+            secret: string;
+            /** @description otpauth://totp/... URI to render as a QR code. */
+            otpauth_uri: string;
+        };
+        RecoveryCodes: {
+            /** @description Shown once; only hashes are stored. */
+            recovery_codes: string[];
+        };
+        LinkedIdentity: {
+            /** Format: int64 */
+            id: number;
+            /** Format: int64 */
+            provider_id: number;
+            provider_slug: string;
+            provider_display_name: string;
+            provider_kind: string;
+            subject: string;
+            email?: string | null;
+            email_verified: boolean;
+            username: string;
+            display_name: string;
+            avatar_url: string;
+            /** Format: date-time */
+            last_login_at?: string | null;
+            /** Format: date-time */
+            created_at: string;
+        };
+        /** @enum {string} */
+        ProviderKind: "github" | "google" | "oidc";
+        IdentityProvider: {
+            /** Format: int64 */
+            id: number;
+            /** @description Name clients see as oidc/<slug>. */
+            slug: string;
+            /** @enum {string} */
+            kind: "github" | "google" | "oidc" | "linuxdo";
+            display_name: string;
+            client_id: string;
+            /** @description The secret itself is write-only. */
+            has_client_secret: boolean;
+            /** @description OIDC only; Google is fixed to https://accounts.google.com. */
+            issuer?: string | null;
+            /** @description Empty = defaults (openid profile email; GitHub read:user user:email). */
+            scopes: string[];
+            pkce_enabled: boolean;
+            /** @enum {string} */
+            pkce_method: "S256" | "plain";
+            auto_register: boolean;
+            /** @description Link to an existing user by email only when the IdP asserts email_verified. */
+            link_by_verified_email: boolean;
+            enabled: boolean;
+            sort_order: number;
+            /** @description Redirect URI to register at the IdP ("" without public URL). */
+            callback_url: string;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+        };
+        IdentityProviderInput: {
+            slug: string;
+            kind: components["schemas"]["ProviderKind"];
+            display_name?: string;
+            client_id: string;
+            /** @description Omitted/null keeps the stored secret; empty string clears it. */
+            client_secret?: string | null;
+            /** @description Required for kind=oidc. */
+            issuer?: string;
+            scopes?: string[];
+            /** @default true */
+            pkce_enabled: boolean;
+            /**
+             * @default S256
+             * @enum {string}
+             */
+            pkce_method: "S256" | "plain";
+            /** @default false */
+            auto_register: boolean;
+            /** @default false */
+            link_by_verified_email: boolean;
+            /** @default true */
+            enabled: boolean;
+            /** @default 0 */
+            sort_order: number;
+        };
+        IdentityProviderTestResult: {
+            ok: boolean;
+            error?: string;
+            issuer?: string;
+            authorization_endpoint?: string;
+            token_endpoint?: string;
+            userinfo_endpoint?: string;
+            jwks_uri?: string;
+            callback_url: string;
         };
         /** @enum {string} */
         Role: "admin" | "user";
@@ -349,13 +809,13 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Logged in. */
+            /** @description Logged in, or password accepted and second factor required. */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Me"];
+                    "application/json": components["schemas"]["LoginResponse"];
                 };
             };
             400: components["responses"]["ValidationFailed"];
@@ -383,8 +843,540 @@ export interface operations {
                 };
                 content?: never;
             };
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    completeMfa: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Must equal the rdpanel_csrf cookie. */
+                "X-CSRF-Token": components["parameters"]["CsrfHeader"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CodeRequest"];
+            };
+        };
+        responses: {
+            /** @description Logged in. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LoginResponse"];
+                };
+            };
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
+            429: components["responses"]["RateLimited"];
+        };
+    };
+    listLoginProviders: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Providers (empty when OIDC is unavailable). */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LoginProvider"][];
+                };
+            };
+        };
+    };
+    startOidcLogin: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Must equal the rdpanel_csrf cookie. */
+                "X-CSRF-Token": components["parameters"]["CsrfHeader"];
+            };
+            path: {
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["OidcStartRequest"];
+            };
+        };
+        responses: {
+            /** @description IdP authorization URL. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UrlResponse"];
+                };
+            };
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    getMySecurity: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Security overview. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SecurityOverview"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+        };
+    };
+    enrollTotp: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Must equal the rdpanel_csrf cookie. */
+                "X-CSRF-Token": components["parameters"]["CsrfHeader"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description New pending seed. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TotpEnrollment"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    confirmTotp: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Must equal the rdpanel_csrf cookie. */
+                "X-CSRF-Token": components["parameters"]["CsrfHeader"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CodeRequest"];
+            };
+        };
+        responses: {
+            /** @description 2FA enabled. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RecoveryCodes"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            429: components["responses"]["RateLimited"];
+        };
+    };
+    disableTotp: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Must equal the rdpanel_csrf cookie. */
+                "X-CSRF-Token": components["parameters"]["CsrfHeader"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReauthRequest"];
+            };
+        };
+        responses: {
+            /** @description Disabled. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            429: components["responses"]["RateLimited"];
+        };
+    };
+    regenerateRecoveryCodes: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Must equal the rdpanel_csrf cookie. */
+                "X-CSRF-Token": components["parameters"]["CsrfHeader"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReauthRequest"];
+            };
+        };
+        responses: {
+            /** @description New codes. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RecoveryCodes"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            409: components["responses"]["Conflict"];
+            429: components["responses"]["RateLimited"];
+        };
+    };
+    listMySessions: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Sessions, newest first. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Session"][];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+        };
+    };
+    revokeMySession: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Must equal the rdpanel_csrf cookie. */
+                "X-CSRF-Token": components["parameters"]["CsrfHeader"];
+            };
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Revoked. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    changeMyPassword: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Must equal the rdpanel_csrf cookie. */
+                "X-CSRF-Token": components["parameters"]["CsrfHeader"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ChangePasswordRequest"];
+            };
+        };
+        responses: {
+            /** @description Changed. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["Unauthorized"];
+            429: components["responses"]["RateLimited"];
+        };
+    };
+    listMyIdentities: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Linked identities. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LinkedIdentity"][];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+        };
+    };
+    unlinkMyIdentity: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Must equal the rdpanel_csrf cookie. */
+                "X-CSRF-Token": components["parameters"]["CsrfHeader"];
+            };
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Unlinked. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    linkMyIdentity: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Must equal the rdpanel_csrf cookie. */
+                "X-CSRF-Token": components["parameters"]["CsrfHeader"];
+            };
+            path: {
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["OidcStartRequest"];
+            };
+        };
+        responses: {
+            /** @description IdP authorization URL. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UrlResponse"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    listIdentityProviders: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Providers. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IdentityProvider"][];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    createIdentityProvider: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Must equal the rdpanel_csrf cookie. */
+                "X-CSRF-Token": components["parameters"]["CsrfHeader"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IdentityProviderInput"];
+            };
+        };
+        responses: {
+            /** @description Created. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IdentityProvider"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    getIdentityProvider: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Provider. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IdentityProvider"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    updateIdentityProvider: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Must equal the rdpanel_csrf cookie. */
+                "X-CSRF-Token": components["parameters"]["CsrfHeader"];
+            };
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IdentityProviderInput"];
+            };
+        };
+        responses: {
+            /** @description Updated. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IdentityProvider"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    deleteIdentityProvider: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Must equal the rdpanel_csrf cookie. */
+                "X-CSRF-Token": components["parameters"]["CsrfHeader"];
+            };
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Deleted. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    testIdentityProvider: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Must equal the rdpanel_csrf cookie. */
+                "X-CSRF-Token": components["parameters"]["CsrfHeader"];
+            };
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Result (ok=false with error on failure). */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IdentityProviderTestResult"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
         };
     };
     getMe: {

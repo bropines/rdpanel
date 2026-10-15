@@ -37,7 +37,13 @@ export function LoginPage() {
 
   const login = useMutation({
     mutationFn: (body: LoginRequest) => auth.login(body),
-    onSuccess: () => void navigate({ to: "/" }),
+    onSuccess: (res) => {
+      if (res.mfa_required) {
+        setNeedTotp(true);
+        return;
+      }
+      void navigate({ to: "/" });
+    },
     onError: (err) => {
       if (err instanceof ApiError && err.code === "totp_required") {
         setNeedTotp(true);
