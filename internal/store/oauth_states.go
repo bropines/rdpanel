@@ -107,6 +107,12 @@ func (r *OAuthStates) Create(ctx context.Context, s *OAuthState) error {
 		toMs(s.ExpiresAt)).Scan(&s.ID))
 }
 
+// SetPKCEVerifier stores the encrypted PKCE verifier of state id (the AD
+// contains the row id, so it is written after Create).
+func (r *OAuthStates) SetPKCEVerifier(ctx context.Context, id int64, enc []byte) error {
+	return expectOne(r.q.ExecContext(ctx, `UPDATE oauth_states SET pkce_verifier_enc = ? WHERE id = ?`, enc, id))
+}
+
 // GetActive returns the unconsumed, unexpired state with digest hash.
 func (r *OAuthStates) GetActive(ctx context.Context, hash []byte) (*OAuthState, error) {
 	return scanOAuthState(r.q.QueryRowContext(ctx, `SELECT `+oauthStateColumns+` FROM oauth_states

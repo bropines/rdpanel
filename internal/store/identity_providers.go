@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
-	"strconv"
 	"time"
 
 	"github.com/bropines/rustdesk-panel/internal/db"
@@ -23,7 +22,7 @@ const (
 )
 
 // IdentityProvider is a row of identity_providers. ClientSecretEnc is the
-// AEAD ciphertext (associated data from ProviderSecretAD); it is never
+// AEAD ciphertext (associated data crypto.IdentityProviderClientSecretAD); it is never
 // returned by the API.
 type IdentityProvider struct {
 	ID                  int64
@@ -42,11 +41,6 @@ type IdentityProvider struct {
 	SortOrder           int
 	CreatedAt           time.Time
 	UpdatedAt           time.Time
-}
-
-// ProviderSecretAD is the AEAD associated data binding a client secret to its row.
-func ProviderSecretAD(id int64) string {
-	return "identity_providers.client_secret_enc:" + strconv.FormatInt(id, 10)
 }
 
 // IdentityProviders is the identity_providers repository.

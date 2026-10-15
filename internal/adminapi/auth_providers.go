@@ -12,6 +12,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	"github.com/bropines/rustdesk-panel/internal/crypto"
 	"github.com/bropines/rustdesk-panel/internal/httpx"
 	"github.com/bropines/rustdesk-panel/internal/oidc"
 	"github.com/bropines/rustdesk-panel/internal/store"
@@ -155,7 +156,7 @@ func (c *authCore) sealSecret(p *store.IdentityProvider, secret *string) error {
 		p.ClientSecretEnc = nil
 		return nil
 	}
-	enc, err := c.d.AEAD.SealString(*secret, store.ProviderSecretAD(p.ID))
+	enc, err := c.d.AEAD.SealString(*secret, crypto.IdentityProviderClientSecretAD(p.ID))
 	if err != nil {
 		return err
 	}

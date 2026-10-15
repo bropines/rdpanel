@@ -81,7 +81,7 @@ func (s *Service) resolve(ctx context.Context, p *store.IdentityProvider) (*prov
 	}
 	cfg := &providerConfig{row: p}
 	if len(p.ClientSecretEnc) > 0 {
-		sec, err := s.aead.OpenString(p.ClientSecretEnc, store.ProviderSecretAD(p.ID))
+		sec, err := s.aead.OpenString(p.ClientSecretEnc, crypto.IdentityProviderClientSecretAD(p.ID))
 		if err != nil {
 			return nil, errors.New("cannot decrypt client secret")
 		}

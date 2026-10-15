@@ -21,7 +21,6 @@ package oidc
 
 import (
 	"context"
-	"encoding/hex"
 	"errors"
 	"io"
 	"log/slog"
@@ -162,11 +161,6 @@ type ClientDevice struct {
 	ID, UUID, Name, OS, Type string
 }
 
-// pkceAD binds the encrypted PKCE verifier to its state.
-func pkceAD(stateHash []byte) string {
-	return "oauth_states.pkce_verifier_enc:" + hex.EncodeToString(stateHash)
-}
-
 type begun struct {
 	state string
 	url   string
@@ -206,12 +200,23 @@ func (s *Service) begin(ctx context.Context, slug string, tmpl store.OAuthState)
 		if verifier, err = crypto.RandomToken(32); err != nil { // 43 chars, RFC 7636 §4.1
 			return nil, err
 		}
-		if st.PKCEVerifierEnc, err = s.aead.SealString(verifier, pkceAD(state.Hash)); err != nil {
-			return nil, err
-		}
 	}
 	st.ExpiresAt = s.now().Add(s.stateTTL)
-	if err := s.st.OAuthStates.Create(ctx, &st); err != nil {
+	// The verifier's AD contains the row id, so insert first, then seal.
+	err = s.st.Tx(ctx, func(tx *store.Store) error {
+		if err := tx.OAuthStates.Create(ctx, &st); err != nil {
+			return err
+		}
+		if verifier == "" {
+			return nil
+		}
+		enc, err := s.aead.SealString(verifier, crypto.OAuthStatePKCEVerifierAD(st.ID))
+		if err != nil {
+			return err
+		}
+		return tx.OAuthStates.SetPKCEVerifier(ctx, st.ID, enc)
+	})
+	if err != nil {
 		return nil, err
 	}
 	return &begun{state: state.Plain, url: cfg.authCodeURL(s.redirectURI(), state.Plain, nonce, verifier)}, nil

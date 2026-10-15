@@ -150,7 +150,7 @@ func (s *Service) complete(ctx context.Context, st *store.OAuthState, q url.Valu
 	}
 	var verifier string
 	if len(st.PKCEVerifierEnc) > 0 {
-		if verifier, err = s.aead.OpenString(st.PKCEVerifierEnc, pkceAD(st.StateSHA256)); err != nil {
+		if verifier, err = s.aead.OpenString(st.PKCEVerifierEnc, crypto.OAuthStatePKCEVerifierAD(st.ID)); err != nil {
 			return prov, nil, errors.New("cannot decrypt PKCE verifier")
 		}
 	}

@@ -3,19 +3,15 @@ package store
 import (
 	"context"
 	"database/sql"
-	"strconv"
 	"time"
 
 	"github.com/bropines/rustdesk-panel/internal/db"
 )
 
-// TOTPSecretAD is the AEAD associated data of a user's TOTP seed.
-func TOTPSecretAD(userID int64) string { return "totp:" + strconv.FormatInt(userID, 10) }
-
 // TOTPSecret is a row of totp_secrets.
 type TOTPSecret struct {
 	UserID int64
-	// SecretEnc is AEAD(base32 seed) with TOTPSecretAD(UserID).
+	// SecretEnc is AEAD(base32 seed) with crypto.TOTPSecretAD(UserID).
 	SecretEnc []byte
 	// ConfirmedAt is nil while enrolment is pending.
 	ConfirmedAt  *time.Time

@@ -104,7 +104,7 @@ func (e *env) addProvider(aead *crypto.AEAD, p *store.IdentityProvider, secret s
 	if err := e.st.IdentityProviders.Create(ctx, p); err != nil {
 		e.t.Fatal(err)
 	}
-	enc, err := aead.SealString(secret, store.ProviderSecretAD(p.ID))
+	enc, err := aead.SealString(secret, crypto.IdentityProviderClientSecretAD(p.ID))
 	if err != nil {
 		e.t.Fatal(err)
 	}

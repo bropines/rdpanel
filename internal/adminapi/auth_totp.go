@@ -92,7 +92,7 @@ func (t *TOTPService) verifyTOTP(ctx context.Context, userID int64, code string,
 	if s.Confirmed() != confirmed {
 		return false, nil
 	}
-	secret, err := t.aead.OpenString(s.SecretEnc, store.TOTPSecretAD(userID))
+	secret, err := t.aead.OpenString(s.SecretEnc, crypto.TOTPSecretAD(userID))
 	if err != nil {
 		return false, err
 	}
@@ -117,7 +117,7 @@ func (t *TOTPService) enroll(ctx context.Context, user *store.User, issuer strin
 	if err != nil {
 		return auth.TOTPKey{}, err
 	}
-	enc, err := t.aead.SealString(key.Secret, store.TOTPSecretAD(user.ID))
+	enc, err := t.aead.SealString(key.Secret, crypto.TOTPSecretAD(user.ID))
 	if err != nil {
 		return auth.TOTPKey{}, err
 	}
