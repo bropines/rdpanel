@@ -63,7 +63,7 @@ export default defineConfig(({ mode }) => {
             if (id.includes("i18next")) return "i18n";
             if (/[\\/]node_modules[\\/](zod|react-hook-form|@hookform)[\\/]/.test(id)) return "forms";
             if (/[\\/]node_modules[\\/](marked|dompurify)[\\/]/.test(id)) return "markdown";
-            if (/[\\/]node_modules[\\/](msw|@mswjs|@bundled-es-modules|graphql|headers-polyfill|outvariant|strict-event-emitter|@open-draft)[\\/]/.test(id)) return "msw";
+            if (mock && /[\\/]node_modules[\\/](msw|@mswjs|@bundled-es-modules|graphql|headers-polyfill|outvariant|strict-event-emitter|@open-draft)[\\/]/.test(id)) return "msw";
             return "vendor";
           },
         },
