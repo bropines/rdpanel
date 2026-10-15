@@ -1,0 +1,20 @@
+# Build context for deploy/Dockerfile (context = repo root). Only what the
+# Dockerfile COPYs matters; keep everything else out to keep the context small.
+.git
+.github
+.claude
+.idea
+.vscode
+bin
+data
+docs
+**/node_modules
+web/dist
+web/.vite
+*.db
+*.db-*
+*.sqlite3
+secret.key
+jwt.key
+.env
+.env.*

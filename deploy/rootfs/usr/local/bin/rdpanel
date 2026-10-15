@@ -1,0 +1,6 @@
+#!/bin/sh
+# CLI wrapper for `docker exec <container> rdpanel ...` (user create,
+# migrate-legacy, config print, ...): runs /usr/bin/rdpanel as the service user
+# so files it creates in the data dir stay writable by the running panel.
+# When RUSTDESK_API_JWT_KEY is unset the panel reads its jwt.key file itself.
+exec /usr/libexec/rdpanel/as-service-user /usr/bin/rdpanel "$@"
