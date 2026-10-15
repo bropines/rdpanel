@@ -12,6 +12,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus/collectors"
 
 	"github.com/bropines/rustdesk-panel/internal/auth"
+	"github.com/bropines/rustdesk-panel/internal/clientapi"
 	"github.com/bropines/rustdesk-panel/internal/config"
 	"github.com/bropines/rustdesk-panel/internal/crypto"
 	"github.com/bropines/rustdesk-panel/internal/db"
@@ -45,6 +46,9 @@ type App struct {
 	EventsAuth events.Authenticator
 	// HBBS is the hbbs/hbbr integration (presence, admin channel, reconciler).
 	HBBS HBBS
+	// Kicks queues admin "disconnect" requests delivered by client heartbeats;
+	// shared by the client API (Take) and the admin API (Kick).
+	Kicks *clientapi.MemKickQueue
 
 	httpMetrics *httpx.Metrics
 }
@@ -57,12 +61,13 @@ func New(ctx context.Context, cfg *config.Config, log *slog.Logger) (*App, error
 	if a.DB, err = openDB(ctx, cfg, log); err != nil {
 		return nil, err
 	}
-	a.Store = store.New(a.DB)
 	if err := a.loadKeys(); err != nil {
 		_ = a.DB.Close()
 		return nil, err
 	}
+	a.Store = store.New(a.DB, store.WithSecrets(a.AEAD))
 	a.Limiter = auth.NewBackoff(auth.DefaultBackoffConfig, nil)
+	a.Kicks = clientapi.NewMemKickQueue(0, nil)
 	a.Registry = prometheus.NewRegistry()
 	a.Registry.MustRegister(
 		collectors.NewGoCollector(),
