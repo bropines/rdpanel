@@ -16,40 +16,83 @@ import (
 	"database/sql"
 	"time"
 
+	"github.com/bropines/rustdesk-panel/internal/crypto"
 	"github.com/bropines/rustdesk-panel/internal/db"
 )
 
 // Store groups the repositories. A Store obtained from Tx is bound to that
 // transaction and must not be used after the callback returns.
 type Store struct {
-	db  *db.DB
-	q   db.Querier
-	now func() time.Time
+	db   *db.DB
+	q    db.Querier
+	opts options
 
 	Users      *Users
 	UserGroups *UserGroups
 	AuthTokens *AuthTokens
 	Settings   *Settings
 	AdminAudit *AdminAudit
+
+	Devices            *Devices
+	DeviceGroups       *DeviceGroups
+	AddressBooks       *AddressBooks
+	ConnectionAudits   *ConnectionAudits
+	FileTransferAudits *FileTransferAudits
+	AlarmAudits        *AlarmAudits
+	AuditNonces        *AuditNonces
+	LoginEvents        *LoginEvents
 }
 
+// Option configures a Store.
+type Option func(*options)
+
+type options struct {
+	now   func() time.Time
+	aead  *crypto.AEAD
+	newID func() string
+}
+
+// WithSecrets sets the AEAD used to seal secrets that must be returned to
+// clients (address-book passwords and hashes). Repositories that need it fail
+// with ErrNoSecrets when it is missing.
+func WithSecrets(a *crypto.AEAD) Option { return func(o *options) { o.aead = a } }
+
+// WithIDGenerator replaces the random UUIDv4 generator used for public ids
+// (address-book guids, connection-audit guids). Tests use deterministic ids.
+func WithIDGenerator(fn func() string) Option { return func(o *options) { o.newID = fn } }
+
 // New returns a Store backed by d.
-func New(d *db.DB) *Store {
-	return build(d, d.DB, time.Now)
+func New(d *db.DB, opts ...Option) *Store {
+	o := options{now: time.Now, newID: NewUUID}
+	for _, fn := range opts {
+		fn(&o)
+	}
+	return build(d, d.DB, o)
 }
 
 // WithClock returns a copy of s using now for timestamps (tests).
 func (s *Store) WithClock(now func() time.Time) *Store {
-	return build(s.db, s.q, now)
+	o := s.opts
+	o.now = now
+	return build(s.db, s.q, o)
 }
 
-func build(d *db.DB, q db.Querier, now func() time.Time) *Store {
-	s := &Store{db: d, q: q, now: now}
+func build(d *db.DB, q db.Querier, o options) *Store {
+	now := o.now
+	s := &Store{db: d, q: q, opts: o}
 	s.Users = &Users{q: q, now: now}
 	s.UserGroups = &UserGroups{q: q, now: now}
 	s.AuthTokens = &AuthTokens{q: q, now: now}
 	s.Settings = &Settings{q: q, now: now}
 	s.AdminAudit = &AdminAudit{q: q, now: now}
+	s.Devices = &Devices{q: q, now: now}
+	s.DeviceGroups = &DeviceGroups{q: q, now: now}
+	s.AddressBooks = &AddressBooks{q: q, d: d, now: now, aead: o.aead, newID: o.newID}
+	s.ConnectionAudits = &ConnectionAudits{q: q, now: now, newID: o.newID}
+	s.FileTransferAudits = &FileTransferAudits{q: q, now: now}
+	s.AlarmAudits = &AlarmAudits{q: q, now: now}
+	s.AuditNonces = &AuditNonces{q: q, now: now}
+	s.LoginEvents = &LoginEvents{q: q, now: now}
 	return s
 }
 
@@ -58,7 +101,10 @@ func build(d *db.DB, q db.Querier, now func() time.Time) *Store {
 func (s *Store) Querier() db.Querier { return s.q }
 
 // Now returns the store clock's current time.
-func (s *Store) Now() time.Time { return s.now() }
+func (s *Store) Now() time.Time { return s.opts.now() }
+
+// NewID returns a fresh public id from the configured generator.
+func (s *Store) NewID() string { return s.opts.newID() }
 
 // Tx runs fn with a Store bound to a single transaction. Calling Tx on a
 // transactional Store runs fn in the existing transaction (no nesting).
@@ -67,6 +113,15 @@ func (s *Store) Tx(ctx context.Context, fn func(tx *Store) error) error {
 		return fn(s)
 	}
 	return s.db.WithTx(ctx, func(tx *sql.Tx) error {
-		return fn(build(s.db, tx, s.now))
+		return fn(build(s.db, tx, s.opts))
 	})
+}
+
+// atomic runs fn with q bound to a transaction: the current one when q already
+// is a transaction, otherwise a new one on d.
+func atomic(ctx context.Context, d *db.DB, q db.Querier, fn func(q db.Querier) error) error {
+	if _, inTx := q.(*sql.Tx); inTx || d == nil {
+		return fn(q)
+	}
+	return d.WithTx(ctx, func(tx *sql.Tx) error { return fn(tx) })
 }

@@ -49,11 +49,11 @@ func New(ctx context.Context, cfg *config.Config, log *slog.Logger) (*App, error
 	if a.DB, err = openDB(ctx, cfg, log); err != nil {
 		return nil, err
 	}
-	a.Store = store.New(a.DB)
 	if err := a.loadKeys(); err != nil {
 		_ = a.DB.Close()
 		return nil, err
 	}
+	a.Store = store.New(a.DB, store.WithSecrets(a.AEAD))
 	a.Limiter = auth.NewBackoff(auth.DefaultBackoffConfig, nil)
 	a.Registry = prometheus.NewRegistry()
 	a.Registry.MustRegister(
