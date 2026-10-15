@@ -17,7 +17,7 @@ on:
     inputs:
       server_ref:
         description: bropines/rustdesk-server ref (branch, tag or sha) for hbbs/hbbr
-        default: 393f872ddc2505e3b122fd6943365b47722e56cc # merge-upstream-1.1.16 @ 393f872 (tcp-keepalive)
+        default: 8b6f490ccdb63f58252d833f52761356841f69ba # merge-upstream-1.1.16 @ 8b6f490 (tcp-keepalive)
         required: true
       push:
         description: push the image to ghcr.io
@@ -36,7 +36,7 @@ env:
   SERVER_REPO: bropines/rustdesk-server
   # Pinned hbbs/hbbr source for push/tag builds; bump deliberately after
   # testing a newer bropines/rustdesk-server commit.
-  SERVER_REF: ${{ inputs.server_ref || '393f872ddc2505e3b122fd6943365b47722e56cc' }}
+  SERVER_REF: ${{ inputs.server_ref || '8b6f490ccdb63f58252d833f52761356841f69ba' }}
 
 jobs:
   hbb:
