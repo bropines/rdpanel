@@ -156,3 +156,34 @@ func TestEnvNames(t *testing.T) {
 		}
 	}
 }
+
+func TestHBBSWorkerSettings(t *testing.T) {
+	cfg, err := Load(env(nil))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !cfg.HBBS.Enabled || cfg.HBBS.PollInterval != 5*time.Second || cfg.HBBS.ReconcileInterval != 15*time.Second || cfg.HBBS.ListDir != "" {
+		t.Fatalf("defaults %+v", cfg.HBBS)
+	}
+	cfg, err = Load(env(map[string]string{
+		"RDPANEL_HBBS_ENABLED":            "false",
+		"RDPANEL_HBBS_POLL_INTERVAL":      "2s",
+		"RDPANEL_HBBS_RECONCILE_INTERVAL": "1m",
+		"RDPANEL_HBBS_LIST_DIR":           "/data",
+	}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.HBBS.Enabled || cfg.HBBS.PollInterval != 2*time.Second || cfg.HBBS.ReconcileInterval != time.Minute || cfg.HBBS.ListDir != "/data" {
+		t.Fatalf("env %+v", cfg.HBBS)
+	}
+	for k, v := range map[string]string{
+		"RDPANEL_HBBS_ENABLED":            "maybe",
+		"RDPANEL_HBBS_POLL_INTERVAL":      "100ms",
+		"RDPANEL_HBBS_RECONCILE_INTERVAL": "0s",
+	} {
+		if _, err := Load(env(map[string]string{k: v})); err == nil {
+			t.Errorf("%s=%s accepted", k, v)
+		}
+	}
+}

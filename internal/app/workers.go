@@ -17,7 +17,6 @@ const (
 )
 
 // startWorkers launches background loops bound to ctx.
-// TODO(stream C): presence poller, hbbs/hbbr reconciler, punch-request collector.
 func (a *App) startWorkers(ctx context.Context, wg *sync.WaitGroup) {
 	run := func(name string, fn func(context.Context)) {
 		wg.Add(1)
@@ -33,6 +32,12 @@ func (a *App) startWorkers(ctx context.Context, wg *sync.WaitGroup) {
 	}
 	run("janitor", a.runJanitor)
 	run("limiter-prune", func(ctx context.Context) { a.Limiter.RunPruner(ctx, time.Minute) })
+	if p := a.HBBS.Presence; p != nil {
+		run("hbbs-presence", p.Run)
+	}
+	if r := a.HBBS.Reconciler; r != nil {
+		run("hbbs-reconcile", r.Run)
+	}
 }
 
 func (a *App) runJanitor(ctx context.Context) {

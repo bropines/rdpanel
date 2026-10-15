@@ -92,6 +92,16 @@ type HBBSConfig struct {
 	RelayServer string `yaml:"relay_server"`
 	// PublicKeyFile is the hbbs public key served to clients. Default: <DataDir>/id_ed25519.pub.
 	PublicKeyFile string `yaml:"public_key_file"`
+	// Enabled turns on the hbbs/hbbr workers (presence poller, reconciler).
+	Enabled bool `yaml:"enabled"`
+	// PollInterval is the presence poll period (OnlineRequest to IDServer).
+	PollInterval time.Duration `yaml:"poll_interval"`
+	// ReconcileInterval is the admin-channel probe / drift-check period.
+	ReconcileInterval time.Duration `yaml:"reconcile_interval"`
+	// ListDir is hbbr's working directory; when set, the reconciler keeps
+	// blacklist.txt / blocklist.txt there in sync with the desired lists
+	// (/data in the s6 image). Empty disables writing the files.
+	ListDir string `yaml:"list_dir"`
 }
 
 // LogConfig controls slog output.
@@ -118,8 +128,11 @@ func Defaults() *Config {
 			MetricsAllow:   []string{"127.0.0.0/8", "::1/128"},
 		},
 		HBBS: HBBSConfig{
-			IDServer:    "127.0.0.1:21116",
-			RelayServer: "127.0.0.1:21117",
+			IDServer:          "127.0.0.1:21116",
+			RelayServer:       "127.0.0.1:21117",
+			Enabled:           true,
+			PollInterval:      5 * time.Second,
+			ReconcileInterval: 15 * time.Second,
 		},
 		Log: LogConfig{Level: "info", Format: "json"},
 	}
@@ -187,6 +200,16 @@ func (c *Config) envVars() []envVar {
 			return nil
 		}
 	}
+	boolean := func(dst *bool) func(string) error {
+		return func(v string) error {
+			b, err := strconv.ParseBool(strings.TrimSpace(v))
+			if err != nil {
+				return err
+			}
+			*dst = b
+			return nil
+		}
+	}
 	list := func(dst *[]string) func(string) error {
 		return func(v string) error { *dst = splitList(v); return nil }
 	}
@@ -209,6 +232,10 @@ func (c *Config) envVars() []envVar {
 		{"RDPANEL_HBBS_ID_SERVER", str(&c.HBBS.IDServer)},
 		{"RDPANEL_HBBS_RELAY_SERVER", str(&c.HBBS.RelayServer)},
 		{"RDPANEL_HBBS_PUBLIC_KEY_FILE", str(&c.HBBS.PublicKeyFile)},
+		{"RDPANEL_HBBS_ENABLED", boolean(&c.HBBS.Enabled)},
+		{"RDPANEL_HBBS_POLL_INTERVAL", dur(&c.HBBS.PollInterval)},
+		{"RDPANEL_HBBS_RECONCILE_INTERVAL", dur(&c.HBBS.ReconcileInterval)},
+		{"RDPANEL_HBBS_LIST_DIR", str(&c.HBBS.ListDir)},
 		{"RDPANEL_LOG_LEVEL", str(&c.Log.Level)},
 		{"RDPANEL_LOG_FORMAT", str(&c.Log.Format)},
 	}
@@ -319,6 +346,12 @@ func (c *Config) Validate() error {
 	}
 	if _, err := portOf(c.HBBS.RelayServer); err != nil {
 		add("hbbs.relay_server: %v", err)
+	}
+	if c.HBBS.PollInterval < time.Second {
+		add("hbbs.poll_interval must be >= 1s")
+	}
+	if c.HBBS.ReconcileInterval < time.Second {
+		add("hbbs.reconcile_interval must be >= 1s")
 	}
 	switch c.Log.Level {
 	case "debug", "info", "warn", "error":
