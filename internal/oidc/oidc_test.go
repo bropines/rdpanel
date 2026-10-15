@@ -226,7 +226,7 @@ func TestClientFlowEndToEnd(t *testing.T) {
 		t.Fatal(err)
 	}
 	cb := e.callback(q)
-	if cb.Code != 200 || !strings.Contains(cb.Body.String(), "Login successful") {
+	if cb.Code != 200 || !strings.Contains(cb.Body.String(), "Signed in") {
 		t.Fatalf("callback: %d %s", cb.Code, cb.Body.String())
 	}
 	// Replayed callback (same state) is refused.
@@ -397,7 +397,7 @@ func TestBadIDTokens(t *testing.T) {
 			_ = e.st.UserIdentities.Create(ctx, &store.UserIdentity{UserID: u.ID, ProviderID: e.prov.ID, Subject: "d"})
 			setup(e)
 			code, cb := e.clientLogin("authentik", oidctest.Identity{Subject: "d"})
-			if !strings.Contains(cb.Body.String(), "Login failed") {
+			if !strings.Contains(cb.Body.String(), "Sign-in failed") {
 				t.Fatalf("callback: %s", cb.Body.String())
 			}
 			if m := pollResult(t, e, code); m["access_token"] != nil || m["error"] == nil {
@@ -424,7 +424,7 @@ func TestGitHubFlow(t *testing.T) {
 	e := newEnv(t, nil)
 	code, cb := e.clientLogin("github", oidctest.Identity{GitHubID: 4242, GitHubLogin: "Octo Cat",
 		Email: "octo@example.test", EmailVerified: true, Name: "Octo"})
-	if cb.Code != 200 || !strings.Contains(cb.Body.String(), "Login successful") {
+	if cb.Code != 200 || !strings.Contains(cb.Body.String(), "Signed in") {
 		t.Fatalf("callback: %d %s", cb.Code, cb.Body.String())
 	}
 	m := pollResult(t, e, code)
