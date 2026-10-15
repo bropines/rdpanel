@@ -21,7 +21,22 @@ info:
 
     **Timestamps** are RFC 3339 UTC strings. **Ids** are integers.
 
-    Status: skeleton by stream F; stream B completes resources and endpoints.
+    **Pagination.** List endpoints take `page` (1-based) and `page_size` (default 50,
+    max 500) and return `{"items": [...], "total": N, "page": P, "page_size": S}`.
+    `sort` is a field name, prefixed with `-` for descending (allowed values are
+    enumerated per endpoint). `q` is a case-insensitive substring search.
+
+    **Scoping.** Endpoints tagged for both roles (devices, address books, audit
+    logins, lookups) are scoped server-side: a `user` only ever sees their own
+    devices, books they own or that are shared with them, and their own login
+    events. Admin-only endpoints return 403 `forbidden` for the `user` role.
+
+    **Live events.** `GET /api/v1/events` (outside this base path) is a
+    Server-Sent Events stream, see the `/events` path and `x-sse-events`.
+
+    Status: skeleton by stream F; stream D defined the resource endpoints the UI
+    needs (dashboard … settings); stream B owns `/auth/*`, `/me/*` and
+    `/identity-providers` and implements everything.
   license:
     name: MIT
     identifier: MIT
@@ -31,9 +46,30 @@ security:
   - sessionCookie: []
 tags:
   - name: auth
+  - name: dashboard
   - name: users
+  - name: groups
   - name: devices
   - name: address-books
+  - name: audit
+  - name: server
+  - name: settings
+  - name: lookup
+  - name: events
+x-sse-events:
+  description: |
+    `GET /api/v1/events` — `text/event-stream`, session-authenticated (same cookie),
+    no CSRF (GET). The server sends a comment line `: ping` every 25 s and sets
+    `retry: 3000`. Clients reconnect with exponential backoff (1 s → 30 s, jitter)
+    and refetch lists after a reconnect because events are not replayed
+    (`Last-Event-ID` is ignored in v1). `user`-role sessions receive only events
+    about their own devices and connections; `hbbs.health` goes to admins only.
+    Every event's `data:` is one JSON object.
+  events:
+    presence.changed: { $ref: "#/components/schemas/PresenceChangedEvent" }
+    device.updated: { $ref: "#/components/schemas/Device" }
+    audit.connection: { $ref: "#/components/schemas/ConnectionAudit" }
+    hbbs.health: { $ref: "#/components/schemas/ServerHealth" }
 paths:
   /auth/csrf:
     get:
@@ -98,6 +134,1497 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/Me" }
         "401": { $ref: "#/components/responses/Unauthorized" }
+
+  # ───────────────────────────── stream D: resources ─────────────────────────────
+
+  /branding:
+    get:
+      tags: [settings]
+      operationId: getBranding
+      summary: Public branding (title, logo, welcome text) for the login page and shell.
+      security: []
+      responses:
+        "200":
+          description: Branding.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Branding" }
+  /branding/logo:
+    get:
+      tags: [settings]
+      operationId: getBrandingLogo
+      summary: The uploaded logo image (404 when none).
+      security: []
+      responses:
+        "200":
+          description: Logo bytes.
+          content:
+            image/png: { schema: { type: string, format: binary } }
+            image/jpeg: { schema: { type: string, format: binary } }
+            image/webp: { schema: { type: string, format: binary } }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /dashboard:
+    get:
+      tags: [dashboard]
+      operationId: getDashboard
+      summary: Overview counters, 24 h series and server health.
+      description: For the `user` role the device/connection counters cover only their own devices and `health` is null.
+      responses:
+        "200":
+          description: Dashboard data.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Dashboard" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
+  /lookup/users:
+    get:
+      tags: [lookup]
+      operationId: lookupUsers
+      summary: Minimal user directory for pickers (owner, share grantee).
+      description: Any authenticated user; returns at most 20 active users matching `q`.
+      parameters:
+        - $ref: "#/components/parameters/Q"
+      responses:
+        "200":
+          description: Matching users.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items: { type: array, items: { $ref: "#/components/schemas/UserRef" } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+  /lookup/user-groups:
+    get:
+      tags: [lookup]
+      operationId: lookupUserGroups
+      summary: Minimal user-group directory for pickers.
+      parameters:
+        - $ref: "#/components/parameters/Q"
+      responses:
+        "200":
+          description: Matching groups.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items: { type: array, items: { $ref: "#/components/schemas/GroupRef" } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
+  /devices:
+    get:
+      tags: [devices]
+      operationId: listDevices
+      summary: List devices (admins see all, users see their own).
+      parameters:
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PageSize"
+        - $ref: "#/components/parameters/Q"
+        - name: sort
+          in: query
+          schema:
+            type: string
+            default: -last_seen_at
+            enum: [rustdesk_id, -rustdesk_id, hostname, -hostname, alias, -alias, os, -os, client_version, -client_version, last_seen_at, -last_seen_at, created_at, -created_at, online, -online]
+        - $ref: "#/components/parameters/DeviceOnline"
+        - $ref: "#/components/parameters/DeviceOwner"
+        - $ref: "#/components/parameters/DeviceGroupFilter"
+        - $ref: "#/components/parameters/DeviceOs"
+        - $ref: "#/components/parameters/DeviceVersion"
+        - $ref: "#/components/parameters/DeviceSeenAfter"
+      responses:
+        "200":
+          description: Page of devices.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/DevicePage" }
+        "400": { $ref: "#/components/responses/ValidationFailed" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+  /devices/facets:
+    get:
+      tags: [devices]
+      operationId: getDeviceFacets
+      summary: Distinct OS families and client versions (with counts) for filter menus.
+      responses:
+        "200":
+          description: Facets.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/DeviceFacets" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+  /devices/export.csv:
+    get:
+      tags: [devices]
+      operationId: exportDevicesCsv
+      summary: CSV export of all devices matching the same filters as the list (no paging).
+      parameters:
+        - $ref: "#/components/parameters/Q"
+        - $ref: "#/components/parameters/DeviceOnline"
+        - $ref: "#/components/parameters/DeviceOwner"
+        - $ref: "#/components/parameters/DeviceGroupFilter"
+        - $ref: "#/components/parameters/DeviceOs"
+        - $ref: "#/components/parameters/DeviceVersion"
+        - $ref: "#/components/parameters/DeviceSeenAfter"
+      responses:
+        "200":
+          description: |
+            `Content-Disposition: attachment; filename="devices-<date>.csv"`. Columns:
+            rustdesk_id,alias,hostname,os,client_version,owner,group,online,last_seen_at,last_seen_ip,note.
+            Cells starting with `= + - @` are prefixed with `'` (CSV injection).
+          content:
+            text/csv: { schema: { type: string } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+  /devices/bulk:
+    post:
+      tags: [devices]
+      operationId: bulkDevices
+      summary: Bulk action on devices (admin).
+      description: |
+        `assign_owner` (owner_user_id, null = unassign), `assign_group` (device_group_id, null = none),
+        `kick` (heartbeat `disconnect`), `delete` (also revokes client tokens bound to the device uuid).
+      parameters:
+        - $ref: "#/components/parameters/CsrfHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/DeviceBulkRequest" }
+      responses:
+        "200":
+          description: Result.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/BulkResult" }
+        "400": { $ref: "#/components/responses/ValidationFailed" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /devices/{device_id}:
+    parameters:
+      - $ref: "#/components/parameters/DeviceId"
+    get:
+      tags: [devices]
+      operationId: getDevice
+      summary: Device detail incl. recent connections.
+      responses:
+        "200":
+          description: Device.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/DeviceDetail" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    patch:
+      tags: [devices]
+      operationId: updateDevice
+      summary: Update alias, note, owner or group. Users may only edit alias/note of their own devices.
+      parameters:
+        - $ref: "#/components/parameters/CsrfHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/DeviceUpdate" }
+      responses:
+        "200":
+          description: Updated device.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Device" }
+        "400": { $ref: "#/components/responses/ValidationFailed" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    delete:
+      tags: [devices]
+      operationId: deleteDevice
+      summary: Delete a device (admin); revokes client tokens bound to it.
+      parameters:
+        - $ref: "#/components/parameters/CsrfHeader"
+      responses:
+        "204": { description: Deleted. }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /devices/{device_id}/kick:
+    post:
+      tags: [devices]
+      operationId: kickDevice
+      summary: Ask the client to disconnect active sessions on its next heartbeat (admin).
+      parameters:
+        - $ref: "#/components/parameters/DeviceId"
+        - $ref: "#/components/parameters/CsrfHeader"
+      responses:
+        "202": { description: Queued. }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /users:
+    get:
+      tags: [users]
+      operationId: listUsers
+      summary: List users (admin).
+      parameters:
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PageSize"
+        - $ref: "#/components/parameters/Q"
+        - name: sort
+          in: query
+          schema:
+            type: string
+            default: username
+            enum: [username, -username, created_at, -created_at, last_login_at, -last_login_at, role, -role]
+        - name: role
+          in: query
+          schema: { $ref: "#/components/schemas/Role" }
+        - name: status
+          in: query
+          schema: { $ref: "#/components/schemas/UserStatus" }
+        - name: user_group_id
+          in: query
+          schema: { type: integer, format: int64 }
+      responses:
+        "200":
+          description: Page of users.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/UserPage" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+    post:
+      tags: [users]
+      operationId: createUser
+      summary: Create a user (admin).
+      parameters:
+        - $ref: "#/components/parameters/CsrfHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/UserCreate" }
+      responses:
+        "201":
+          description: Created.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/UserListItem" }
+        "400": { $ref: "#/components/responses/ValidationFailed" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409": { $ref: "#/components/responses/Conflict" }
+  /users/{user_id}:
+    parameters:
+      - $ref: "#/components/parameters/UserId"
+    get:
+      tags: [users]
+      operationId: getUser
+      summary: User detail (admin).
+      responses:
+        "200":
+          description: User.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/UserDetail" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    patch:
+      tags: [users]
+      operationId: updateUser
+      summary: Update profile, role, status, group, totp_required (admin).
+      description: |
+        Demoting or disabling the last active admin fails with 409 `last_admin`.
+        Disabling a user revokes all their sessions and client tokens.
+      parameters:
+        - $ref: "#/components/parameters/CsrfHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/UserUpdate" }
+      responses:
+        "200":
+          description: Updated.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/UserListItem" }
+        "400": { $ref: "#/components/responses/ValidationFailed" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+    delete:
+      tags: [users]
+      operationId: deleteUser
+      summary: Delete a user (admin). 409 `last_admin` for the last active admin; 409 `self` for yourself.
+      parameters:
+        - $ref: "#/components/parameters/CsrfHeader"
+      responses:
+        "204": { description: Deleted. }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+  /users/{user_id}/password:
+    post:
+      tags: [users]
+      operationId: resetUserPassword
+      summary: Set a new password for a user (admin).
+      parameters:
+        - $ref: "#/components/parameters/UserId"
+        - $ref: "#/components/parameters/CsrfHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/PasswordReset" }
+      responses:
+        "204": { description: Password changed. }
+        "400": { $ref: "#/components/responses/ValidationFailed" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /users/{user_id}/totp/reset:
+    post:
+      tags: [users]
+      operationId: resetUserTotp
+      summary: Remove the user's TOTP secret and recovery codes (admin). They must re-enrol if `totp_required`.
+      parameters:
+        - $ref: "#/components/parameters/UserId"
+        - $ref: "#/components/parameters/CsrfHeader"
+      responses:
+        "204": { description: Reset. }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /users/{user_id}/sessions:
+    get:
+      tags: [users]
+      operationId: listUserSessions
+      summary: Active panel sessions and client tokens of a user (admin).
+      parameters:
+        - $ref: "#/components/parameters/UserId"
+      responses:
+        "200":
+          description: Sessions.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items: { type: array, items: { $ref: "#/components/schemas/Session" } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /users/{user_id}/sessions/revoke:
+    post:
+      tags: [users]
+      operationId: revokeUserSessions
+      summary: Revoke all sessions/tokens of a user, optionally only one kind (admin).
+      parameters:
+        - $ref: "#/components/parameters/UserId"
+        - $ref: "#/components/parameters/CsrfHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                kind: { type: string, enum: [all, web, client], default: all }
+      responses:
+        "200":
+          description: Number of revoked sessions.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RevokeResult" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /users/{user_id}/sessions/{session_id}:
+    delete:
+      tags: [users]
+      operationId: revokeUserSession
+      summary: Revoke one session/token of a user (admin).
+      parameters:
+        - $ref: "#/components/parameters/UserId"
+        - $ref: "#/components/parameters/SessionId"
+        - $ref: "#/components/parameters/CsrfHeader"
+      responses:
+        "204": { description: Revoked. }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /users/{user_id}/identities/{identity_id}:
+    delete:
+      tags: [users]
+      operationId: unlinkUserIdentity
+      summary: Unlink an IdP identity from a user (admin). 409 `last_login_method` if it is the only way to log in.
+      parameters:
+        - $ref: "#/components/parameters/UserId"
+        - name: identity_id
+          in: path
+          required: true
+          schema: { type: integer, format: int64 }
+        - $ref: "#/components/parameters/CsrfHeader"
+      responses:
+        "204": { description: Unlinked. }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+
+  /user-groups:
+    get:
+      tags: [groups]
+      operationId: listUserGroups
+      summary: List user groups (admin).
+      parameters:
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PageSize"
+        - $ref: "#/components/parameters/Q"
+        - name: sort
+          in: query
+          schema: { type: string, default: name, enum: [name, -name, member_count, -member_count, created_at, -created_at] }
+      responses:
+        "200":
+          description: Page of user groups.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/UserGroupPage" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+    post:
+      tags: [groups]
+      operationId: createUserGroup
+      summary: Create user group.
+      parameters:
+        - $ref: "#/components/parameters/CsrfHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/UserGroupInput" }
+      responses:
+        "201":
+          description: Created.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/UserGroup" }
+        "400": { $ref: "#/components/responses/ValidationFailed" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409": { $ref: "#/components/responses/Conflict" }
+  /user-groups/{group_id}:
+    parameters:
+      - $ref: "#/components/parameters/GroupId"
+    patch:
+      tags: [groups]
+      operationId: updateUserGroup
+      summary: Update user group.
+      parameters:
+        - $ref: "#/components/parameters/CsrfHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/UserGroupPatch" }
+      responses:
+        "200":
+          description: Updated.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/UserGroup" }
+        "400": { $ref: "#/components/responses/ValidationFailed" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+    delete:
+      tags: [groups]
+      operationId: deleteUserGroup
+      summary: Delete a user group; members fall back to no group.
+      parameters:
+        - $ref: "#/components/parameters/CsrfHeader"
+      responses:
+        "204": { description: Deleted. }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /device-groups:
+    get:
+      tags: [groups]
+      operationId: listDeviceGroups
+      summary: List device groups (admin).
+      parameters:
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PageSize"
+        - $ref: "#/components/parameters/Q"
+        - name: sort
+          in: query
+          schema: { type: string, default: name, enum: [name, -name, device_count, -device_count, created_at, -created_at] }
+      responses:
+        "200":
+          description: Page of device groups.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/DeviceGroupPage" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+    post:
+      tags: [groups]
+      operationId: createDeviceGroup
+      summary: Create device group.
+      parameters:
+        - $ref: "#/components/parameters/CsrfHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/DeviceGroupInput" }
+      responses:
+        "201":
+          description: Created.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/DeviceGroup" }
+        "400": { $ref: "#/components/responses/ValidationFailed" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409": { $ref: "#/components/responses/Conflict" }
+  /device-groups/{group_id}:
+    parameters:
+      - $ref: "#/components/parameters/GroupId"
+    patch:
+      tags: [groups]
+      operationId: updateDeviceGroup
+      summary: Update device group.
+      parameters:
+        - $ref: "#/components/parameters/CsrfHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/DeviceGroupPatch" }
+      responses:
+        "200":
+          description: Updated.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/DeviceGroup" }
+        "400": { $ref: "#/components/responses/ValidationFailed" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+    delete:
+      tags: [groups]
+      operationId: deleteDeviceGroup
+      summary: Delete a device group; devices fall back to no group.
+      parameters:
+        - $ref: "#/components/parameters/CsrfHeader"
+      responses:
+        "204": { description: Deleted. }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /address-books:
+    get:
+      tags: [address-books]
+      operationId: listAddressBooks
+      summary: Address books visible to the caller.
+      description: |
+        `scope=accessible` (default): books the caller owns or that are shared with them (also for admins).
+        `scope=all`: every book (admin only). `owner_user_id` narrows by owner (admin only for others).
+      parameters:
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PageSize"
+        - $ref: "#/components/parameters/Q"
+        - name: scope
+          in: query
+          schema: { type: string, enum: [accessible, all], default: accessible }
+        - name: owner_user_id
+          in: query
+          schema: { type: integer, format: int64 }
+        - name: kind
+          in: query
+          schema: { type: string, enum: [personal, shared] }
+        - name: sort
+          in: query
+          schema: { type: string, default: name, enum: [name, -name, entry_count, -entry_count, updated_at, -updated_at] }
+      responses:
+        "200":
+          description: Page of books.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AddressBookPage" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+    post:
+      tags: [address-books]
+      operationId: createAddressBook
+      summary: Create a shared address book (owner = caller, or any user for admins).
+      parameters:
+        - $ref: "#/components/parameters/CsrfHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/AddressBookCreate" }
+      responses:
+        "201":
+          description: Created.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AddressBook" }
+        "400": { $ref: "#/components/responses/ValidationFailed" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409": { $ref: "#/components/responses/Conflict" }
+  /address-books/{book_id}:
+    parameters:
+      - $ref: "#/components/parameters/BookId"
+    get:
+      tags: [address-books]
+      operationId: getAddressBook
+      summary: Get address book.
+      responses:
+        "200":
+          description: Book.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AddressBook" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    patch:
+      tags: [address-books]
+      operationId: updateAddressBook
+      summary: Rename / edit note / default password (requires `full`).
+      parameters:
+        - $ref: "#/components/parameters/CsrfHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/AddressBookUpdate" }
+      responses:
+        "200":
+          description: Updated.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AddressBook" }
+        "400": { $ref: "#/components/responses/ValidationFailed" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+    delete:
+      tags: [address-books]
+      operationId: deleteAddressBook
+      summary: Delete a shared book (owner or admin). Personal books cannot be deleted (409 `personal_book`).
+      parameters:
+        - $ref: "#/components/parameters/CsrfHeader"
+      responses:
+        "204": { description: Deleted. }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+  /address-books/{book_id}/shares:
+    parameters:
+      - $ref: "#/components/parameters/BookId"
+    get:
+      tags: [address-books]
+      operationId: listAddressBookShares
+      summary: Shares of a book (requires `full`).
+      responses:
+        "200":
+          description: Shares.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items: { type: array, items: { $ref: "#/components/schemas/AddressBookShare" } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    post:
+      tags: [address-books]
+      operationId: createAddressBookShare
+      summary: Share a book with a user or a user group (requires `full`). Personal books cannot be shared.
+      parameters:
+        - $ref: "#/components/parameters/CsrfHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/AddressBookShareCreate" }
+      responses:
+        "201":
+          description: Created.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AddressBookShare" }
+        "400": { $ref: "#/components/responses/ValidationFailed" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+  /address-books/{book_id}/shares/{share_id}:
+    parameters:
+      - $ref: "#/components/parameters/BookId"
+      - name: share_id
+        in: path
+        required: true
+        schema: { type: integer, format: int64 }
+    patch:
+      tags: [address-books]
+      operationId: updateAddressBookShare
+      summary: Update address book share.
+      parameters:
+        - $ref: "#/components/parameters/CsrfHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [permission]
+              additionalProperties: false
+              properties:
+                permission: { $ref: "#/components/schemas/Permission" }
+      responses:
+        "200":
+          description: Updated.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AddressBookShare" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    delete:
+      tags: [address-books]
+      operationId: deleteAddressBookShare
+      summary: Delete address book share.
+      parameters:
+        - $ref: "#/components/parameters/CsrfHeader"
+      responses:
+        "204": { description: Deleted. }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /address-books/{book_id}/entries:
+    parameters:
+      - $ref: "#/components/parameters/BookId"
+    get:
+      tags: [address-books]
+      operationId: listAddressBookEntries
+      summary: Entries of a book (requires `read`).
+      parameters:
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PageSize"
+        - $ref: "#/components/parameters/Q"
+        - name: tag
+          in: query
+          description: Only entries having every given tag (repeatable).
+          schema: { type: array, items: { type: string } }
+          style: form
+          explode: true
+        - name: sort
+          in: query
+          schema: { type: string, default: alias, enum: [alias, -alias, rustdesk_id, -rustdesk_id, hostname, -hostname, updated_at, -updated_at] }
+      responses:
+        "200":
+          description: Page of entries. `online` is joined from live presence.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/EntryPage" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    post:
+      tags: [address-books]
+      operationId: createAddressBookEntry
+      summary: Add an entry (requires `read_write`). Unknown tag names are created with the default color.
+      parameters:
+        - $ref: "#/components/parameters/CsrfHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/EntryCreate" }
+      responses:
+        "201":
+          description: Created.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Entry" }
+        "400": { $ref: "#/components/responses/ValidationFailed" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+  /address-books/{book_id}/entries/bulk:
+    post:
+      tags: [address-books]
+      operationId: bulkAddressBookEntries
+      summary: Bulk delete or tag edit (requires `read_write`).
+      description: |
+        `delete`; `add_tags` / `remove_tags` (tags = names; added names are created if missing);
+        `set_tags` replaces the tag set.
+      parameters:
+        - $ref: "#/components/parameters/BookId"
+        - $ref: "#/components/parameters/CsrfHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/EntryBulkRequest" }
+      responses:
+        "200":
+          description: Result.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/BulkResult" }
+        "400": { $ref: "#/components/responses/ValidationFailed" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /address-books/{book_id}/entries/from-devices:
+    post:
+      tags: [address-books]
+      operationId: addAddressBookEntriesFromDevices
+      summary: Add devices as entries (requires `read_write`); existing ids are skipped.
+      description: Copies rustdesk_id, alias (or hostname), hostname, os_username and platform from the device rows. Users may only add devices visible to them.
+      parameters:
+        - $ref: "#/components/parameters/BookId"
+        - $ref: "#/components/parameters/CsrfHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/EntriesFromDevicesRequest" }
+      responses:
+        "200":
+          description: Result (`affected` = added, `skipped` = already present).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/BulkResult" }
+        "400": { $ref: "#/components/responses/ValidationFailed" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /address-books/{book_id}/entries/{entry_id}:
+    parameters:
+      - $ref: "#/components/parameters/BookId"
+      - name: entry_id
+        in: path
+        required: true
+        schema: { type: integer, format: int64 }
+    patch:
+      tags: [address-books]
+      operationId: updateAddressBookEntry
+      summary: Update address book entry.
+      parameters:
+        - $ref: "#/components/parameters/CsrfHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/EntryUpdate" }
+      responses:
+        "200":
+          description: Updated.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Entry" }
+        "400": { $ref: "#/components/responses/ValidationFailed" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+    delete:
+      tags: [address-books]
+      operationId: deleteAddressBookEntry
+      summary: Delete address book entry.
+      parameters:
+        - $ref: "#/components/parameters/CsrfHeader"
+      responses:
+        "204": { description: Deleted. }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /address-books/{book_id}/tags:
+    parameters:
+      - $ref: "#/components/parameters/BookId"
+    get:
+      tags: [address-books]
+      operationId: listAddressBookTags
+      summary: List address book tags.
+      responses:
+        "200":
+          description: Tags of the book, ordered by name.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items: { type: array, items: { $ref: "#/components/schemas/Tag" } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    post:
+      tags: [address-books]
+      operationId: createAddressBookTag
+      summary: Create address book tag.
+      parameters:
+        - $ref: "#/components/parameters/CsrfHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/TagInput" }
+      responses:
+        "201":
+          description: Created.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Tag" }
+        "400": { $ref: "#/components/responses/ValidationFailed" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409": { $ref: "#/components/responses/Conflict" }
+  /address-books/{book_id}/tags/{tag_id}:
+    parameters:
+      - $ref: "#/components/parameters/BookId"
+      - name: tag_id
+        in: path
+        required: true
+        schema: { type: integer, format: int64 }
+    patch:
+      tags: [address-books]
+      operationId: updateAddressBookTag
+      summary: Rename and/or recolor a tag (rename keeps entry links).
+      parameters:
+        - $ref: "#/components/parameters/CsrfHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/TagPatch" }
+      responses:
+        "200":
+          description: Updated.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Tag" }
+        "400": { $ref: "#/components/responses/ValidationFailed" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+    delete:
+      tags: [address-books]
+      operationId: deleteAddressBookTag
+      summary: Delete a tag (removed from all entries).
+      parameters:
+        - $ref: "#/components/parameters/CsrfHeader"
+      responses:
+        "204": { description: Deleted. }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /audit/connections:
+    get:
+      tags: [audit]
+      operationId: listConnectionAudits
+      summary: Connection audit (admin; users get connections to their own devices).
+      parameters:
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PageSize"
+        - $ref: "#/components/parameters/Q"
+        - $ref: "#/components/parameters/From"
+        - $ref: "#/components/parameters/To"
+        - name: device_id
+          in: query
+          description: Device row id.
+          schema: { type: integer, format: int64 }
+        - name: conn_type
+          in: query
+          schema: { $ref: "#/components/schemas/ConnType" }
+        - name: active
+          in: query
+          description: true = only connections without `ended_at`.
+          schema: { type: boolean }
+        - name: sort
+          in: query
+          schema: { type: string, default: -started_at, enum: [started_at, -started_at, ended_at, -ended_at] }
+      responses:
+        "200":
+          description: Page.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ConnectionAuditPage" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+  /audit/files:
+    get:
+      tags: [audit]
+      operationId: listFileTransferAudits
+      summary: File-transfer audit.
+      parameters:
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PageSize"
+        - $ref: "#/components/parameters/Q"
+        - $ref: "#/components/parameters/From"
+        - $ref: "#/components/parameters/To"
+        - name: device_id
+          in: query
+          schema: { type: integer, format: int64 }
+        - name: direction
+          in: query
+          schema: { $ref: "#/components/schemas/FileDirection" }
+        - name: sort
+          in: query
+          schema: { type: string, default: -created_at, enum: [created_at, -created_at] }
+      responses:
+        "200":
+          description: Page.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/FileTransferAuditPage" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+  /audit/alarms:
+    get:
+      tags: [audit]
+      operationId: listAlarmAudits
+      summary: Client security alarms (admin).
+      parameters:
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PageSize"
+        - $ref: "#/components/parameters/Q"
+        - $ref: "#/components/parameters/From"
+        - $ref: "#/components/parameters/To"
+        - name: alarm_type
+          in: query
+          schema: { type: integer }
+        - name: sort
+          in: query
+          schema: { type: string, default: -created_at, enum: [created_at, -created_at] }
+      responses:
+        "200":
+          description: Page.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AlarmAuditPage" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /audit/logins:
+    get:
+      tags: [audit]
+      operationId: listLoginEvents
+      summary: Login attempts (admins see all, users their own).
+      parameters:
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PageSize"
+        - $ref: "#/components/parameters/Q"
+        - $ref: "#/components/parameters/From"
+        - $ref: "#/components/parameters/To"
+        - name: user_id
+          in: query
+          schema: { type: integer, format: int64 }
+        - name: result
+          in: query
+          schema: { type: string, enum: [success, failure] }
+        - name: method
+          in: query
+          schema: { $ref: "#/components/schemas/LoginMethod" }
+        - name: client_kind
+          in: query
+          schema: { type: string, enum: [web, client] }
+        - name: sort
+          in: query
+          schema: { type: string, default: -created_at, enum: [created_at, -created_at] }
+      responses:
+        "200":
+          description: Page.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/LoginEventPage" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+  /audit/admin:
+    get:
+      tags: [audit]
+      operationId: listAdminAudit
+      summary: Admin actions (admin).
+      parameters:
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PageSize"
+        - $ref: "#/components/parameters/Q"
+        - $ref: "#/components/parameters/From"
+        - $ref: "#/components/parameters/To"
+        - name: actor_user_id
+          in: query
+          schema: { type: integer, format: int64 }
+        - name: action
+          in: query
+          description: Action prefix, e.g. `user.` or `device.delete`.
+          schema: { type: string }
+        - name: target_type
+          in: query
+          schema: { type: string }
+        - name: sort
+          in: query
+          schema: { type: string, default: -created_at, enum: [created_at, -created_at] }
+      responses:
+        "200":
+          description: Page.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AdminAuditPage" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
+  /server/health:
+    get:
+      tags: [server]
+      operationId: getServerHealth
+      summary: hbbs/hbbr reachability and presence source (admin).
+      responses:
+        "200":
+          description: Health.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ServerHealth" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /server/settings:
+    get:
+      tags: [server]
+      operationId: getServerSettings
+      summary: Desired hbbs/hbbr settings, the values read back from the servers, and per-key sync state (admin).
+      responses:
+        "200":
+          description: State.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ServerSettingsState" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+    patch:
+      tags: [server]
+      operationId: updateServerSettings
+      summary: Change desired settings (partial). The reconciler applies them immediately and on every hbbs/hbbr restart.
+      description: |
+        Validation: relay servers `host[:port]` without spaces; IPs/CIDRs via netip;
+        speeds > 0. After `always_use_relay` the reconciler re-sends `relay-servers`
+        (hbbs bug, see docs/research/hbbs-integration.md §1.3).
+      parameters:
+        - $ref: "#/components/parameters/CsrfHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ServerSettingsPatch" }
+      responses:
+        "200":
+          description: New state (after one apply attempt).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ServerSettingsState" }
+        "400": { $ref: "#/components/responses/ValidationFailed" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /server/settings/reapply:
+    post:
+      tags: [server]
+      operationId: reapplyServerSettings
+      summary: Force the reconciler to re-apply every desired setting now (admin).
+      parameters:
+        - $ref: "#/components/parameters/CsrfHeader"
+      responses:
+        "200":
+          description: State after re-applying.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ServerSettingsState" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /server/ip-blocker:
+    get:
+      tags: [server]
+      operationId: listIpBlocker
+      summary: hbbs `ip-blocker` table (admin).
+      parameters:
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PageSize"
+      responses:
+        "200":
+          description: Entries.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/IpBlockerPage" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "503": { $ref: "#/components/responses/Unavailable" }
+  /server/ip-blocker/{ip}:
+    delete:
+      tags: [server]
+      operationId: unblockIp
+      summary: Remove an IP from the hbbs ip-blocker (`ib <ip> -`).
+      parameters:
+        - name: ip
+          in: path
+          required: true
+          schema: { type: string }
+        - $ref: "#/components/parameters/CsrfHeader"
+      responses:
+        "204": { description: Removed. }
+        "400": { $ref: "#/components/responses/ValidationFailed" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "503": { $ref: "#/components/responses/Unavailable" }
+  /server/ip-changes:
+    get:
+      tags: [server]
+      operationId: listIpChanges
+      summary: hbbs `ip-changes` table — ids that registered from several IPs (admin).
+      parameters:
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PageSize"
+      responses:
+        "200":
+          description: Entries.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/IpChangesPage" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "503": { $ref: "#/components/responses/Unavailable" }
+  /server/ip-changes/{rustdesk_id}:
+    delete:
+      tags: [server]
+      operationId: clearIpChanges
+      summary: Forget the IP history of one id (`ic <id> -`).
+      parameters:
+        - name: rustdesk_id
+          in: path
+          required: true
+          schema: { type: string }
+        - $ref: "#/components/parameters/CsrfHeader"
+      responses:
+        "204": { description: Removed. }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "503": { $ref: "#/components/responses/Unavailable" }
+  /server/punch-requests:
+    get:
+      tags: [server]
+      operationId: listPunchRequests
+      summary: Punch requests collected from hbbs (`pr`) and stored by the panel (admin).
+      parameters:
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PageSize"
+        - $ref: "#/components/parameters/Q"
+        - $ref: "#/components/parameters/From"
+        - $ref: "#/components/parameters/To"
+      responses:
+        "200":
+          description: Page.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PunchRequestPage" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /server/relay-usage:
+    get:
+      tags: [server]
+      operationId: getRelayUsage
+      summary: Active relays from hbbr `usage` (admin).
+      responses:
+        "200":
+          description: Active relays, by total bytes descending.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items, checked_at]
+                properties:
+                  checked_at: { type: string, format: date-time }
+                  items: { type: array, items: { $ref: "#/components/schemas/RelayUsage" } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "503": { $ref: "#/components/responses/Unavailable" }
+  /server/console/commands:
+    get:
+      tags: [server]
+      operationId: listConsoleCommands
+      summary: Allow-listed raw console commands (admin).
+      responses:
+        "200":
+          description: Commands.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items: { type: array, items: { $ref: "#/components/schemas/ConsoleCommand" } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /server/console:
+    post:
+      tags: [server]
+      operationId: runConsoleCommand
+      summary: Run one allow-listed command against hbbs/hbbr (admin, audited).
+      description: |
+        `cmd` must be a full command name from `/server/console/commands` for that target;
+        each arg must match the command's `arg_pattern`; no spaces inside args; total < 1 KiB.
+        Mutating commands change runtime state only — the reconciler may revert them to the
+        desired settings; prefer the typed settings.
+      parameters:
+        - $ref: "#/components/parameters/CsrfHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ConsoleRequest" }
+      responses:
+        "200":
+          description: Output.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ConsoleResult" }
+        "400": { $ref: "#/components/responses/ValidationFailed" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "503": { $ref: "#/components/responses/Unavailable" }
+  /server/console/history:
+    get:
+      tags: [server]
+      operationId: listConsoleHistory
+      summary: Recently executed console commands (from admin_audit, newest first).
+      parameters:
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PageSize"
+      responses:
+        "200":
+          description: Page.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ConsoleHistoryPage" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
+  /settings:
+    get:
+      tags: [settings]
+      operationId: getSettings
+      summary: Panel settings (admin).
+      responses:
+        "200":
+          description: Settings.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PanelSettings" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+    patch:
+      tags: [settings]
+      operationId: updateSettings
+      summary: Partial update; each section is merged key by key.
+      parameters:
+        - $ref: "#/components/parameters/CsrfHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/PanelSettingsPatch" }
+      responses:
+        "200":
+          description: Settings after the update.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PanelSettings" }
+        "400": { $ref: "#/components/responses/ValidationFailed" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /settings/logo:
+    put:
+      tags: [settings]
+      operationId: uploadLogo
+      summary: Upload the branding logo (PNG/JPEG/WebP, ≤ 256 KiB; SVG is refused).
+      parameters:
+        - $ref: "#/components/parameters/CsrfHeader"
+      requestBody:
+        required: true
+        content:
+          image/png: { schema: { type: string, format: binary } }
+          image/jpeg: { schema: { type: string, format: binary } }
+          image/webp: { schema: { type: string, format: binary } }
+      responses:
+        "200":
+          description: Branding after upload.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Branding" }
+        "400": { $ref: "#/components/responses/ValidationFailed" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+    delete:
+      tags: [settings]
+      operationId: deleteLogo
+      summary: Delete logo.
+      parameters:
+        - $ref: "#/components/parameters/CsrfHeader"
+      responses:
+        "204": { description: Removed. }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
+  /events:
+    servers:
+      - url: /api/v1
+    get:
+      tags: [events]
+      operationId: streamEvents
+      summary: Server-Sent Events stream (presence, device updates, connections, health).
+      description: |
+        Mounted at `/api/v1/events` (not under `/admin`). Event names and payloads are
+        listed in the top-level `x-sse-events`:
+
+        ```
+        event: presence.changed
+        data: {"id":12,"rustdesk_id":"123456789","online":true,"since":"2026-10-15T10:00:00Z"}
+
+        event: device.updated
+        data: {<Device>}
+
+        event: audit.connection
+        data: {<ConnectionAudit>}
+
+        event: hbbs.health
+        data: {<ServerHealth>}
+        ```
+      responses:
+        "200":
+          description: Event stream (never ends on its own).
+          content:
+            text/event-stream:
+              schema: { type: string }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
 components:
   securitySchemes:
     sessionCookie:
@@ -119,7 +1646,90 @@ components:
       name: offset
       in: query
       schema: { type: integer, minimum: 0, default: 0 }
+    Page:
+      name: page
+      in: query
+      description: 1-based page number.
+      schema: { type: integer, minimum: 1, default: 1 }
+    PageSize:
+      name: page_size
+      in: query
+      schema: { type: integer, minimum: 1, maximum: 500, default: 50 }
+    Q:
+      name: q
+      in: query
+      description: Case-insensitive substring search.
+      schema: { type: string, maxLength: 200 }
+    From:
+      name: from
+      in: query
+      description: Inclusive lower time bound.
+      schema: { type: string, format: date-time }
+    To:
+      name: to
+      in: query
+      description: Exclusive upper time bound.
+      schema: { type: string, format: date-time }
+    DeviceId:
+      name: device_id
+      in: path
+      required: true
+      schema: { type: integer, format: int64 }
+    UserId:
+      name: user_id
+      in: path
+      required: true
+      schema: { type: integer, format: int64 }
+    GroupId:
+      name: group_id
+      in: path
+      required: true
+      schema: { type: integer, format: int64 }
+    BookId:
+      name: book_id
+      in: path
+      required: true
+      schema: { type: integer, format: int64 }
+    SessionId:
+      name: session_id
+      in: path
+      required: true
+      schema: { type: integer, format: int64 }
+    DeviceOnline:
+      name: online
+      in: query
+      schema: { type: boolean }
+    DeviceOwner:
+      name: owner
+      in: query
+      description: Owner user id, `me` (the caller) or `none` (unassigned).
+      schema: { type: string, pattern: "^([0-9]+|me|none)$" }
+    DeviceGroupFilter:
+      name: device_group
+      in: query
+      description: Device group id or `none`.
+      schema: { type: string, pattern: "^([0-9]+|none)$" }
+    DeviceOs:
+      name: os
+      in: query
+      description: OS family as returned by `/devices/facets`.
+      schema: { $ref: "#/components/schemas/OsFamily" }
+    DeviceVersion:
+      name: version
+      in: query
+      description: Exact client version.
+      schema: { type: string }
+    DeviceSeenAfter:
+      name: seen_after
+      in: query
+      description: Only devices last seen at/after this time.
+      schema: { type: string, format: date-time }
   responses:
+    Unavailable:
+      description: hbbs/hbbr unreachable (error code `server_unavailable`).
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
     Unauthorized:
       description: Not authenticated (or session expired).
       content:
@@ -257,9 +1867,22 @@ components:
         note: { type: string }
         owner_user_id: { type: [integer, "null"], format: int64 }
         device_group_id: { type: [integer, "null"], format: int64 }
-        online: { type: boolean, description: Live presence (hbbs OnlineRequest, heartbeat fallback). }
+        owner:
+          description: Embedded owner (null = unassigned).
+          oneOf:
+            - $ref: "#/components/schemas/UserRef"
+            - type: "null"
+        device_group:
+          oneOf:
+            - $ref: "#/components/schemas/GroupRef"
+            - type: "null"
+        os_family: { $ref: "#/components/schemas/OsFamily" }
+        online: { type: boolean, description: "Live presence (hbbs OnlineRequest, heartbeat fallback)." }
+        online_since: { type: [string, "null"], format: date-time, description: Start of the current online/offline streak. }
         last_seen_at: { type: [string, "null"], format: date-time }
         last_seen_ip: { type: [string, "null"] }
+        last_heartbeat_at: { type: [string, "null"], format: date-time }
+        sysinfo_at: { type: [string, "null"], format: date-time }
         created_at: { type: string, format: date-time }
         updated_at: { type: string, format: date-time }
     Permission:
@@ -267,18 +1890,21 @@ components:
       enum: [read, read_write, full]
     AddressBook:
       type: object
-      required: [id, guid, owner_user_id, name, is_personal, permission, entry_count, created_at, updated_at]
+      required: [id, guid, owner_user_id, owner, name, is_personal, permission, entry_count, share_count, has_default_password, created_at, updated_at]
       properties:
         id: { type: integer, format: int64 }
         guid: { type: string }
         owner_user_id: { type: integer, format: int64 }
+        owner: { $ref: "#/components/schemas/UserRef" }
         name: { type: string }
         note: { type: string }
         is_personal: { type: boolean }
         permission:
           $ref: "#/components/schemas/Permission"
-          description: Effective permission of the current user.
+          description: Effective permission of the current user (admins have `full` on every book).
         entry_count: { type: integer }
+        share_count: { type: integer }
+        has_default_password: { type: boolean, description: Shared books only; the password itself is write-only. }
         created_at: { type: string, format: date-time }
         updated_at: { type: string, format: date-time }
     Entry:
@@ -301,21 +1927,19 @@ components:
         rdp_port: { type: string }
         rdp_username: { type: string }
         same_server: { type: boolean }
+        online: { type: [boolean, "null"], description: "Live presence when the id is a known device, else null." }
+        device_id: { type: [integer, "null"], format: int64, description: "Matching device row, if any." }
         created_at: { type: string, format: date-time }
         updated_at: { type: string, format: date-time }
     Tag:
       type: object
-      required: [id, address_book_id, name, color_argb]
+      required: [id, address_book_id, name, color_argb, entry_count]
       properties:
         id: { type: integer, format: int64 }
         address_book_id: { type: integer, format: int64 }
         name: { type: string }
-        color_argb:
-          type: integer
-          format: int64
-          minimum: 0
-          maximum: 4294967295
-          description: Flutter ARGB uint32, e.g. 4288585374 (0xFF9E9E9E).
+        color_argb: { $ref: "#/components/schemas/ArgbColor" }
+        entry_count: { type: integer }
     Page:
       type: object
       description: Generic page envelope; stream B specialises per resource.
@@ -323,3 +1947,826 @@ components:
       properties:
         total: { type: integer }
         items: { type: array, items: {} }
+
+    # ───────────────────────────── stream D: resources ─────────────────────────────
+
+    PageMeta:
+      type: object
+      required: [total, page, page_size]
+      properties:
+        total: { type: integer, description: Total number of matching items. }
+        page: { type: integer }
+        page_size: { type: integer }
+    BulkResult:
+      type: object
+      required: [affected]
+      properties:
+        affected: { type: integer }
+        skipped: { type: integer }
+        errors:
+          type: array
+          items:
+            type: object
+            required: [id, code, message]
+            properties:
+              id: { type: [integer, string] }
+              code: { type: string }
+              message: { type: string }
+    RevokeResult:
+      type: object
+      required: [revoked]
+      properties:
+        revoked: { type: integer }
+    ArgbColor:
+      type: integer
+      format: int64
+      minimum: 0
+      maximum: 4294967295
+      description: Flutter ARGB uint32, e.g. 4288585374 (0xFF9E9E9E).
+    UserRef:
+      type: object
+      required: [id, username, display_name]
+      properties:
+        id: { type: integer, format: int64 }
+        username: { type: string }
+        display_name: { type: string }
+    GroupRef:
+      type: object
+      required: [id, name]
+      properties:
+        id: { type: integer, format: int64 }
+        name: { type: string }
+    OsFamily:
+      type: string
+      enum: [windows, macos, linux, android, ios, other]
+    Branding:
+      type: object
+      required: [title, logo_url, welcome_markdown]
+      properties:
+        title: { type: string }
+        logo_url: { type: [string, "null"], description: "Same-origin URL of the uploaded logo (cache-busted), or null." }
+        welcome_markdown:
+          type: string
+          description: Markdown shown on the dashboard; `{{username}}` is substituted client-side. Rendered sanitized (DOMPurify).
+        web_client_url: { type: [string, "null"], description: Optional external RustDesk web client link-out. }
+
+    Dashboard:
+      type: object
+      required: [devices_total, devices_online, users_total, address_books_total, logins_24h, failed_logins_24h, connections_24h, active_connections, series, version]
+      properties:
+        devices_total: { type: integer }
+        devices_online: { type: integer }
+        users_total: { type: integer }
+        address_books_total: { type: integer }
+        logins_24h: { type: integer }
+        failed_logins_24h: { type: integer }
+        connections_24h: { type: integer }
+        active_connections: { type: integer }
+        series:
+          type: object
+          required: [logins, connections, online]
+          description: 24 hourly buckets, oldest first; `t` is the bucket start.
+          properties:
+            logins: { type: array, items: { $ref: "#/components/schemas/SeriesPoint" } }
+            connections: { type: array, items: { $ref: "#/components/schemas/SeriesPoint" } }
+            online: { type: array, items: { $ref: "#/components/schemas/SeriesPoint" }, description: Max devices online per hour. }
+        health:
+          description: Null for the `user` role.
+          oneOf:
+            - $ref: "#/components/schemas/ServerHealth"
+            - type: "null"
+        version: { $ref: "#/components/schemas/VersionInfo" }
+    SeriesPoint:
+      type: object
+      required: [t, v]
+      properties:
+        t: { type: string, format: date-time }
+        v: { type: integer }
+    VersionInfo:
+      type: object
+      required: [panel]
+      properties:
+        panel: { type: string }
+        commit: { type: string }
+        build_date: { type: string }
+        go: { type: string }
+
+    DeviceFacets:
+      type: object
+      required: [os, versions, total]
+      properties:
+        total: { type: integer }
+        os:
+          type: array
+          items:
+            type: object
+            required: [value, count]
+            properties:
+              value: { $ref: "#/components/schemas/OsFamily" }
+              count: { type: integer }
+        versions:
+          type: array
+          items:
+            type: object
+            required: [value, count]
+            properties:
+              value: { type: string }
+              count: { type: integer }
+    DevicePage:
+      allOf:
+        - $ref: "#/components/schemas/PageMeta"
+        - type: object
+          required: [items]
+          properties:
+            items: { type: array, items: { $ref: "#/components/schemas/Device" } }
+    DeviceDetail:
+      allOf:
+        - $ref: "#/components/schemas/Device"
+        - type: object
+          required: [recent_connections, address_books]
+          properties:
+            recent_connections:
+              type: array
+              description: Last 10 connections to this device.
+              items: { $ref: "#/components/schemas/ConnectionAudit" }
+            address_books:
+              type: array
+              description: Books (visible to the caller) containing this id.
+              items: { $ref: "#/components/schemas/GroupRef" }
+    DeviceUpdate:
+      type: object
+      additionalProperties: false
+      properties:
+        alias: { type: string, maxLength: 128 }
+        note: { type: string, maxLength: 4096 }
+        owner_user_id: { type: [integer, "null"], format: int64, description: Admin only. }
+        device_group_id: { type: [integer, "null"], format: int64, description: Admin only. }
+    DeviceBulkRequest:
+      type: object
+      required: [action, device_ids]
+      additionalProperties: false
+      properties:
+        action: { type: string, enum: [assign_owner, assign_group, kick, delete] }
+        device_ids: { type: array, minItems: 1, maxItems: 1000, items: { type: integer, format: int64 } }
+        owner_user_id: { type: [integer, "null"], format: int64 }
+        device_group_id: { type: [integer, "null"], format: int64 }
+    PresenceChangedEvent:
+      type: object
+      required: [id, rustdesk_id, online, since]
+      properties:
+        id: { type: integer, format: int64, description: Device row id. }
+        rustdesk_id: { type: string }
+        online: { type: boolean }
+        since: { type: string, format: date-time }
+        last_seen_ip: { type: [string, "null"] }
+
+    UserListItem:
+      allOf:
+        - $ref: "#/components/schemas/User"
+        - type: object
+          required: [user_group, device_count, is_last_admin]
+          properties:
+            user_group:
+              oneOf:
+                - $ref: "#/components/schemas/GroupRef"
+                - type: "null"
+            device_count: { type: integer }
+            is_last_admin:
+              type: boolean
+              description: True when this is the only active admin (UI disables demote/disable/delete).
+    UserPage:
+      allOf:
+        - $ref: "#/components/schemas/PageMeta"
+        - type: object
+          required: [items]
+          properties:
+            items: { type: array, items: { $ref: "#/components/schemas/UserListItem" } }
+    UserIdentity:
+      type: object
+      description: A linked IdP identity.
+      required: [id, provider_id, provider_slug, provider_kind, provider_name, subject, created_at]
+      properties:
+        id: { type: integer, format: int64 }
+        provider_id: { type: integer, format: int64 }
+        provider_slug: { type: string }
+        provider_kind: { type: string, enum: [github, google, oidc, linuxdo] }
+        provider_name: { type: string }
+        subject: { type: string }
+        email: { type: [string, "null"] }
+        email_verified: { type: boolean }
+        username: { type: [string, "null"] }
+        last_login_at: { type: [string, "null"], format: date-time }
+        created_at: { type: string, format: date-time }
+    UserDetail:
+      allOf:
+        - $ref: "#/components/schemas/UserListItem"
+        - type: object
+          required: [identities, address_book_count]
+          properties:
+            identities: { type: array, items: { $ref: "#/components/schemas/UserIdentity" } }
+            address_book_count: { type: integer }
+    UserCreate:
+      type: object
+      required: [username, role]
+      additionalProperties: false
+      properties:
+        username: { type: string, minLength: 1, maxLength: 128, pattern: "^[A-Za-z0-9._@-]+$" }
+        password: { type: string, minLength: 8, maxLength: 1024, description: Omit for an OIDC-only account. }
+        email: { type: [string, "null"], format: email }
+        display_name: { type: string, maxLength: 128 }
+        note: { type: string, maxLength: 4096 }
+        role: { $ref: "#/components/schemas/Role" }
+        status: { $ref: "#/components/schemas/UserStatus" }
+        user_group_id: { type: [integer, "null"], format: int64 }
+        totp_required: { type: boolean }
+    UserUpdate:
+      type: object
+      additionalProperties: false
+      properties:
+        username: { type: string, minLength: 1, maxLength: 128, pattern: "^[A-Za-z0-9._@-]+$" }
+        email: { type: [string, "null"], format: email }
+        display_name: { type: string, maxLength: 128 }
+        note: { type: string, maxLength: 4096 }
+        role: { $ref: "#/components/schemas/Role" }
+        status: { $ref: "#/components/schemas/UserStatus" }
+        user_group_id: { type: [integer, "null"], format: int64 }
+        totp_required: { type: boolean }
+    PasswordReset:
+      type: object
+      required: [password]
+      additionalProperties: false
+      properties:
+        password: { type: string, minLength: 8, maxLength: 1024 }
+        revoke_sessions: { type: boolean, default: true, description: Also revoke all sessions and client tokens. }
+
+    GroupVisibility:
+      type: string
+      enum: [self, shared]
+      description: "`self`: members see only their own devices; `shared`: members see each other in the client."
+    UserGroup:
+      type: object
+      required: [id, name, visibility, note, member_count, created_at, updated_at]
+      properties:
+        id: { type: integer, format: int64 }
+        name: { type: string }
+        visibility: { $ref: "#/components/schemas/GroupVisibility" }
+        note: { type: string }
+        member_count: { type: integer }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+    UserGroupInput:
+      type: object
+      required: [name]
+      additionalProperties: false
+      properties:
+        name: { type: string, minLength: 1, maxLength: 128 }
+        visibility: { $ref: "#/components/schemas/GroupVisibility" }
+        note: { type: string, maxLength: 4096 }
+    UserGroupPatch:
+      type: object
+      additionalProperties: false
+      properties:
+        name: { type: string, minLength: 1, maxLength: 128 }
+        visibility: { $ref: "#/components/schemas/GroupVisibility" }
+        note: { type: string, maxLength: 4096 }
+    UserGroupPage:
+      allOf:
+        - $ref: "#/components/schemas/PageMeta"
+        - type: object
+          required: [items]
+          properties:
+            items: { type: array, items: { $ref: "#/components/schemas/UserGroup" } }
+    DeviceGroup:
+      type: object
+      required: [id, name, note, device_count, created_at, updated_at]
+      properties:
+        id: { type: integer, format: int64 }
+        name: { type: string }
+        note: { type: string }
+        device_count: { type: integer }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+    DeviceGroupInput:
+      type: object
+      required: [name]
+      additionalProperties: false
+      properties:
+        name: { type: string, minLength: 1, maxLength: 128 }
+        note: { type: string, maxLength: 4096 }
+    DeviceGroupPatch:
+      type: object
+      additionalProperties: false
+      properties:
+        name: { type: string, minLength: 1, maxLength: 128 }
+        note: { type: string, maxLength: 4096 }
+    DeviceGroupPage:
+      allOf:
+        - $ref: "#/components/schemas/PageMeta"
+        - type: object
+          required: [items]
+          properties:
+            items: { type: array, items: { $ref: "#/components/schemas/DeviceGroup" } }
+
+    AddressBookPage:
+      allOf:
+        - $ref: "#/components/schemas/PageMeta"
+        - type: object
+          required: [items]
+          properties:
+            items: { type: array, items: { $ref: "#/components/schemas/AddressBook" } }
+    AddressBookCreate:
+      type: object
+      required: [name]
+      additionalProperties: false
+      properties:
+        name: { type: string, minLength: 1, maxLength: 128 }
+        note: { type: string, maxLength: 4096 }
+        owner_user_id: { type: integer, format: int64, description: Admin only; defaults to the caller. }
+        default_password: { type: string, maxLength: 1024, description: Write-only. }
+    AddressBookUpdate:
+      type: object
+      additionalProperties: false
+      properties:
+        name: { type: string, minLength: 1, maxLength: 128 }
+        note: { type: string, maxLength: 4096 }
+        default_password: { type: [string, "null"], maxLength: 1024, description: Write-only; null clears it. }
+    ShareGranteeType:
+      type: string
+      enum: [user, group]
+    AddressBookShare:
+      type: object
+      required: [id, address_book_id, grantee_type, grantee, permission, created_at]
+      properties:
+        id: { type: integer, format: int64 }
+        address_book_id: { type: integer, format: int64 }
+        grantee_type: { $ref: "#/components/schemas/ShareGranteeType" }
+        grantee: { $ref: "#/components/schemas/GroupRef", description: "`name` is the username (user) or group name." }
+        permission: { $ref: "#/components/schemas/Permission" }
+        created_at: { type: string, format: date-time }
+    AddressBookShareCreate:
+      type: object
+      required: [grantee_type, grantee_id, permission]
+      additionalProperties: false
+      properties:
+        grantee_type: { $ref: "#/components/schemas/ShareGranteeType" }
+        grantee_id: { type: integer, format: int64 }
+        permission: { $ref: "#/components/schemas/Permission" }
+    EntryPage:
+      allOf:
+        - $ref: "#/components/schemas/PageMeta"
+        - type: object
+          required: [items]
+          properties:
+            items: { type: array, items: { $ref: "#/components/schemas/Entry" } }
+    EntryFields:
+      type: object
+      properties:
+        alias: { type: string, maxLength: 128 }
+        os_username: { type: string, maxLength: 128 }
+        hostname: { type: string, maxLength: 255 }
+        platform: { type: string, maxLength: 64 }
+        login_name: { type: string, maxLength: 128 }
+        note: { type: [string, "null"], maxLength: 4096 }
+        tags: { type: array, items: { type: string, minLength: 1, maxLength: 64 } }
+        force_always_relay: { type: boolean }
+        rdp_port: { type: string, maxLength: 5 }
+        rdp_username: { type: string, maxLength: 128 }
+        same_server: { type: boolean }
+    EntryCreate:
+      allOf:
+        - $ref: "#/components/schemas/EntryFields"
+        - type: object
+          required: [rustdesk_id]
+          properties:
+            rustdesk_id: { type: string, pattern: "^[A-Za-z0-9_-]{1,100}$" }
+            password: { type: string, maxLength: 1024, description: Write-only; stored as the shared-book `password` field. }
+    EntryUpdate:
+      allOf:
+        - $ref: "#/components/schemas/EntryFields"
+        - type: object
+          properties:
+            rustdesk_id: { type: string, pattern: "^[A-Za-z0-9_-]{1,100}$" }
+            password: { type: [string, "null"], maxLength: 1024, description: "Write-only; null clears it, omit to keep." }
+    EntryBulkRequest:
+      type: object
+      required: [action, entry_ids]
+      additionalProperties: false
+      properties:
+        action: { type: string, enum: [delete, add_tags, remove_tags, set_tags] }
+        entry_ids: { type: array, minItems: 1, maxItems: 5000, items: { type: integer, format: int64 } }
+        tags: { type: array, items: { type: string } }
+    EntriesFromDevicesRequest:
+      type: object
+      required: [device_ids]
+      additionalProperties: false
+      properties:
+        device_ids: { type: array, minItems: 1, maxItems: 1000, items: { type: integer, format: int64 } }
+        tags: { type: array, items: { type: string } }
+    TagInput:
+      type: object
+      required: [name, color_argb]
+      additionalProperties: false
+      properties:
+        name: { type: string, minLength: 1, maxLength: 64 }
+        color_argb: { $ref: "#/components/schemas/ArgbColor" }
+    TagPatch:
+      type: object
+      additionalProperties: false
+      properties:
+        name: { type: string, minLength: 1, maxLength: 64 }
+        color_argb: { $ref: "#/components/schemas/ArgbColor" }
+
+    ConnType:
+      type: integer
+      enum: [0, 1, 2, 3, 4]
+      description: 0 remote desktop, 1 file transfer, 2 port forward, 3 camera, 4 terminal.
+    ConnectionAudit:
+      type: object
+      required: [id, guid, device_rustdesk_id, conn_type, started_at]
+      properties:
+        id: { type: integer, format: int64 }
+        guid: { type: string }
+        device_id: { type: [integer, "null"], format: int64 }
+        device_rustdesk_id: { type: string }
+        device_alias: { type: [string, "null"] }
+        controller_rustdesk_id: { type: [string, "null"] }
+        controller_name: { type: [string, "null"] }
+        controller_ip: { type: [string, "null"] }
+        conn_type: { $ref: "#/components/schemas/ConnType" }
+        session_id: { type: [string, "null"], description: u64 as a decimal string. }
+        note: { type: [string, "null"] }
+        started_at: { type: string, format: date-time }
+        ended_at: { type: [string, "null"], format: date-time }
+    ConnectionAuditPage:
+      allOf:
+        - $ref: "#/components/schemas/PageMeta"
+        - type: object
+          required: [items]
+          properties:
+            items: { type: array, items: { $ref: "#/components/schemas/ConnectionAudit" } }
+    FileDirection:
+      type: integer
+      enum: [0, 1]
+      description: 0 remote→local (download), 1 local→remote (upload).
+    FileTransferAudit:
+      type: object
+      required: [id, device_rustdesk_id, direction, is_file, path, file_count, info, created_at]
+      properties:
+        id: { type: integer, format: int64 }
+        device_id: { type: [integer, "null"], format: int64 }
+        device_rustdesk_id: { type: string }
+        device_alias: { type: [string, "null"] }
+        controller_rustdesk_id: { type: [string, "null"] }
+        controller_name: { type: [string, "null"] }
+        controller_ip: { type: [string, "null"] }
+        direction: { $ref: "#/components/schemas/FileDirection" }
+        is_file: { type: boolean }
+        path: { type: string }
+        file_count: { type: integer }
+        info: { type: object, additionalProperties: true }
+        created_at: { type: string, format: date-time }
+    FileTransferAuditPage:
+      allOf:
+        - $ref: "#/components/schemas/PageMeta"
+        - type: object
+          required: [items]
+          properties:
+            items: { type: array, items: { $ref: "#/components/schemas/FileTransferAudit" } }
+    AlarmAudit:
+      type: object
+      required: [id, device_rustdesk_id, alarm_type, info, created_at]
+      properties:
+        id: { type: integer, format: int64 }
+        device_id: { type: [integer, "null"], format: int64 }
+        device_rustdesk_id: { type: string }
+        alarm_type: { type: integer, description: Client alarm type code. }
+        conn_id: { type: [integer, "null"] }
+        ip: { type: [string, "null"] }
+        info: { type: object, additionalProperties: true }
+        created_at: { type: string, format: date-time }
+    AlarmAuditPage:
+      allOf:
+        - $ref: "#/components/schemas/PageMeta"
+        - type: object
+          required: [items]
+          properties:
+            items: { type: array, items: { $ref: "#/components/schemas/AlarmAudit" } }
+    LoginMethod:
+      type: string
+      enum: [password, oidc, webauth]
+    LoginEvent:
+      type: object
+      required: [id, method, result, client_kind, created_at]
+      properties:
+        id: { type: integer, format: int64 }
+        user:
+          oneOf:
+            - $ref: "#/components/schemas/UserRef"
+            - type: "null"
+        username_attempted: { type: [string, "null"] }
+        method: { $ref: "#/components/schemas/LoginMethod" }
+        provider_slug: { type: [string, "null"] }
+        result: { type: string, enum: [success, failure] }
+        failure_reason: { type: [string, "null"] }
+        client_kind: { type: string, enum: [web, client] }
+        device_rustdesk_id: { type: [string, "null"] }
+        platform: { type: [string, "null"] }
+        ip: { type: [string, "null"] }
+        user_agent: { type: [string, "null"] }
+        created_at: { type: string, format: date-time }
+    LoginEventPage:
+      allOf:
+        - $ref: "#/components/schemas/PageMeta"
+        - type: object
+          required: [items]
+          properties:
+            items: { type: array, items: { $ref: "#/components/schemas/LoginEvent" } }
+    AdminAuditEvent:
+      type: object
+      required: [id, actor_name, action, details, created_at]
+      properties:
+        id: { type: integer, format: int64 }
+        actor_user_id: { type: [integer, "null"], format: int64 }
+        actor_name: { type: string, description: "Username snapshot; `cli` for command-line actions." }
+        actor_ip: { type: [string, "null"] }
+        action: { type: string, examples: [user.create] }
+        target_type: { type: [string, "null"] }
+        target_id: { type: [string, "null"] }
+        target_label: { type: [string, "null"], description: "Human-readable target (username, rustdesk id, …)." }
+        details: { type: object, additionalProperties: true }
+        created_at: { type: string, format: date-time }
+    AdminAuditPage:
+      allOf:
+        - $ref: "#/components/schemas/PageMeta"
+        - type: object
+          required: [items]
+          properties:
+            items: { type: array, items: { $ref: "#/components/schemas/AdminAuditEvent" } }
+
+    ComponentHealth:
+      type: object
+      required: [status, checked_at]
+      properties:
+        status: { type: string, enum: [up, down, unknown] }
+        address: { type: string, description: "e.g. 127.0.0.1:21115" }
+        latency_ms: { type: [integer, "null"] }
+        checked_at: { type: string, format: date-time }
+        up_since: { type: [string, "null"], format: date-time }
+        error: { type: [string, "null"] }
+    ServerHealth:
+      type: object
+      required: [hbbs, hbbr, presence]
+      properties:
+        hbbs: { $ref: "#/components/schemas/ComponentHealth" }
+        hbbr: { $ref: "#/components/schemas/ComponentHealth" }
+        presence:
+          type: object
+          required: [source, devices_online]
+          properties:
+            source: { type: string, enum: [hbbs, heartbeat], description: heartbeat = fallback while hbbs is down. }
+            last_poll_at: { type: [string, "null"], format: date-time }
+            poll_duration_ms: { type: [integer, "null"] }
+            devices_online: { type: integer }
+        settings_in_sync: { type: boolean, description: False when a desired server setting differs from the applied value. }
+    ServerSettingsValues:
+      type: object
+      description: hbbs/hbbr runtime settings. In `applied`, null = could not be read.
+      properties:
+        relay_servers: { type: [array, "null"], items: { type: string } }
+        always_use_relay: { type: [boolean, "null"] }
+        must_login: { type: [boolean, "null"] }
+        blacklist: { type: [array, "null"], items: { type: string }, description: hbbr throttled IPs. }
+        blocklist: { type: [array, "null"], items: { type: string }, description: hbbr refused IPs. }
+        limit_speed_mbps: { type: [number, "null"], description: Speed for blacklisted/downgraded relays (Mibit/s). }
+        total_bandwidth_mbps: { type: [number, "null"] }
+        single_bandwidth_mbps: { type: [number, "null"] }
+        downgrade_threshold: { type: [number, "null"] }
+        downgrade_start_check_s: { type: [integer, "null"] }
+    ServerSettingsPatch:
+      type: object
+      additionalProperties: false
+      properties:
+        relay_servers: { type: array, maxItems: 32, items: { type: string, pattern: "^[^\\s,]+$" } }
+        always_use_relay: { type: boolean }
+        must_login: { type: boolean }
+        blacklist: { type: array, maxItems: 10000, items: { type: string } }
+        blocklist: { type: array, maxItems: 10000, items: { type: string } }
+        limit_speed_mbps: { type: number, exclusiveMinimum: 0 }
+        total_bandwidth_mbps: { type: number, exclusiveMinimum: 0 }
+        single_bandwidth_mbps: { type: number, exclusiveMinimum: 0 }
+        downgrade_threshold: { type: number, exclusiveMinimum: 0 }
+        downgrade_start_check_s: { type: integer, minimum: 1 }
+    ServerSettingKey:
+      type: string
+      enum: [relay_servers, always_use_relay, must_login, blacklist, blocklist, limit_speed_mbps, total_bandwidth_mbps, single_bandwidth_mbps, downgrade_threshold, downgrade_start_check_s]
+    ServerSettingStatus:
+      type: object
+      required: [key, target, in_sync]
+      properties:
+        key: { $ref: "#/components/schemas/ServerSettingKey" }
+        target: { type: string, enum: [hbbs, hbbr] }
+        in_sync: { type: boolean }
+        managed: { type: boolean, description: False when no desired value is stored (server default/env applies). }
+        updated_at: { type: [string, "null"], format: date-time }
+        updated_by: { type: [string, "null"] }
+        applied_at: { type: [string, "null"], format: date-time }
+        last_error: { type: [string, "null"] }
+    ServerSettingsState:
+      type: object
+      required: [desired, applied, keys]
+      properties:
+        desired: { $ref: "#/components/schemas/ServerSettingsValues" }
+        applied: { $ref: "#/components/schemas/ServerSettingsValues" }
+        keys: { type: array, items: { $ref: "#/components/schemas/ServerSettingStatus" } }
+        checked_at: { type: [string, "null"], format: date-time }
+    IpBlockerEntry:
+      type: object
+      required: [ip, attempts, attempts_window_s, ids, ids_window_s]
+      properties:
+        ip: { type: string }
+        attempts: { type: integer, description: RegisterPk attempts in the current 60 s window. }
+        attempts_window_s: { type: integer }
+        ids: { type: integer, description: Distinct ids registered from this IP in 24 h. }
+        ids_window_s: { type: integer }
+        blocked: { type: boolean }
+    IpBlockerPage:
+      allOf:
+        - $ref: "#/components/schemas/PageMeta"
+        - type: object
+          required: [items]
+          properties:
+            items: { type: array, items: { $ref: "#/components/schemas/IpBlockerEntry" } }
+    IpChangesEntry:
+      type: object
+      required: [rustdesk_id, seconds, ips]
+      properties:
+        rustdesk_id: { type: string }
+        seconds: { type: integer, description: Age of the record in seconds. }
+        ips: { type: object, additionalProperties: { type: integer }, description: IP → registrations. }
+    IpChangesPage:
+      allOf:
+        - $ref: "#/components/schemas/PageMeta"
+        - type: object
+          required: [items]
+          properties:
+            items: { type: array, items: { $ref: "#/components/schemas/IpChangesEntry" } }
+    PunchRequest:
+      type: object
+      required: [id, at, from_ip, to_rustdesk_id]
+      properties:
+        id: { type: integer, format: int64 }
+        at: { type: string, format: date-time }
+        from_ip: { type: string }
+        to_rustdesk_id: { type: string }
+        to_ip: { type: [string, "null"] }
+    PunchRequestPage:
+      allOf:
+        - $ref: "#/components/schemas/PageMeta"
+        - type: object
+          required: [items]
+          properties:
+            items: { type: array, items: { $ref: "#/components/schemas/PunchRequest" } }
+    RelayUsage:
+      type: object
+      required: [peer, elapsed_s, total_mb, highest_kbps, avg_kbps, current_kbps]
+      properties:
+        peer: { type: string, description: "ip:port" }
+        elapsed_s: { type: integer }
+        total_mb: { type: number }
+        highest_kbps: { type: number }
+        avg_kbps: { type: number }
+        current_kbps: { type: number }
+    ConsoleTarget:
+      type: string
+      enum: [hbbs, hbbr]
+    ConsoleCommand:
+      type: object
+      required: [target, cmd, description, mutating, max_args]
+      properties:
+        target: { $ref: "#/components/schemas/ConsoleTarget" }
+        cmd: { type: string, description: Full command name (aliases are not accepted). }
+        alias: { type: string }
+        args_hint: { type: string, examples: ["[Y|N]"] }
+        arg_pattern: { type: string, description: Regex every argument must match. }
+        max_args: { type: integer }
+        description: { type: string }
+        mutating: { type: boolean }
+    ConsoleRequest:
+      type: object
+      required: [target, cmd]
+      additionalProperties: false
+      properties:
+        target: { $ref: "#/components/schemas/ConsoleTarget" }
+        cmd: { type: string }
+        args: { type: array, maxItems: 8, items: { type: string, pattern: "^\\S+$" } }
+    ConsoleResult:
+      type: object
+      required: [output, duration_ms, executed_at]
+      properties:
+        output: { type: string }
+        truncated: { type: boolean }
+        duration_ms: { type: integer }
+        executed_at: { type: string, format: date-time }
+    ConsoleHistoryItem:
+      type: object
+      required: [id, actor_name, target, cmd, args, created_at]
+      properties:
+        id: { type: integer, format: int64 }
+        actor_name: { type: string }
+        target: { $ref: "#/components/schemas/ConsoleTarget" }
+        cmd: { type: string }
+        args: { type: array, items: { type: string } }
+        output_excerpt: { type: [string, "null"] }
+        error: { type: [string, "null"] }
+        created_at: { type: string, format: date-time }
+    ConsoleHistoryPage:
+      allOf:
+        - $ref: "#/components/schemas/PageMeta"
+        - type: object
+          required: [items]
+          properties:
+            items: { type: array, items: { $ref: "#/components/schemas/ConsoleHistoryItem" } }
+
+    PanelSettings:
+      type: object
+      required: [public_url, branding, auth, retention, rate_limits, trusted_proxies]
+      properties:
+        public_url: { type: string, description: "e.g. https://desk.example.com; used for OIDC callbacks and links." }
+        branding:
+          type: object
+          required: [title, welcome_markdown, has_logo]
+          properties:
+            title: { type: string, maxLength: 64 }
+            welcome_markdown: { type: string, maxLength: 20000 }
+            has_logo: { type: boolean }
+            web_client_url: { type: [string, "null"] }
+        auth:
+          type: object
+          required: [password_login_enabled, require_admin_2fa, session_idle_hours, session_absolute_days, client_token_lifetime_hours]
+          properties:
+            password_login_enabled: { type: boolean }
+            require_admin_2fa: { type: boolean }
+            session_idle_hours: { type: integer, minimum: 1, maximum: 720 }
+            session_absolute_days: { type: integer, minimum: 1, maximum: 365 }
+            client_token_lifetime_hours: { type: integer, minimum: 1, maximum: 87600 }
+        retention:
+          type: object
+          description: Days to keep each audit category; 0 = forever.
+          required: [login_events_days, connection_audits_days, file_transfer_audits_days, alarm_audits_days, admin_audit_days, punch_requests_days]
+          properties:
+            login_events_days: { type: integer, minimum: 0 }
+            connection_audits_days: { type: integer, minimum: 0 }
+            file_transfer_audits_days: { type: integer, minimum: 0 }
+            alarm_audits_days: { type: integer, minimum: 0 }
+            admin_audit_days: { type: integer, minimum: 0 }
+            punch_requests_days: { type: integer, minimum: 0 }
+        rate_limits:
+          type: object
+          required: [login_per_ip_per_minute, login_per_user_per_minute, client_api_per_ip_per_minute]
+          properties:
+            login_per_ip_per_minute: { type: integer, minimum: 1 }
+            login_per_user_per_minute: { type: integer, minimum: 1 }
+            client_api_per_ip_per_minute: { type: integer, minimum: 1 }
+        trusted_proxies:
+          type: array
+          description: IPs/CIDRs whose X-Forwarded-For is trusted (default loopback only).
+          items: { type: string }
+    PanelSettingsPatch:
+      type: object
+      additionalProperties: false
+      properties:
+        public_url: { type: string }
+        branding:
+          type: object
+          additionalProperties: false
+          properties:
+            title: { type: string, maxLength: 64 }
+            welcome_markdown: { type: string, maxLength: 20000 }
+            web_client_url: { type: [string, "null"] }
+        auth:
+          type: object
+          additionalProperties: false
+          properties:
+            password_login_enabled: { type: boolean }
+            require_admin_2fa: { type: boolean }
+            session_idle_hours: { type: integer, minimum: 1, maximum: 720 }
+            session_absolute_days: { type: integer, minimum: 1, maximum: 365 }
+            client_token_lifetime_hours: { type: integer, minimum: 1, maximum: 87600 }
+        retention:
+          type: object
+          additionalProperties: false
+          properties:
+            login_events_days: { type: integer, minimum: 0 }
+            connection_audits_days: { type: integer, minimum: 0 }
+            file_transfer_audits_days: { type: integer, minimum: 0 }
+            alarm_audits_days: { type: integer, minimum: 0 }
+            admin_audit_days: { type: integer, minimum: 0 }
+            punch_requests_days: { type: integer, minimum: 0 }
+        rate_limits:
+          type: object
+          additionalProperties: false
+          properties:
+            login_per_ip_per_minute: { type: integer, minimum: 1 }
+            login_per_user_per_minute: { type: integer, minimum: 1 }
+            client_api_per_ip_per_minute: { type: integer, minimum: 1 }
+        trusted_proxies: { type: array, items: { type: string } }

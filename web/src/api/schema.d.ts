@@ -78,6 +78,1007 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/branding": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Public branding (title, logo, welcome text) for the login page and shell. */
+        get: operations["getBranding"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/branding/logo": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The uploaded logo image (404 when none). */
+        get: operations["getBrandingLogo"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/dashboard": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Overview counters, 24 h series and server health.
+         * @description For the `user` role the device/connection counters cover only their own devices and `health` is null.
+         */
+        get: operations["getDashboard"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/lookup/users": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Minimal user directory for pickers (owner, share grantee).
+         * @description Any authenticated user; returns at most 20 active users matching `q`.
+         */
+        get: operations["lookupUsers"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/lookup/user-groups": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Minimal user-group directory for pickers. */
+        get: operations["lookupUserGroups"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/devices": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List devices (admins see all, users see their own). */
+        get: operations["listDevices"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/devices/facets": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Distinct OS families and client versions (with counts) for filter menus. */
+        get: operations["getDeviceFacets"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/devices/export.csv": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** CSV export of all devices matching the same filters as the list (no paging). */
+        get: operations["exportDevicesCsv"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/devices/bulk": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Bulk action on devices (admin).
+         * @description `assign_owner` (owner_user_id, null = unassign), `assign_group` (device_group_id, null = none),
+         *     `kick` (heartbeat `disconnect`), `delete` (also revokes client tokens bound to the device uuid).
+         */
+        post: operations["bulkDevices"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/devices/{device_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                device_id: components["parameters"]["DeviceId"];
+            };
+            cookie?: never;
+        };
+        /** Device detail incl. recent connections. */
+        get: operations["getDevice"];
+        put?: never;
+        post?: never;
+        /** Delete a device (admin); revokes client tokens bound to it. */
+        delete: operations["deleteDevice"];
+        options?: never;
+        head?: never;
+        /** Update alias, note, owner or group. Users may only edit alias/note of their own devices. */
+        patch: operations["updateDevice"];
+        trace?: never;
+    };
+    "/devices/{device_id}/kick": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Ask the client to disconnect active sessions on its next heartbeat (admin). */
+        post: operations["kickDevice"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/users": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List users (admin). */
+        get: operations["listUsers"];
+        put?: never;
+        /** Create a user (admin). */
+        post: operations["createUser"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/users/{user_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                user_id: components["parameters"]["UserId"];
+            };
+            cookie?: never;
+        };
+        /** User detail (admin). */
+        get: operations["getUser"];
+        put?: never;
+        post?: never;
+        /** Delete a user (admin). 409 `last_admin` for the last active admin; 409 `self` for yourself. */
+        delete: operations["deleteUser"];
+        options?: never;
+        head?: never;
+        /**
+         * Update profile, role, status, group, totp_required (admin).
+         * @description Demoting or disabling the last active admin fails with 409 `last_admin`.
+         *     Disabling a user revokes all their sessions and client tokens.
+         */
+        patch: operations["updateUser"];
+        trace?: never;
+    };
+    "/users/{user_id}/password": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Set a new password for a user (admin). */
+        post: operations["resetUserPassword"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/users/{user_id}/totp/reset": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Remove the user's TOTP secret and recovery codes (admin). They must re-enrol if `totp_required`. */
+        post: operations["resetUserTotp"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/users/{user_id}/sessions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Active panel sessions and client tokens of a user (admin). */
+        get: operations["listUserSessions"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/users/{user_id}/sessions/revoke": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Revoke all sessions/tokens of a user, optionally only one kind (admin). */
+        post: operations["revokeUserSessions"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/users/{user_id}/sessions/{session_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Revoke one session/token of a user (admin). */
+        delete: operations["revokeUserSession"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/users/{user_id}/identities/{identity_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Unlink an IdP identity from a user (admin). 409 `last_login_method` if it is the only way to log in. */
+        delete: operations["unlinkUserIdentity"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/user-groups": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List user groups (admin). */
+        get: operations["listUserGroups"];
+        put?: never;
+        /** Create user group. */
+        post: operations["createUserGroup"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/user-groups/{group_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                group_id: components["parameters"]["GroupId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Delete a user group; members fall back to no group. */
+        delete: operations["deleteUserGroup"];
+        options?: never;
+        head?: never;
+        /** Update user group. */
+        patch: operations["updateUserGroup"];
+        trace?: never;
+    };
+    "/device-groups": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List device groups (admin). */
+        get: operations["listDeviceGroups"];
+        put?: never;
+        /** Create device group. */
+        post: operations["createDeviceGroup"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/device-groups/{group_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                group_id: components["parameters"]["GroupId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Delete a device group; devices fall back to no group. */
+        delete: operations["deleteDeviceGroup"];
+        options?: never;
+        head?: never;
+        /** Update device group. */
+        patch: operations["updateDeviceGroup"];
+        trace?: never;
+    };
+    "/address-books": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Address books visible to the caller.
+         * @description `scope=accessible` (default): books the caller owns or that are shared with them (also for admins).
+         *     `scope=all`: every book (admin only). `owner_user_id` narrows by owner (admin only for others).
+         */
+        get: operations["listAddressBooks"];
+        put?: never;
+        /** Create a shared address book (owner = caller, or any user for admins). */
+        post: operations["createAddressBook"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/address-books/{book_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                book_id: components["parameters"]["BookId"];
+            };
+            cookie?: never;
+        };
+        /** Get address book. */
+        get: operations["getAddressBook"];
+        put?: never;
+        post?: never;
+        /** Delete a shared book (owner or admin). Personal books cannot be deleted (409 `personal_book`). */
+        delete: operations["deleteAddressBook"];
+        options?: never;
+        head?: never;
+        /** Rename / edit note / default password (requires `full`). */
+        patch: operations["updateAddressBook"];
+        trace?: never;
+    };
+    "/address-books/{book_id}/shares": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                book_id: components["parameters"]["BookId"];
+            };
+            cookie?: never;
+        };
+        /** Shares of a book (requires `full`). */
+        get: operations["listAddressBookShares"];
+        put?: never;
+        /** Share a book with a user or a user group (requires `full`). Personal books cannot be shared. */
+        post: operations["createAddressBookShare"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/address-books/{book_id}/shares/{share_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                book_id: components["parameters"]["BookId"];
+                share_id: number;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Delete address book share. */
+        delete: operations["deleteAddressBookShare"];
+        options?: never;
+        head?: never;
+        /** Update address book share. */
+        patch: operations["updateAddressBookShare"];
+        trace?: never;
+    };
+    "/address-books/{book_id}/entries": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                book_id: components["parameters"]["BookId"];
+            };
+            cookie?: never;
+        };
+        /** Entries of a book (requires `read`). */
+        get: operations["listAddressBookEntries"];
+        put?: never;
+        /** Add an entry (requires `read_write`). Unknown tag names are created with the default color. */
+        post: operations["createAddressBookEntry"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/address-books/{book_id}/entries/bulk": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Bulk delete or tag edit (requires `read_write`).
+         * @description `delete`; `add_tags` / `remove_tags` (tags = names; added names are created if missing);
+         *     `set_tags` replaces the tag set.
+         */
+        post: operations["bulkAddressBookEntries"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/address-books/{book_id}/entries/from-devices": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Add devices as entries (requires `read_write`); existing ids are skipped.
+         * @description Copies rustdesk_id, alias (or hostname), hostname, os_username and platform from the device rows. Users may only add devices visible to them.
+         */
+        post: operations["addAddressBookEntriesFromDevices"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/address-books/{book_id}/entries/{entry_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                book_id: components["parameters"]["BookId"];
+                entry_id: number;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Delete address book entry. */
+        delete: operations["deleteAddressBookEntry"];
+        options?: never;
+        head?: never;
+        /** Update address book entry. */
+        patch: operations["updateAddressBookEntry"];
+        trace?: never;
+    };
+    "/address-books/{book_id}/tags": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                book_id: components["parameters"]["BookId"];
+            };
+            cookie?: never;
+        };
+        /** List address book tags. */
+        get: operations["listAddressBookTags"];
+        put?: never;
+        /** Create address book tag. */
+        post: operations["createAddressBookTag"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/address-books/{book_id}/tags/{tag_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                book_id: components["parameters"]["BookId"];
+                tag_id: number;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Delete a tag (removed from all entries). */
+        delete: operations["deleteAddressBookTag"];
+        options?: never;
+        head?: never;
+        /** Rename and/or recolor a tag (rename keeps entry links). */
+        patch: operations["updateAddressBookTag"];
+        trace?: never;
+    };
+    "/audit/connections": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Connection audit (admin; users get connections to their own devices). */
+        get: operations["listConnectionAudits"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/audit/files": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** File-transfer audit. */
+        get: operations["listFileTransferAudits"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/audit/alarms": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Client security alarms (admin). */
+        get: operations["listAlarmAudits"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/audit/logins": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Login attempts (admins see all, users their own). */
+        get: operations["listLoginEvents"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/audit/admin": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Admin actions (admin). */
+        get: operations["listAdminAudit"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/server/health": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** hbbs/hbbr reachability and presence source (admin). */
+        get: operations["getServerHealth"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/server/settings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Desired hbbs/hbbr settings, the values read back from the servers, and per-key sync state (admin). */
+        get: operations["getServerSettings"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Change desired settings (partial). The reconciler applies them immediately and on every hbbs/hbbr restart.
+         * @description Validation: relay servers `host[:port]` without spaces; IPs/CIDRs via netip;
+         *     speeds > 0. After `always_use_relay` the reconciler re-sends `relay-servers`
+         *     (hbbs bug, see docs/research/hbbs-integration.md §1.3).
+         */
+        patch: operations["updateServerSettings"];
+        trace?: never;
+    };
+    "/server/settings/reapply": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Force the reconciler to re-apply every desired setting now (admin). */
+        post: operations["reapplyServerSettings"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/server/ip-blocker": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** hbbs `ip-blocker` table (admin). */
+        get: operations["listIpBlocker"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/server/ip-blocker/{ip}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Remove an IP from the hbbs ip-blocker (`ib <ip> -`). */
+        delete: operations["unblockIp"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/server/ip-changes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** hbbs `ip-changes` table — ids that registered from several IPs (admin). */
+        get: operations["listIpChanges"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/server/ip-changes/{rustdesk_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Forget the IP history of one id (`ic <id> -`). */
+        delete: operations["clearIpChanges"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/server/punch-requests": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Punch requests collected from hbbs (`pr`) and stored by the panel (admin). */
+        get: operations["listPunchRequests"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/server/relay-usage": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Active relays from hbbr `usage` (admin). */
+        get: operations["getRelayUsage"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/server/console/commands": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Allow-listed raw console commands (admin). */
+        get: operations["listConsoleCommands"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/server/console": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Run one allow-listed command against hbbs/hbbr (admin, audited).
+         * @description `cmd` must be a full command name from `/server/console/commands` for that target;
+         *     each arg must match the command's `arg_pattern`; no spaces inside args; total < 1 KiB.
+         *     Mutating commands change runtime state only — the reconciler may revert them to the
+         *     desired settings; prefer the typed settings.
+         */
+        post: operations["runConsoleCommand"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/server/console/history": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Recently executed console commands (from admin_audit, newest first). */
+        get: operations["listConsoleHistory"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/settings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Panel settings (admin). */
+        get: operations["getSettings"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Partial update; each section is merged key by key. */
+        patch: operations["updateSettings"];
+        trace?: never;
+    };
+    "/settings/logo": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Upload the branding logo (PNG/JPEG/WebP, ≤ 256 KiB; SVG is refused). */
+        put: operations["uploadLogo"];
+        post?: never;
+        /** Delete logo. */
+        delete: operations["deleteLogo"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Server-Sent Events stream (presence, device updates, connections, health).
+         * @description Mounted at `/api/v1/events` (not under `/admin`). Event names and payloads are
+         *     listed in the top-level `x-sse-events`:
+         *
+         *     ```
+         *     event: presence.changed
+         *     data: {"id":12,"rustdesk_id":"123456789","online":true,"since":"2026-10-15T10:00:00Z"}
+         *
+         *     event: device.updated
+         *     data: {<Device>}
+         *
+         *     event: audit.connection
+         *     data: {<ConnectionAudit>}
+         *
+         *     event: hbbs.health
+         *     data: {<ServerHealth>}
+         *     ```
+         */
+        get: operations["streamEvents"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -172,11 +1173,24 @@ export interface components {
             owner_user_id?: number | null;
             /** Format: int64 */
             device_group_id?: number | null;
-            /** @description Live presence (hbbs OnlineRequest */
+            /** @description Embedded owner (null = unassigned). */
+            owner?: components["schemas"]["UserRef"] | null;
+            device_group?: components["schemas"]["GroupRef"] | null;
+            os_family?: components["schemas"]["OsFamily"];
+            /** @description Live presence (hbbs OnlineRequest, heartbeat fallback). */
             online: boolean;
+            /**
+             * Format: date-time
+             * @description Start of the current online/offline streak.
+             */
+            online_since?: string | null;
             /** Format: date-time */
             last_seen_at?: string | null;
             last_seen_ip?: string | null;
+            /** Format: date-time */
+            last_heartbeat_at?: string | null;
+            /** Format: date-time */
+            sysinfo_at?: string | null;
             /** Format: date-time */
             created_at: string;
             /** Format: date-time */
@@ -190,12 +1204,16 @@ export interface components {
             guid: string;
             /** Format: int64 */
             owner_user_id: number;
+            owner: components["schemas"]["UserRef"];
             name: string;
             note?: string;
             is_personal: boolean;
-            /** @description Effective permission of the current user. */
+            /** @description Effective permission of the current user (admins have `full` on every book). */
             permission: components["schemas"]["Permission"];
             entry_count: number;
+            share_count: number;
+            /** @description Shared books only; the password itself is write-only. */
+            has_default_password: boolean;
             /** Format: date-time */
             created_at: string;
             /** Format: date-time */
@@ -220,6 +1238,13 @@ export interface components {
             rdp_port?: string;
             rdp_username?: string;
             same_server?: boolean;
+            /** @description Live presence when the id is a known device, else null. */
+            online?: boolean | null;
+            /**
+             * Format: int64
+             * @description Matching device row, if any.
+             */
+            device_id?: number | null;
             /** Format: date-time */
             created_at: string;
             /** Format: date-time */
@@ -231,19 +1256,710 @@ export interface components {
             /** Format: int64 */
             address_book_id: number;
             name: string;
-            /**
-             * Format: int64
-             * @description Flutter ARGB uint32, e.g. 4288585374 (0xFF9E9E9E).
-             */
-            color_argb: number;
+            color_argb: components["schemas"]["ArgbColor"];
+            entry_count: number;
         };
         /** @description Generic page envelope; stream B specialises per resource. */
         Page: {
             total: number;
             items: unknown[];
         };
+        PageMeta: {
+            /** @description Total number of matching items. */
+            total: number;
+            page: number;
+            page_size: number;
+        };
+        BulkResult: {
+            affected: number;
+            skipped?: number;
+            errors?: {
+                id: number | string;
+                code: string;
+                message: string;
+            }[];
+        };
+        RevokeResult: {
+            revoked: number;
+        };
+        /**
+         * Format: int64
+         * @description Flutter ARGB uint32, e.g. 4288585374 (0xFF9E9E9E).
+         */
+        ArgbColor: number;
+        UserRef: {
+            /** Format: int64 */
+            id: number;
+            username: string;
+            display_name: string;
+        };
+        GroupRef: {
+            /** Format: int64 */
+            id: number;
+            name: string;
+        };
+        /** @enum {string} */
+        OsFamily: "windows" | "macos" | "linux" | "android" | "ios" | "other";
+        Branding: {
+            title: string;
+            /** @description Same-origin URL of the uploaded logo (cache-busted), or null. */
+            logo_url: string | null;
+            /** @description Markdown shown on the dashboard; `{{username}}` is substituted client-side. Rendered sanitized (DOMPurify). */
+            welcome_markdown: string;
+            /** @description Optional external RustDesk web client link-out. */
+            web_client_url?: string | null;
+        };
+        Dashboard: {
+            devices_total: number;
+            devices_online: number;
+            users_total: number;
+            address_books_total: number;
+            logins_24h: number;
+            failed_logins_24h: number;
+            connections_24h: number;
+            active_connections: number;
+            /** @description 24 hourly buckets, oldest first; `t` is the bucket start. */
+            series: {
+                logins: components["schemas"]["SeriesPoint"][];
+                connections: components["schemas"]["SeriesPoint"][];
+                /** @description Max devices online per hour. */
+                online: components["schemas"]["SeriesPoint"][];
+            };
+            /** @description Null for the `user` role. */
+            health?: components["schemas"]["ServerHealth"] | null;
+            version: components["schemas"]["VersionInfo"];
+        };
+        SeriesPoint: {
+            /** Format: date-time */
+            t: string;
+            v: number;
+        };
+        VersionInfo: {
+            panel: string;
+            commit?: string;
+            build_date?: string;
+            go?: string;
+        };
+        DeviceFacets: {
+            total: number;
+            os: {
+                value: components["schemas"]["OsFamily"];
+                count: number;
+            }[];
+            versions: {
+                value: string;
+                count: number;
+            }[];
+        };
+        DevicePage: components["schemas"]["PageMeta"] & {
+            items: components["schemas"]["Device"][];
+        };
+        DeviceDetail: components["schemas"]["Device"] & {
+            /** @description Last 10 connections to this device. */
+            recent_connections: components["schemas"]["ConnectionAudit"][];
+            /** @description Books (visible to the caller) containing this id. */
+            address_books: components["schemas"]["GroupRef"][];
+        };
+        DeviceUpdate: {
+            alias?: string;
+            note?: string;
+            /**
+             * Format: int64
+             * @description Admin only.
+             */
+            owner_user_id?: number | null;
+            /**
+             * Format: int64
+             * @description Admin only.
+             */
+            device_group_id?: number | null;
+        };
+        DeviceBulkRequest: {
+            /** @enum {string} */
+            action: "assign_owner" | "assign_group" | "kick" | "delete";
+            device_ids: number[];
+            /** Format: int64 */
+            owner_user_id?: number | null;
+            /** Format: int64 */
+            device_group_id?: number | null;
+        };
+        PresenceChangedEvent: {
+            /**
+             * Format: int64
+             * @description Device row id.
+             */
+            id: number;
+            rustdesk_id: string;
+            online: boolean;
+            /** Format: date-time */
+            since: string;
+            last_seen_ip?: string | null;
+        };
+        UserListItem: components["schemas"]["User"] & {
+            user_group: components["schemas"]["GroupRef"] | null;
+            device_count: number;
+            /** @description True when this is the only active admin (UI disables demote/disable/delete). */
+            is_last_admin: boolean;
+        };
+        UserPage: components["schemas"]["PageMeta"] & {
+            items: components["schemas"]["UserListItem"][];
+        };
+        /** @description A linked IdP identity. */
+        UserIdentity: {
+            /** Format: int64 */
+            id: number;
+            /** Format: int64 */
+            provider_id: number;
+            provider_slug: string;
+            /** @enum {string} */
+            provider_kind: "github" | "google" | "oidc" | "linuxdo";
+            provider_name: string;
+            subject: string;
+            email?: string | null;
+            email_verified?: boolean;
+            username?: string | null;
+            /** Format: date-time */
+            last_login_at?: string | null;
+            /** Format: date-time */
+            created_at: string;
+        };
+        UserDetail: components["schemas"]["UserListItem"] & {
+            identities: components["schemas"]["UserIdentity"][];
+            address_book_count: number;
+        };
+        UserCreate: {
+            username: string;
+            /** @description Omit for an OIDC-only account. */
+            password?: string;
+            /** Format: email */
+            email?: string | null;
+            display_name?: string;
+            note?: string;
+            role: components["schemas"]["Role"];
+            status?: components["schemas"]["UserStatus"];
+            /** Format: int64 */
+            user_group_id?: number | null;
+            totp_required?: boolean;
+        };
+        UserUpdate: {
+            username?: string;
+            /** Format: email */
+            email?: string | null;
+            display_name?: string;
+            note?: string;
+            role?: components["schemas"]["Role"];
+            status?: components["schemas"]["UserStatus"];
+            /** Format: int64 */
+            user_group_id?: number | null;
+            totp_required?: boolean;
+        };
+        PasswordReset: {
+            password: string;
+            /**
+             * @description Also revoke all sessions and client tokens.
+             * @default true
+             */
+            revoke_sessions: boolean;
+        };
+        /**
+         * @description `self`: members see only their own devices; `shared`: members see each other in the client.
+         * @enum {string}
+         */
+        GroupVisibility: "self" | "shared";
+        UserGroup: {
+            /** Format: int64 */
+            id: number;
+            name: string;
+            visibility: components["schemas"]["GroupVisibility"];
+            note: string;
+            member_count: number;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+        };
+        UserGroupInput: {
+            name: string;
+            visibility?: components["schemas"]["GroupVisibility"];
+            note?: string;
+        };
+        UserGroupPatch: {
+            name?: string;
+            visibility?: components["schemas"]["GroupVisibility"];
+            note?: string;
+        };
+        UserGroupPage: components["schemas"]["PageMeta"] & {
+            items: components["schemas"]["UserGroup"][];
+        };
+        DeviceGroup: {
+            /** Format: int64 */
+            id: number;
+            name: string;
+            note: string;
+            device_count: number;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+        };
+        DeviceGroupInput: {
+            name: string;
+            note?: string;
+        };
+        DeviceGroupPatch: {
+            name?: string;
+            note?: string;
+        };
+        DeviceGroupPage: components["schemas"]["PageMeta"] & {
+            items: components["schemas"]["DeviceGroup"][];
+        };
+        AddressBookPage: components["schemas"]["PageMeta"] & {
+            items: components["schemas"]["AddressBook"][];
+        };
+        AddressBookCreate: {
+            name: string;
+            note?: string;
+            /**
+             * Format: int64
+             * @description Admin only; defaults to the caller.
+             */
+            owner_user_id?: number;
+            /** @description Write-only. */
+            default_password?: string;
+        };
+        AddressBookUpdate: {
+            name?: string;
+            note?: string;
+            /** @description Write-only; null clears it. */
+            default_password?: string | null;
+        };
+        /** @enum {string} */
+        ShareGranteeType: "user" | "group";
+        AddressBookShare: {
+            /** Format: int64 */
+            id: number;
+            /** Format: int64 */
+            address_book_id: number;
+            grantee_type: components["schemas"]["ShareGranteeType"];
+            /** @description `name` is the username (user) or group name. */
+            grantee: components["schemas"]["GroupRef"];
+            permission: components["schemas"]["Permission"];
+            /** Format: date-time */
+            created_at: string;
+        };
+        AddressBookShareCreate: {
+            grantee_type: components["schemas"]["ShareGranteeType"];
+            /** Format: int64 */
+            grantee_id: number;
+            permission: components["schemas"]["Permission"];
+        };
+        EntryPage: components["schemas"]["PageMeta"] & {
+            items: components["schemas"]["Entry"][];
+        };
+        EntryFields: {
+            alias?: string;
+            os_username?: string;
+            hostname?: string;
+            platform?: string;
+            login_name?: string;
+            note?: string | null;
+            tags?: string[];
+            force_always_relay?: boolean;
+            rdp_port?: string;
+            rdp_username?: string;
+            same_server?: boolean;
+        };
+        EntryCreate: components["schemas"]["EntryFields"] & {
+            rustdesk_id: string;
+            /** @description Write-only; stored as the shared-book `password` field. */
+            password?: string;
+        };
+        EntryUpdate: components["schemas"]["EntryFields"] & {
+            rustdesk_id?: string;
+            /** @description Write-only; null clears it, omit to keep. */
+            password?: string | null;
+        };
+        EntryBulkRequest: {
+            /** @enum {string} */
+            action: "delete" | "add_tags" | "remove_tags" | "set_tags";
+            entry_ids: number[];
+            tags?: string[];
+        };
+        EntriesFromDevicesRequest: {
+            device_ids: number[];
+            tags?: string[];
+        };
+        TagInput: {
+            name: string;
+            color_argb: components["schemas"]["ArgbColor"];
+        };
+        TagPatch: {
+            name?: string;
+            color_argb?: components["schemas"]["ArgbColor"];
+        };
+        /**
+         * @description 0 remote desktop, 1 file transfer, 2 port forward, 3 camera, 4 terminal.
+         * @enum {integer}
+         */
+        ConnType: 0 | 1 | 2 | 3 | 4;
+        ConnectionAudit: {
+            /** Format: int64 */
+            id: number;
+            guid: string;
+            /** Format: int64 */
+            device_id?: number | null;
+            device_rustdesk_id: string;
+            device_alias?: string | null;
+            controller_rustdesk_id?: string | null;
+            controller_name?: string | null;
+            controller_ip?: string | null;
+            conn_type: components["schemas"]["ConnType"];
+            /** @description u64 as a decimal string. */
+            session_id?: string | null;
+            note?: string | null;
+            /** Format: date-time */
+            started_at: string;
+            /** Format: date-time */
+            ended_at?: string | null;
+        };
+        ConnectionAuditPage: components["schemas"]["PageMeta"] & {
+            items: components["schemas"]["ConnectionAudit"][];
+        };
+        /**
+         * @description 0 remote→local (download), 1 local→remote (upload).
+         * @enum {integer}
+         */
+        FileDirection: 0 | 1;
+        FileTransferAudit: {
+            /** Format: int64 */
+            id: number;
+            /** Format: int64 */
+            device_id?: number | null;
+            device_rustdesk_id: string;
+            device_alias?: string | null;
+            controller_rustdesk_id?: string | null;
+            controller_name?: string | null;
+            controller_ip?: string | null;
+            direction: components["schemas"]["FileDirection"];
+            is_file: boolean;
+            path: string;
+            file_count: number;
+            info: {
+                [key: string]: unknown;
+            };
+            /** Format: date-time */
+            created_at: string;
+        };
+        FileTransferAuditPage: components["schemas"]["PageMeta"] & {
+            items: components["schemas"]["FileTransferAudit"][];
+        };
+        AlarmAudit: {
+            /** Format: int64 */
+            id: number;
+            /** Format: int64 */
+            device_id?: number | null;
+            device_rustdesk_id: string;
+            /** @description Client alarm type code. */
+            alarm_type: number;
+            conn_id?: number | null;
+            ip?: string | null;
+            info: {
+                [key: string]: unknown;
+            };
+            /** Format: date-time */
+            created_at: string;
+        };
+        AlarmAuditPage: components["schemas"]["PageMeta"] & {
+            items: components["schemas"]["AlarmAudit"][];
+        };
+        /** @enum {string} */
+        LoginMethod: "password" | "oidc" | "webauth";
+        LoginEvent: {
+            /** Format: int64 */
+            id: number;
+            user?: components["schemas"]["UserRef"] | null;
+            username_attempted?: string | null;
+            method: components["schemas"]["LoginMethod"];
+            provider_slug?: string | null;
+            /** @enum {string} */
+            result: "success" | "failure";
+            failure_reason?: string | null;
+            /** @enum {string} */
+            client_kind: "web" | "client";
+            device_rustdesk_id?: string | null;
+            platform?: string | null;
+            ip?: string | null;
+            user_agent?: string | null;
+            /** Format: date-time */
+            created_at: string;
+        };
+        LoginEventPage: components["schemas"]["PageMeta"] & {
+            items: components["schemas"]["LoginEvent"][];
+        };
+        AdminAuditEvent: {
+            /** Format: int64 */
+            id: number;
+            /** Format: int64 */
+            actor_user_id?: number | null;
+            /** @description Username snapshot; `cli` for command-line actions. */
+            actor_name: string;
+            actor_ip?: string | null;
+            /** @example user.create */
+            action: string;
+            target_type?: string | null;
+            target_id?: string | null;
+            /** @description Human-readable target (username, rustdesk id, …). */
+            target_label?: string | null;
+            details: {
+                [key: string]: unknown;
+            };
+            /** Format: date-time */
+            created_at: string;
+        };
+        AdminAuditPage: components["schemas"]["PageMeta"] & {
+            items: components["schemas"]["AdminAuditEvent"][];
+        };
+        ComponentHealth: {
+            /** @enum {string} */
+            status: "up" | "down" | "unknown";
+            /** @description e.g. 127.0.0.1:21115 */
+            address?: string;
+            latency_ms?: number | null;
+            /** Format: date-time */
+            checked_at: string;
+            /** Format: date-time */
+            up_since?: string | null;
+            error?: string | null;
+        };
+        ServerHealth: {
+            hbbs: components["schemas"]["ComponentHealth"];
+            hbbr: components["schemas"]["ComponentHealth"];
+            presence: {
+                /**
+                 * @description heartbeat = fallback while hbbs is down.
+                 * @enum {string}
+                 */
+                source: "hbbs" | "heartbeat";
+                /** Format: date-time */
+                last_poll_at?: string | null;
+                poll_duration_ms?: number | null;
+                devices_online: number;
+            };
+            /** @description False when a desired server setting differs from the applied value. */
+            settings_in_sync?: boolean;
+        };
+        /** @description hbbs/hbbr runtime settings. In `applied`, null = could not be read. */
+        ServerSettingsValues: {
+            relay_servers?: string[] | null;
+            always_use_relay?: boolean | null;
+            must_login?: boolean | null;
+            /** @description hbbr throttled IPs. */
+            blacklist?: string[] | null;
+            /** @description hbbr refused IPs. */
+            blocklist?: string[] | null;
+            /** @description Speed for blacklisted/downgraded relays (Mibit/s). */
+            limit_speed_mbps?: number | null;
+            total_bandwidth_mbps?: number | null;
+            single_bandwidth_mbps?: number | null;
+            downgrade_threshold?: number | null;
+            downgrade_start_check_s?: number | null;
+        };
+        ServerSettingsPatch: {
+            relay_servers?: string[];
+            always_use_relay?: boolean;
+            must_login?: boolean;
+            blacklist?: string[];
+            blocklist?: string[];
+            limit_speed_mbps?: number;
+            total_bandwidth_mbps?: number;
+            single_bandwidth_mbps?: number;
+            downgrade_threshold?: number;
+            downgrade_start_check_s?: number;
+        };
+        /** @enum {string} */
+        ServerSettingKey: "relay_servers" | "always_use_relay" | "must_login" | "blacklist" | "blocklist" | "limit_speed_mbps" | "total_bandwidth_mbps" | "single_bandwidth_mbps" | "downgrade_threshold" | "downgrade_start_check_s";
+        ServerSettingStatus: {
+            key: components["schemas"]["ServerSettingKey"];
+            /** @enum {string} */
+            target: "hbbs" | "hbbr";
+            in_sync: boolean;
+            /** @description False when no desired value is stored (server default/env applies). */
+            managed?: boolean;
+            /** Format: date-time */
+            updated_at?: string | null;
+            updated_by?: string | null;
+            /** Format: date-time */
+            applied_at?: string | null;
+            last_error?: string | null;
+        };
+        ServerSettingsState: {
+            desired: components["schemas"]["ServerSettingsValues"];
+            applied: components["schemas"]["ServerSettingsValues"];
+            keys: components["schemas"]["ServerSettingStatus"][];
+            /** Format: date-time */
+            checked_at?: string | null;
+        };
+        IpBlockerEntry: {
+            ip: string;
+            /** @description RegisterPk attempts in the current 60 s window. */
+            attempts: number;
+            attempts_window_s: number;
+            /** @description Distinct ids registered from this IP in 24 h. */
+            ids: number;
+            ids_window_s: number;
+            blocked?: boolean;
+        };
+        IpBlockerPage: components["schemas"]["PageMeta"] & {
+            items: components["schemas"]["IpBlockerEntry"][];
+        };
+        IpChangesEntry: {
+            rustdesk_id: string;
+            /** @description Age of the record in seconds. */
+            seconds: number;
+            /** @description IP → registrations. */
+            ips: {
+                [key: string]: number;
+            };
+        };
+        IpChangesPage: components["schemas"]["PageMeta"] & {
+            items: components["schemas"]["IpChangesEntry"][];
+        };
+        PunchRequest: {
+            /** Format: int64 */
+            id: number;
+            /** Format: date-time */
+            at: string;
+            from_ip: string;
+            to_rustdesk_id: string;
+            to_ip?: string | null;
+        };
+        PunchRequestPage: components["schemas"]["PageMeta"] & {
+            items: components["schemas"]["PunchRequest"][];
+        };
+        RelayUsage: {
+            /** @description ip:port */
+            peer: string;
+            elapsed_s: number;
+            total_mb: number;
+            highest_kbps: number;
+            avg_kbps: number;
+            current_kbps: number;
+        };
+        /** @enum {string} */
+        ConsoleTarget: "hbbs" | "hbbr";
+        ConsoleCommand: {
+            target: components["schemas"]["ConsoleTarget"];
+            /** @description Full command name (aliases are not accepted). */
+            cmd: string;
+            alias?: string;
+            /** @example [Y|N] */
+            args_hint?: string;
+            /** @description Regex every argument must match. */
+            arg_pattern?: string;
+            max_args: number;
+            description: string;
+            mutating: boolean;
+        };
+        ConsoleRequest: {
+            target: components["schemas"]["ConsoleTarget"];
+            cmd: string;
+            args?: string[];
+        };
+        ConsoleResult: {
+            output: string;
+            truncated?: boolean;
+            duration_ms: number;
+            /** Format: date-time */
+            executed_at: string;
+        };
+        ConsoleHistoryItem: {
+            /** Format: int64 */
+            id: number;
+            actor_name: string;
+            target: components["schemas"]["ConsoleTarget"];
+            cmd: string;
+            args: string[];
+            output_excerpt?: string | null;
+            error?: string | null;
+            /** Format: date-time */
+            created_at: string;
+        };
+        ConsoleHistoryPage: components["schemas"]["PageMeta"] & {
+            items: components["schemas"]["ConsoleHistoryItem"][];
+        };
+        PanelSettings: {
+            /** @description e.g. https://desk.example.com; used for OIDC callbacks and links. */
+            public_url: string;
+            branding: {
+                title: string;
+                welcome_markdown: string;
+                has_logo: boolean;
+                web_client_url?: string | null;
+            };
+            auth: {
+                password_login_enabled: boolean;
+                require_admin_2fa: boolean;
+                session_idle_hours: number;
+                session_absolute_days: number;
+                client_token_lifetime_hours: number;
+            };
+            /** @description Days to keep each audit category; 0 = forever. */
+            retention: {
+                login_events_days: number;
+                connection_audits_days: number;
+                file_transfer_audits_days: number;
+                alarm_audits_days: number;
+                admin_audit_days: number;
+                punch_requests_days: number;
+            };
+            rate_limits: {
+                login_per_ip_per_minute: number;
+                login_per_user_per_minute: number;
+                client_api_per_ip_per_minute: number;
+            };
+            /** @description IPs/CIDRs whose X-Forwarded-For is trusted (default loopback only). */
+            trusted_proxies: string[];
+        };
+        PanelSettingsPatch: {
+            public_url?: string;
+            branding?: {
+                title?: string;
+                welcome_markdown?: string;
+                web_client_url?: string | null;
+            };
+            auth?: {
+                password_login_enabled?: boolean;
+                require_admin_2fa?: boolean;
+                session_idle_hours?: number;
+                session_absolute_days?: number;
+                client_token_lifetime_hours?: number;
+            };
+            retention?: {
+                login_events_days?: number;
+                connection_audits_days?: number;
+                file_transfer_audits_days?: number;
+                alarm_audits_days?: number;
+                admin_audit_days?: number;
+                punch_requests_days?: number;
+            };
+            rate_limits?: {
+                login_per_ip_per_minute?: number;
+                login_per_user_per_minute?: number;
+                client_api_per_ip_per_minute?: number;
+            };
+            trusted_proxies?: string[];
+        };
     };
     responses: {
+        /** @description hbbs/hbbr unreachable (error code `server_unavailable`). */
+        Unavailable: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["Error"];
+            };
+        };
         /** @description Not authenticated (or session expired). */
         Unauthorized: {
             headers: {
@@ -306,6 +2022,31 @@ export interface components {
         CsrfHeader: string;
         Limit: number;
         Offset: number;
+        /** @description 1-based page number. */
+        Page: number;
+        PageSize: number;
+        /** @description Case-insensitive substring search. */
+        Q: string;
+        /** @description Inclusive lower time bound. */
+        From: string;
+        /** @description Exclusive upper time bound. */
+        To: string;
+        DeviceId: number;
+        UserId: number;
+        GroupId: number;
+        BookId: number;
+        SessionId: number;
+        DeviceOnline: boolean;
+        /** @description Owner user id, `me` (the caller) or `none` (unassigned). */
+        DeviceOwner: string;
+        /** @description Device group id or `none`. */
+        DeviceGroupFilter: string;
+        /** @description OS family as returned by `/devices/facets`. */
+        DeviceOs: components["schemas"]["OsFamily"];
+        /** @description Exact client version. */
+        DeviceVersion: string;
+        /** @description Only devices last seen at/after this time. */
+        DeviceSeenAfter: string;
     };
     requestBodies: never;
     headers: never;
@@ -403,6 +2144,2168 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Me"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+        };
+    };
+    getBranding: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Branding. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Branding"];
+                };
+            };
+        };
+    };
+    getBrandingLogo: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Logo bytes. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "image/png": string;
+                    "image/jpeg": string;
+                    "image/webp": string;
+                };
+            };
+            404: components["responses"]["NotFound"];
+        };
+    };
+    getDashboard: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Dashboard data. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Dashboard"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+        };
+    };
+    lookupUsers: {
+        parameters: {
+            query?: {
+                /** @description Case-insensitive substring search. */
+                q?: components["parameters"]["Q"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Matching users. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        items: components["schemas"]["UserRef"][];
+                    };
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+        };
+    };
+    lookupUserGroups: {
+        parameters: {
+            query?: {
+                /** @description Case-insensitive substring search. */
+                q?: components["parameters"]["Q"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Matching groups. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        items: components["schemas"]["GroupRef"][];
+                    };
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+        };
+    };
+    listDevices: {
+        parameters: {
+            query?: {
+                /** @description 1-based page number. */
+                page?: components["parameters"]["Page"];
+                page_size?: components["parameters"]["PageSize"];
+                /** @description Case-insensitive substring search. */
+                q?: components["parameters"]["Q"];
+                sort?: "rustdesk_id" | "-rustdesk_id" | "hostname" | "-hostname" | "alias" | "-alias" | "os" | "-os" | "client_version" | "-client_version" | "last_seen_at" | "-last_seen_at" | "created_at" | "-created_at" | "online" | "-online";
+                online?: components["parameters"]["DeviceOnline"];
+                /** @description Owner user id, `me` (the caller) or `none` (unassigned). */
+                owner?: components["parameters"]["DeviceOwner"];
+                /** @description Device group id or `none`. */
+                device_group?: components["parameters"]["DeviceGroupFilter"];
+                /** @description OS family as returned by `/devices/facets`. */
+                os?: components["parameters"]["DeviceOs"];
+                /** @description Exact client version. */
+                version?: components["parameters"]["DeviceVersion"];
+                /** @description Only devices last seen at/after this time. */
+                seen_after?: components["parameters"]["DeviceSeenAfter"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Page of devices. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DevicePage"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["Unauthorized"];
+        };
+    };
+    getDeviceFacets: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Facets. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeviceFacets"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+        };
+    };
+    exportDevicesCsv: {
+        parameters: {
+            query?: {
+                /** @description Case-insensitive substring search. */
+                q?: components["parameters"]["Q"];
+                online?: components["parameters"]["DeviceOnline"];
+                /** @description Owner user id, `me` (the caller) or `none` (unassigned). */
+                owner?: components["parameters"]["DeviceOwner"];
+                /** @description Device group id or `none`. */
+                device_group?: components["parameters"]["DeviceGroupFilter"];
+                /** @description OS family as returned by `/devices/facets`. */
+                os?: components["parameters"]["DeviceOs"];
+                /** @description Exact client version. */
+                version?: components["parameters"]["DeviceVersion"];
+                /** @description Only devices last seen at/after this time. */
+                seen_after?: components["parameters"]["DeviceSeenAfter"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /**
+             * @description `Content-Disposition: attachment; filename="devices-<date>.csv"`. Columns:
+             *     rustdesk_id,alias,hostname,os,client_version,owner,group,online,last_seen_at,last_seen_ip,note.
+             *     Cells starting with `= + - @` are prefixed with `'` (CSV injection).
+             */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/csv": string;
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+        };
+    };
+    bulkDevices: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Must equal the rdpanel_csrf cookie. */
+                "X-CSRF-Token": components["parameters"]["CsrfHeader"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DeviceBulkRequest"];
+            };
+        };
+        responses: {
+            /** @description Result. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BulkResult"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    getDevice: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                device_id: components["parameters"]["DeviceId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Device. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeviceDetail"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    deleteDevice: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Must equal the rdpanel_csrf cookie. */
+                "X-CSRF-Token": components["parameters"]["CsrfHeader"];
+            };
+            path: {
+                device_id: components["parameters"]["DeviceId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Deleted. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    updateDevice: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Must equal the rdpanel_csrf cookie. */
+                "X-CSRF-Token": components["parameters"]["CsrfHeader"];
+            };
+            path: {
+                device_id: components["parameters"]["DeviceId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DeviceUpdate"];
+            };
+        };
+        responses: {
+            /** @description Updated device. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Device"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    kickDevice: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Must equal the rdpanel_csrf cookie. */
+                "X-CSRF-Token": components["parameters"]["CsrfHeader"];
+            };
+            path: {
+                device_id: components["parameters"]["DeviceId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Queued. */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    listUsers: {
+        parameters: {
+            query?: {
+                /** @description 1-based page number. */
+                page?: components["parameters"]["Page"];
+                page_size?: components["parameters"]["PageSize"];
+                /** @description Case-insensitive substring search. */
+                q?: components["parameters"]["Q"];
+                sort?: "username" | "-username" | "created_at" | "-created_at" | "last_login_at" | "-last_login_at" | "role" | "-role";
+                role?: components["schemas"]["Role"];
+                status?: components["schemas"]["UserStatus"];
+                user_group_id?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Page of users. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UserPage"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    createUser: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Must equal the rdpanel_csrf cookie. */
+                "X-CSRF-Token": components["parameters"]["CsrfHeader"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UserCreate"];
+            };
+        };
+        responses: {
+            /** @description Created. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UserListItem"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    getUser: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                user_id: components["parameters"]["UserId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description User. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UserDetail"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    deleteUser: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Must equal the rdpanel_csrf cookie. */
+                "X-CSRF-Token": components["parameters"]["CsrfHeader"];
+            };
+            path: {
+                user_id: components["parameters"]["UserId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Deleted. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    updateUser: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Must equal the rdpanel_csrf cookie. */
+                "X-CSRF-Token": components["parameters"]["CsrfHeader"];
+            };
+            path: {
+                user_id: components["parameters"]["UserId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UserUpdate"];
+            };
+        };
+        responses: {
+            /** @description Updated. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UserListItem"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    resetUserPassword: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Must equal the rdpanel_csrf cookie. */
+                "X-CSRF-Token": components["parameters"]["CsrfHeader"];
+            };
+            path: {
+                user_id: components["parameters"]["UserId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PasswordReset"];
+            };
+        };
+        responses: {
+            /** @description Password changed. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    resetUserTotp: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Must equal the rdpanel_csrf cookie. */
+                "X-CSRF-Token": components["parameters"]["CsrfHeader"];
+            };
+            path: {
+                user_id: components["parameters"]["UserId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Reset. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    listUserSessions: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                user_id: components["parameters"]["UserId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Sessions. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        items: components["schemas"]["Session"][];
+                    };
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    revokeUserSessions: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Must equal the rdpanel_csrf cookie. */
+                "X-CSRF-Token": components["parameters"]["CsrfHeader"];
+            };
+            path: {
+                user_id: components["parameters"]["UserId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /**
+                     * @default all
+                     * @enum {string}
+                     */
+                    kind?: "all" | "web" | "client";
+                };
+            };
+        };
+        responses: {
+            /** @description Number of revoked sessions. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RevokeResult"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    revokeUserSession: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Must equal the rdpanel_csrf cookie. */
+                "X-CSRF-Token": components["parameters"]["CsrfHeader"];
+            };
+            path: {
+                user_id: components["parameters"]["UserId"];
+                session_id: components["parameters"]["SessionId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Revoked. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    unlinkUserIdentity: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Must equal the rdpanel_csrf cookie. */
+                "X-CSRF-Token": components["parameters"]["CsrfHeader"];
+            };
+            path: {
+                user_id: components["parameters"]["UserId"];
+                identity_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Unlinked. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    listUserGroups: {
+        parameters: {
+            query?: {
+                /** @description 1-based page number. */
+                page?: components["parameters"]["Page"];
+                page_size?: components["parameters"]["PageSize"];
+                /** @description Case-insensitive substring search. */
+                q?: components["parameters"]["Q"];
+                sort?: "name" | "-name" | "member_count" | "-member_count" | "created_at" | "-created_at";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Page of user groups. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UserGroupPage"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    createUserGroup: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Must equal the rdpanel_csrf cookie. */
+                "X-CSRF-Token": components["parameters"]["CsrfHeader"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UserGroupInput"];
+            };
+        };
+        responses: {
+            /** @description Created. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UserGroup"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    deleteUserGroup: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Must equal the rdpanel_csrf cookie. */
+                "X-CSRF-Token": components["parameters"]["CsrfHeader"];
+            };
+            path: {
+                group_id: components["parameters"]["GroupId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Deleted. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    updateUserGroup: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Must equal the rdpanel_csrf cookie. */
+                "X-CSRF-Token": components["parameters"]["CsrfHeader"];
+            };
+            path: {
+                group_id: components["parameters"]["GroupId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UserGroupPatch"];
+            };
+        };
+        responses: {
+            /** @description Updated. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UserGroup"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    listDeviceGroups: {
+        parameters: {
+            query?: {
+                /** @description 1-based page number. */
+                page?: components["parameters"]["Page"];
+                page_size?: components["parameters"]["PageSize"];
+                /** @description Case-insensitive substring search. */
+                q?: components["parameters"]["Q"];
+                sort?: "name" | "-name" | "device_count" | "-device_count" | "created_at" | "-created_at";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Page of device groups. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeviceGroupPage"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    createDeviceGroup: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Must equal the rdpanel_csrf cookie. */
+                "X-CSRF-Token": components["parameters"]["CsrfHeader"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DeviceGroupInput"];
+            };
+        };
+        responses: {
+            /** @description Created. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeviceGroup"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    deleteDeviceGroup: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Must equal the rdpanel_csrf cookie. */
+                "X-CSRF-Token": components["parameters"]["CsrfHeader"];
+            };
+            path: {
+                group_id: components["parameters"]["GroupId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Deleted. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    updateDeviceGroup: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Must equal the rdpanel_csrf cookie. */
+                "X-CSRF-Token": components["parameters"]["CsrfHeader"];
+            };
+            path: {
+                group_id: components["parameters"]["GroupId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DeviceGroupPatch"];
+            };
+        };
+        responses: {
+            /** @description Updated. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeviceGroup"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    listAddressBooks: {
+        parameters: {
+            query?: {
+                /** @description 1-based page number. */
+                page?: components["parameters"]["Page"];
+                page_size?: components["parameters"]["PageSize"];
+                /** @description Case-insensitive substring search. */
+                q?: components["parameters"]["Q"];
+                scope?: "accessible" | "all";
+                owner_user_id?: number;
+                kind?: "personal" | "shared";
+                sort?: "name" | "-name" | "entry_count" | "-entry_count" | "updated_at" | "-updated_at";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Page of books. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AddressBookPage"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    createAddressBook: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Must equal the rdpanel_csrf cookie. */
+                "X-CSRF-Token": components["parameters"]["CsrfHeader"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AddressBookCreate"];
+            };
+        };
+        responses: {
+            /** @description Created. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AddressBook"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    getAddressBook: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                book_id: components["parameters"]["BookId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Book. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AddressBook"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    deleteAddressBook: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Must equal the rdpanel_csrf cookie. */
+                "X-CSRF-Token": components["parameters"]["CsrfHeader"];
+            };
+            path: {
+                book_id: components["parameters"]["BookId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Deleted. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    updateAddressBook: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Must equal the rdpanel_csrf cookie. */
+                "X-CSRF-Token": components["parameters"]["CsrfHeader"];
+            };
+            path: {
+                book_id: components["parameters"]["BookId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AddressBookUpdate"];
+            };
+        };
+        responses: {
+            /** @description Updated. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AddressBook"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    listAddressBookShares: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                book_id: components["parameters"]["BookId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Shares. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        items: components["schemas"]["AddressBookShare"][];
+                    };
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    createAddressBookShare: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Must equal the rdpanel_csrf cookie. */
+                "X-CSRF-Token": components["parameters"]["CsrfHeader"];
+            };
+            path: {
+                book_id: components["parameters"]["BookId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AddressBookShareCreate"];
+            };
+        };
+        responses: {
+            /** @description Created. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AddressBookShare"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    deleteAddressBookShare: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Must equal the rdpanel_csrf cookie. */
+                "X-CSRF-Token": components["parameters"]["CsrfHeader"];
+            };
+            path: {
+                book_id: components["parameters"]["BookId"];
+                share_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Deleted. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    updateAddressBookShare: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Must equal the rdpanel_csrf cookie. */
+                "X-CSRF-Token": components["parameters"]["CsrfHeader"];
+            };
+            path: {
+                book_id: components["parameters"]["BookId"];
+                share_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    permission: components["schemas"]["Permission"];
+                };
+            };
+        };
+        responses: {
+            /** @description Updated. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AddressBookShare"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    listAddressBookEntries: {
+        parameters: {
+            query?: {
+                /** @description 1-based page number. */
+                page?: components["parameters"]["Page"];
+                page_size?: components["parameters"]["PageSize"];
+                /** @description Case-insensitive substring search. */
+                q?: components["parameters"]["Q"];
+                /** @description Only entries having every given tag (repeatable). */
+                tag?: string[];
+                sort?: "alias" | "-alias" | "rustdesk_id" | "-rustdesk_id" | "hostname" | "-hostname" | "updated_at" | "-updated_at";
+            };
+            header?: never;
+            path: {
+                book_id: components["parameters"]["BookId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Page of entries. `online` is joined from live presence. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EntryPage"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    createAddressBookEntry: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Must equal the rdpanel_csrf cookie. */
+                "X-CSRF-Token": components["parameters"]["CsrfHeader"];
+            };
+            path: {
+                book_id: components["parameters"]["BookId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EntryCreate"];
+            };
+        };
+        responses: {
+            /** @description Created. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Entry"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    bulkAddressBookEntries: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Must equal the rdpanel_csrf cookie. */
+                "X-CSRF-Token": components["parameters"]["CsrfHeader"];
+            };
+            path: {
+                book_id: components["parameters"]["BookId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EntryBulkRequest"];
+            };
+        };
+        responses: {
+            /** @description Result. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BulkResult"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    addAddressBookEntriesFromDevices: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Must equal the rdpanel_csrf cookie. */
+                "X-CSRF-Token": components["parameters"]["CsrfHeader"];
+            };
+            path: {
+                book_id: components["parameters"]["BookId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EntriesFromDevicesRequest"];
+            };
+        };
+        responses: {
+            /** @description Result (`affected` = added, `skipped` = already present). */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BulkResult"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    deleteAddressBookEntry: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Must equal the rdpanel_csrf cookie. */
+                "X-CSRF-Token": components["parameters"]["CsrfHeader"];
+            };
+            path: {
+                book_id: components["parameters"]["BookId"];
+                entry_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Deleted. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    updateAddressBookEntry: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Must equal the rdpanel_csrf cookie. */
+                "X-CSRF-Token": components["parameters"]["CsrfHeader"];
+            };
+            path: {
+                book_id: components["parameters"]["BookId"];
+                entry_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EntryUpdate"];
+            };
+        };
+        responses: {
+            /** @description Updated. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Entry"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    listAddressBookTags: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                book_id: components["parameters"]["BookId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Tags of the book, ordered by name. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        items: components["schemas"]["Tag"][];
+                    };
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    createAddressBookTag: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Must equal the rdpanel_csrf cookie. */
+                "X-CSRF-Token": components["parameters"]["CsrfHeader"];
+            };
+            path: {
+                book_id: components["parameters"]["BookId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TagInput"];
+            };
+        };
+        responses: {
+            /** @description Created. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Tag"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    deleteAddressBookTag: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Must equal the rdpanel_csrf cookie. */
+                "X-CSRF-Token": components["parameters"]["CsrfHeader"];
+            };
+            path: {
+                book_id: components["parameters"]["BookId"];
+                tag_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Deleted. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    updateAddressBookTag: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Must equal the rdpanel_csrf cookie. */
+                "X-CSRF-Token": components["parameters"]["CsrfHeader"];
+            };
+            path: {
+                book_id: components["parameters"]["BookId"];
+                tag_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TagPatch"];
+            };
+        };
+        responses: {
+            /** @description Updated. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Tag"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    listConnectionAudits: {
+        parameters: {
+            query?: {
+                /** @description 1-based page number. */
+                page?: components["parameters"]["Page"];
+                page_size?: components["parameters"]["PageSize"];
+                /** @description Case-insensitive substring search. */
+                q?: components["parameters"]["Q"];
+                /** @description Inclusive lower time bound. */
+                from?: components["parameters"]["From"];
+                /** @description Exclusive upper time bound. */
+                to?: components["parameters"]["To"];
+                /** @description Device row id. */
+                device_id?: number;
+                conn_type?: components["schemas"]["ConnType"];
+                /** @description true = only connections without `ended_at`. */
+                active?: boolean;
+                sort?: "started_at" | "-started_at" | "ended_at" | "-ended_at";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Page. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConnectionAuditPage"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+        };
+    };
+    listFileTransferAudits: {
+        parameters: {
+            query?: {
+                /** @description 1-based page number. */
+                page?: components["parameters"]["Page"];
+                page_size?: components["parameters"]["PageSize"];
+                /** @description Case-insensitive substring search. */
+                q?: components["parameters"]["Q"];
+                /** @description Inclusive lower time bound. */
+                from?: components["parameters"]["From"];
+                /** @description Exclusive upper time bound. */
+                to?: components["parameters"]["To"];
+                device_id?: number;
+                direction?: components["schemas"]["FileDirection"];
+                sort?: "created_at" | "-created_at";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Page. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FileTransferAuditPage"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+        };
+    };
+    listAlarmAudits: {
+        parameters: {
+            query?: {
+                /** @description 1-based page number. */
+                page?: components["parameters"]["Page"];
+                page_size?: components["parameters"]["PageSize"];
+                /** @description Case-insensitive substring search. */
+                q?: components["parameters"]["Q"];
+                /** @description Inclusive lower time bound. */
+                from?: components["parameters"]["From"];
+                /** @description Exclusive upper time bound. */
+                to?: components["parameters"]["To"];
+                alarm_type?: number;
+                sort?: "created_at" | "-created_at";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Page. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AlarmAuditPage"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    listLoginEvents: {
+        parameters: {
+            query?: {
+                /** @description 1-based page number. */
+                page?: components["parameters"]["Page"];
+                page_size?: components["parameters"]["PageSize"];
+                /** @description Case-insensitive substring search. */
+                q?: components["parameters"]["Q"];
+                /** @description Inclusive lower time bound. */
+                from?: components["parameters"]["From"];
+                /** @description Exclusive upper time bound. */
+                to?: components["parameters"]["To"];
+                user_id?: number;
+                result?: "success" | "failure";
+                method?: components["schemas"]["LoginMethod"];
+                client_kind?: "web" | "client";
+                sort?: "created_at" | "-created_at";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Page. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LoginEventPage"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+        };
+    };
+    listAdminAudit: {
+        parameters: {
+            query?: {
+                /** @description 1-based page number. */
+                page?: components["parameters"]["Page"];
+                page_size?: components["parameters"]["PageSize"];
+                /** @description Case-insensitive substring search. */
+                q?: components["parameters"]["Q"];
+                /** @description Inclusive lower time bound. */
+                from?: components["parameters"]["From"];
+                /** @description Exclusive upper time bound. */
+                to?: components["parameters"]["To"];
+                actor_user_id?: number;
+                /** @description Action prefix, e.g. `user.` or `device.delete`. */
+                action?: string;
+                target_type?: string;
+                sort?: "created_at" | "-created_at";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Page. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminAuditPage"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    getServerHealth: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Health. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServerHealth"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    getServerSettings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description State. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServerSettingsState"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    updateServerSettings: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Must equal the rdpanel_csrf cookie. */
+                "X-CSRF-Token": components["parameters"]["CsrfHeader"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ServerSettingsPatch"];
+            };
+        };
+        responses: {
+            /** @description New state (after one apply attempt). */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServerSettingsState"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    reapplyServerSettings: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Must equal the rdpanel_csrf cookie. */
+                "X-CSRF-Token": components["parameters"]["CsrfHeader"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description State after re-applying. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServerSettingsState"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    listIpBlocker: {
+        parameters: {
+            query?: {
+                /** @description 1-based page number. */
+                page?: components["parameters"]["Page"];
+                page_size?: components["parameters"]["PageSize"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Entries. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IpBlockerPage"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    unblockIp: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Must equal the rdpanel_csrf cookie. */
+                "X-CSRF-Token": components["parameters"]["CsrfHeader"];
+            };
+            path: {
+                ip: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Removed. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    listIpChanges: {
+        parameters: {
+            query?: {
+                /** @description 1-based page number. */
+                page?: components["parameters"]["Page"];
+                page_size?: components["parameters"]["PageSize"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Entries. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IpChangesPage"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    clearIpChanges: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Must equal the rdpanel_csrf cookie. */
+                "X-CSRF-Token": components["parameters"]["CsrfHeader"];
+            };
+            path: {
+                rustdesk_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Removed. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    listPunchRequests: {
+        parameters: {
+            query?: {
+                /** @description 1-based page number. */
+                page?: components["parameters"]["Page"];
+                page_size?: components["parameters"]["PageSize"];
+                /** @description Case-insensitive substring search. */
+                q?: components["parameters"]["Q"];
+                /** @description Inclusive lower time bound. */
+                from?: components["parameters"]["From"];
+                /** @description Exclusive upper time bound. */
+                to?: components["parameters"]["To"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Page. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PunchRequestPage"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    getRelayUsage: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Active relays, by total bytes descending. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** Format: date-time */
+                        checked_at: string;
+                        items: components["schemas"]["RelayUsage"][];
+                    };
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    listConsoleCommands: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Commands. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        items: components["schemas"]["ConsoleCommand"][];
+                    };
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    runConsoleCommand: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Must equal the rdpanel_csrf cookie. */
+                "X-CSRF-Token": components["parameters"]["CsrfHeader"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ConsoleRequest"];
+            };
+        };
+        responses: {
+            /** @description Output. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConsoleResult"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    listConsoleHistory: {
+        parameters: {
+            query?: {
+                /** @description 1-based page number. */
+                page?: components["parameters"]["Page"];
+                page_size?: components["parameters"]["PageSize"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Page. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConsoleHistoryPage"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    getSettings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Settings. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PanelSettings"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    updateSettings: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Must equal the rdpanel_csrf cookie. */
+                "X-CSRF-Token": components["parameters"]["CsrfHeader"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PanelSettingsPatch"];
+            };
+        };
+        responses: {
+            /** @description Settings after the update. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PanelSettings"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    uploadLogo: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Must equal the rdpanel_csrf cookie. */
+                "X-CSRF-Token": components["parameters"]["CsrfHeader"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "image/png": string;
+                "image/jpeg": string;
+                "image/webp": string;
+            };
+        };
+        responses: {
+            /** @description Branding after upload. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Branding"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    deleteLogo: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Must equal the rdpanel_csrf cookie. */
+                "X-CSRF-Token": components["parameters"]["CsrfHeader"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Removed. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    streamEvents: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Event stream (never ends on its own). */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/event-stream": string;
                 };
             };
             401: components["responses"]["Unauthorized"];
