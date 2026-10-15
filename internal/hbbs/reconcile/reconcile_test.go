@@ -79,11 +79,11 @@ func fullSettings() Settings {
 
 func checkApplied(t *testing.T, g *rig) {
 	t.Helper()
-	relays, aur, ml, black, block, rates, dt, tt := g.hs.State()
+	relays, aur, ml, _, _, _, _, _ := g.hs.State()
 	if strings.Join(relays, ",") != "r1.example.com:21117,r2.example.com" || !aur || !ml {
 		t.Fatalf("hbbs state relays=%v aur=%v ml=%v", relays, aur, ml)
 	}
-	_, _, _, black, block, rates, dt, tt = g.hr.State()
+	_, _, _, black, block, rates, dt, tt := g.hr.State()
 	if strings.Join(black, ",") != "1.1.1.1,2.2.2.2" || len(block) != 0 {
 		t.Fatalf("hbbr lists %v %v", black, block)
 	}

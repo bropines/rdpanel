@@ -14,19 +14,27 @@ concurrency:
 
 jobs:
   go:
-    name: go
+    # go.mod stays at 1.23 so the code builds with the oldest toolchain we
+    # support; releases are built with the latest stable Go (see image.yml),
+    # which is what carries the standard-library security fixes.
+    name: go ${{ matrix.go }}
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        go: ["1.23", "stable"]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
-          go-version: "1.23"
+          go-version: ${{ matrix.go }}
           cache: true
       - name: gofmt
         run: |
           out="$(gofmt -l .)"
           if [ -n "$out" ]; then echo "gofmt needed:"; echo "$out"; exit 1; fi
       - name: go mod tidy check
+        if: matrix.go == '1.23'
         run: |
           go mod tidy
           git diff --exit-code go.mod go.sum
@@ -35,24 +43,23 @@ jobs:
       - name: go test (race)
         run: go test -race -count=1 ./...
       - name: staticcheck
+        if: matrix.go == '1.23'
         run: go run honnef.co/go/tools/cmd/staticcheck@2024.1.1 ./...
       - name: build (static)
         run: CGO_ENABLED=0 go build -trimpath -o /tmp/rdpanel ./cmd/rdpanel
 
   govulncheck:
+    # Scans with the toolchain releases are built with; stdlib advisories fixed
+    # only after Go 1.23 are therefore resolved by building with stable Go.
     name: govulncheck
     runs-on: ubuntu-latest
-    # Go 1.23 is past end-of-life, so newer standard-library advisories are only
-    # fixed in later Go releases. Report them without failing the build until
-    # the toolchain is bumped.
-    continue-on-error: true
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
-          go-version: "1.23"
+          go-version: stable
           cache: true
-      - run: go run golang.org/x/vuln/cmd/govulncheck@v1.1.4 ./...
+      - run: go run golang.org/x/vuln/cmd/govulncheck@latest ./...
 
   web:
     name: web
