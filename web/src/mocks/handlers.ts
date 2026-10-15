@@ -6,7 +6,7 @@
 import { delay, http, HttpResponse, type JsonBodyType } from "msw";
 
 import type { Schemas } from "@/api/client";
-import type { IdentityProvider, IdentityProviderInput } from "@/api/identityProviders";
+import type { IdentityProvider, IdentityProviderInput, IdentityProviderPatch } from "@/api/identityProviders";
 import * as db from "@/mocks/data";
 import { liveStream } from "@/mocks/sse";
 
@@ -240,10 +240,10 @@ export const handlers = [
     await delay(120);
   }),
 
-  /* auth (stream B1 contract as assumed by web/src/api/auth.ts) */
+  /* auth (api/openapi.yaml tag auth) */
   http.get(`${B}/auth/csrf`, () => ok({ csrf_token: "mock-csrf" })),
   http.get(`${B}/auth/providers`, () =>
-    ok(db.providers.filter((p) => p.enabled).map((p) => ({ slug: p.slug, display_name: p.display_name, kind: p.kind }))),
+    ok({ items: db.providers.filter((p) => p.enabled).map((p) => ({ slug: p.slug, display_name: p.display_name, kind: p.kind })) }),
   ),
   http.get(`${B}/auth/me`, () => {
     const u = me();
@@ -252,109 +252,110 @@ export const handlers = [
   http.post(`${B}/auth/login`, async ({ request }) => {
     const b = await body<{ username?: string; password?: string }>(request);
     const u = db.users.find((x) => x.username.toLowerCase() === (b.username ?? "").toLowerCase());
-    if (!u || u.password !== b.password) return err(401, "unauthorized", "invalid username or password");
-    if (u.status !== "active") return err(403, "account_disabled", "account disabled");
+    if (!u || u.password !== b.password || u.status !== "active") return err(401, "invalid_credentials", "invalid username or password");
     if (u.totp_enabled) {
       pendingMfaUser = u.id;
-      return ok({ mfa_required: true, methods: ["totp", "recovery"] });
+      return ok({ mfa_required: true });
     }
     setCurrentUser(u.id);
-    return ok(meBody(u));
+    return ok({ mfa_required: false, me: meBody(u) });
   }),
   http.post(`${B}/auth/mfa`, async ({ request }) => {
     const b = await body<{ code?: string }>(request);
     if (pendingMfaUser === null) return err(401, "unauthorized", "no pending login");
-    if (b.code !== "123456" && b.code?.toUpperCase() !== "AAAA-BBBB") return err(401, "totp_invalid", "invalid code");
+    if (b.code !== "123456" && b.code?.toUpperCase() !== "AAAA-BBBB") return err(401, "totp_invalid", "invalid verification code");
     const u = db.users.find((x) => x.id === pendingMfaUser)!;
     pendingMfaUser = null;
     setCurrentUser(u.id);
-    return ok(meBody(u));
+    return ok({ mfa_required: false, me: meBody(u) });
   }),
   http.post(`${B}/auth/logout`, () => {
     setCurrentUser(null);
     return noContent();
   }),
-  http.get(`${B}/auth/oidc/:slug/start`, () => {
+  // Mock: no IdP round-trip, the "IdP URL" signs in as user 1 and returns home.
+  http.post(`${B}/auth/oidc/:slug/start`, () => ok({ url: `${B}/auth/oidc/complete?ticket=mock` })),
+  http.get(`${B}/auth/oidc/complete`, () => {
     setCurrentUser(1);
     return HttpResponse.redirect("/", 302);
   }),
 
-  /* my security (stream B1 contract as assumed by web/src/api/security.ts) */
+  /* my profile / security (api/openapi.yaml tag security) */
   http.patch(`${B}/me`, async ({ request }) => {
     const u = requireAuth();
     if (u instanceof Response) return u;
     const b = await body<{ display_name?: string; email?: string | null }>(request);
     if (b.display_name !== undefined) u.display_name = b.display_name;
-    if (b.email !== undefined) u.email = b.email;
+    if (b.email !== undefined) u.email = b.email || null;
     return ok(publicUser(u));
   }),
-  http.post(`${B}/me/password`, async ({ request }) => {
+  http.post(`${B}/me/security/password`, async ({ request }) => {
     const u = requireAuth();
     if (u instanceof Response) return u;
     const b = await body<{ current_password: string; new_password: string }>(request);
-    if (b.current_password !== u.password) return err(401, "invalid_password", "current password is wrong");
+    if (b.current_password !== u.password) return err(401, "reauth_failed", "current password is incorrect");
     u.password = b.new_password;
     return noContent();
   }),
-  http.post(`${B}/me/totp/enroll`, () => {
+  http.post(`${B}/me/security/totp/enroll`, () => {
     const u = requireAuth();
     if (u instanceof Response) return u;
     const secret = "JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP";
     return ok({ secret, otpauth_uri: `otpauth://totp/RustDesk%20Panel:${u.username}?secret=${secret}&issuer=RustDesk%20Panel&digits=6&period=30` });
   }),
-  http.post(`${B}/me/totp/confirm`, async ({ request }) => {
+  http.post(`${B}/me/security/totp/confirm`, async ({ request }) => {
     const u = requireAuth();
     if (u instanceof Response) return u;
     const b = await body<{ code?: string }>(request);
-    if (b.code !== "123456") return err(400, "totp_invalid", "invalid code (mock: use 123456)");
+    if (b.code !== "123456") return err(401, "totp_invalid", "invalid verification code (mock: use 123456)");
     u.totp_enabled = true;
     return ok({ recovery_codes: ["7KQ2-MX4P", "H9TR-2LWD", "QZ8C-VN3B", "4FJD-PE7S", "WB6N-K2RX", "M3YH-9QAT", "C8LP-ZT5E", "R2VG-6NUJ"] });
   }),
-  http.post(`${B}/me/totp/disable`, async ({ request }) => {
+  http.post(`${B}/me/security/totp/disable`, async ({ request }) => {
     const u = requireAuth();
     if (u instanceof Response) return u;
     const b = await body<{ password?: string; code?: string }>(request);
-    if (b.password !== u.password) return err(401, "invalid_password", "wrong password");
-    if (b.code !== "123456") return err(400, "totp_invalid", "invalid code");
+    if (b.password !== u.password && b.code !== "123456") return err(401, "reauth_failed", "password or verification code is incorrect");
     u.totp_enabled = false;
     return noContent();
   }),
-  http.post(`${B}/me/recovery-codes`, async ({ request }) => {
+  http.post(`${B}/me/security/recovery-codes`, async ({ request }) => {
     const u = requireAuth();
     if (u instanceof Response) return u;
-    const b = await body<{ code?: string }>(request);
-    if (b.code !== "123456") return err(400, "totp_invalid", "invalid code");
+    const b = await body<{ password?: string; code?: string }>(request);
+    if (b.password !== u.password && b.code !== "123456") return err(401, "reauth_failed", "password or verification code is incorrect");
     return ok({ recovery_codes: ["P4XW-7DNA", "JE2K-QR8V", "Z6TB-M3HC", "L9GS-4WYF", "N2CU-8KPE", "T7RM-5JZQ", "V3HD-6XBL", "F8QN-2AEW"] });
   }),
-  http.get(`${B}/me/sessions`, () => {
+  http.get(`${B}/me/security/sessions`, () => {
     const u = requireAuth();
     if (u instanceof Response) return u;
     return ok({ items: db.sessionsByUser[u.id] ?? [] });
   }),
-  http.delete(`${B}/me/sessions/:id`, ({ params }) => {
-    const u = requireAuth();
-    if (u instanceof Response) return u;
-    db.sessionsByUser[u.id] = (db.sessionsByUser[u.id] ?? []).filter((s) => s.id !== Number(params.id));
-    return noContent();
-  }),
-  http.post(`${B}/me/sessions/revoke-others`, () => {
+  http.post(`${B}/me/security/sessions/revoke-others`, () => {
     const u = requireAuth();
     if (u instanceof Response) return u;
     const list = db.sessionsByUser[u.id] ?? [];
     db.sessionsByUser[u.id] = list.filter((s) => s.current);
     return ok({ revoked: list.length - (db.sessionsByUser[u.id]?.length ?? 0) });
   }),
-  http.get(`${B}/me/identities`, () => {
+  http.delete(`${B}/me/security/sessions/:id`, ({ params }) => {
+    const u = requireAuth();
+    if (u instanceof Response) return u;
+    db.sessionsByUser[u.id] = (db.sessionsByUser[u.id] ?? []).filter((s) => s.id !== Number(params.id));
+    return noContent();
+  }),
+  http.get(`${B}/me/security/identities`, () => {
     const u = requireAuth();
     if (u instanceof Response) return u;
     return ok({ items: u.identities });
   }),
-  http.delete(`${B}/me/identities/:id`, ({ params }) => {
+  http.delete(`${B}/me/security/identities/:id`, ({ params }) => {
     const u = requireAuth();
     if (u instanceof Response) return u;
     u.identities = u.identities.filter((i) => i.id !== Number(params.id));
     return noContent();
   }),
+  http.post(`${B}/me/security/identities/link/:slug`, ({ params }) => ok({ url: `/my/profile?linked=${String(params.slug)}` })),
 
   /* branding / dashboard / lookups */
   http.get(`${B}/branding`, () =>
@@ -1198,19 +1199,16 @@ export const handlers = [
     if (u instanceof Response) return u;
     const b = await body<S["PanelSettingsPatch"]>(request);
     const s = db.panelSettings;
-    if (b.public_url !== undefined) s.public_url = b.public_url;
     if (b.branding) Object.assign(s.branding, b.branding);
     if (b.auth) Object.assign(s.auth, b.auth);
     if (b.retention) Object.assign(s.retention, b.retention);
-    if (b.rate_limits) Object.assign(s.rate_limits, b.rate_limits);
-    if (b.trusted_proxies) s.trusted_proxies = b.trusted_proxies;
     audit(u, "settings.update", "settings", Object.keys(b).join(","));
     return ok(s);
   }),
   http.put(`${B}/settings/logo`, () => err(400, "validation_failed", "logo upload is not supported in mock mode")),
   http.delete(`${B}/settings/logo`, () => noContent()),
 
-  /* identity providers (stream B1 contract as assumed by web/src/api/identityProviders.ts) */
+  /* identity providers (api/openapi.yaml tag identity-providers) */
   http.get(`${B}/identity-providers`, () => {
     const u = requireAdmin();
     if (u instanceof Response) return u;
@@ -1250,7 +1248,7 @@ export const handlers = [
     if (u instanceof Response) return u;
     const p = db.providers.find((x) => x.id === Number(params.id));
     if (!p) return err(404, "not_found", "provider not found");
-    const { client_secret, ...rest } = await body<IdentityProviderInput>(request);
+    const { client_secret, ...rest } = await body<IdentityProviderPatch>(request);
     Object.assign(p, rest, { updated_at: nowIso() });
     if (client_secret) p.has_client_secret = true;
     return ok(p);
@@ -1267,10 +1265,11 @@ export const handlers = [
     if (u instanceof Response) return u;
     const p = db.providers.find((x) => x.id === Number(params.id));
     if (!p) return err(404, "not_found", "provider not found");
-    if (!p.has_client_secret) return ok({ ok: false, message: "Client secret is not configured." });
+    const callback_url = p.callback_url;
+    if (p.kind === "oidc" && !(p.issuer ?? "").startsWith("https://sso.")) return ok({ ok: false, error: "discovery: request failed", callback_url });
     return ok({
       ok: true,
-      message: p.kind === "oidc" ? "Discovery document loaded; endpoints reachable." : `${p.display_name} OAuth endpoints reachable.`,
+      callback_url,
       issuer: p.issuer ?? undefined,
       authorization_endpoint: p.kind === "github" ? "https://github.com/login/oauth/authorize" : p.kind === "google" ? "https://accounts.google.com/o/oauth2/v2/auth" : `${p.issuer}/protocol/openid-connect/auth`,
     });

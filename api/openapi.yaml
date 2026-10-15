@@ -17,7 +17,18 @@ info:
     **Errors.** Every non-2xx response has the body `{"error":{"code","message"}}`.
     `code` is stable and machine-readable (`unauthorized`, `forbidden`, `csrf_failed`,
     `not_found`, `conflict`, `validation_failed`, `rate_limited`, `totp_required`,
-    `totp_invalid`, `internal`).
+    `totp_invalid`, `internal`, `invalid_credentials`, `password_login_disabled`,
+    `totp_enrollment_required`, `reauth_failed`, `oidc_not_configured`,
+    `provider_unavailable`, `last_admin`, `server_unavailable`).
+
+    **Route guards.** Resource routes require a full session; while an admin-forced
+    2FA enrolment is pending only `/auth/*` and `/me/security/*` are reachable
+    (others answer 403 `totp_enrollment_required`).
+
+    **Hosts.** The panel (SPA + `/api/v1/*`) may be served from an admin host
+    (`RDPANEL_ADMIN_URL`) different from the public client-API host
+    (`RDPANEL_PUBLIC_URL`); OIDC flows hand off between them (see
+    `/auth/oidc/{slug}/start`).
 
     **Timestamps** are RFC 3339 UTC strings. **Ids** are integers.
 
@@ -34,9 +45,8 @@ info:
     **Live events.** `GET /api/v1/events` (outside this base path) is a
     Server-Sent Events stream, see the `/events` path and `x-sse-events`.
 
-    Status: skeleton by stream F; stream D defined the resource endpoints the UI
-    needs (dashboard … settings); stream B owns `/auth/*`, `/me/*` and
-    `/identity-providers` and implements everything.
+    Every `/api/v1/admin` route is listed here; `internal/app/openapi_test.go`
+    walks the real router and fails on any difference.
   license:
     name: MIT
     identifier: MIT
@@ -46,6 +56,8 @@ security:
   - sessionCookie: []
 tags:
   - name: auth
+  - name: security
+  - name: identity-providers
   - name: dashboard
   - name: users
   - name: groups
@@ -89,10 +101,15 @@ paths:
       operationId: login
       summary: Password login (optionally with a TOTP or recovery code).
       description: |
-        On success sets the session cookie and returns the current user.
-        When the user has 2FA enabled and no `totp_code` was given, responds
-        401 with error code `totp_required`. Failed attempts are rate limited per
-        IP and per username (429 `rate_limited`, `Retry-After` header).
+        On success rotates the session (any presented session is revoked), sets the
+        session and CSRF cookies and returns `{mfa_required: false, me}`.
+        When the user has TOTP enabled and no `totp_code` was given, a short-lived
+        (5 min) pending session is issued and the response is `{mfa_required: true}`;
+        finish with `POST /auth/mfa`. Errors are generic (401 `invalid_credentials`)
+        whether the user exists or not; 403 `password_login_disabled` when password
+        sign-in is turned off for the `user` role (Settings → auth). Failed attempts
+        are rate limited per IP and per username with exponential backoff
+        (429 `rate_limited`, `Retry-After`).
       security: []
       parameters:
         - $ref: "#/components/parameters/CsrfHeader"
@@ -103,10 +120,10 @@ paths:
             schema: { $ref: "#/components/schemas/LoginRequest" }
       responses:
         "200":
-          description: Logged in.
+          description: Logged in, or password accepted and second factor required.
           content:
             application/json:
-              schema: { $ref: "#/components/schemas/Me" }
+              schema: { $ref: "#/components/schemas/LoginResponse" }
         "400": { $ref: "#/components/responses/ValidationFailed" }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "403": { $ref: "#/components/responses/Forbidden" }
@@ -134,6 +151,425 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/Me" }
         "401": { $ref: "#/components/responses/Unauthorized" }
+  /auth/mfa:
+    post:
+      tags: [auth]
+      operationId: completeMfa
+      summary: Complete a pending login with a TOTP code or a recovery code.
+      description: |
+        Requires the short-lived pending session issued by `/auth/login` (or by an
+        OIDC login of a user with TOTP, which lands on `/login?mfa=1&next=…`).
+        Rotates the session.
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - $ref: "#/components/parameters/CsrfHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CodeRequest" }
+      responses:
+        "200":
+          description: Logged in (`mfa_required` is false, `me` is set).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/LoginResponse" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+  /auth/providers:
+    get:
+      tags: [auth]
+      operationId: listLoginProviders
+      summary: Enabled identity providers for the login page buttons.
+      security: []
+      responses:
+        "200":
+          description: Providers (empty when OIDC is unavailable, e.g. no public URL).
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items: { type: array, items: { $ref: "#/components/schemas/LoginProvider" } }
+  /auth/oidc/{slug}/start:
+    post:
+      tags: [auth]
+      operationId: startOidcLogin
+      summary: Begin a panel login with an identity provider.
+      description: |
+        Sets an HttpOnly browser-binding cookie (`rdpanel_oauth`, admin host) and
+        returns the IdP URL; the SPA navigates to it (`window.location`). The IdP
+        redirects to `<public_url>/api/oidc/callback` (the only redirect URI
+        registered at the IdP, possibly on another host), which exchanges the code
+        and hands off to `<admin_url>/api/v1/admin/auth/oidc/complete`. The browser
+        finally lands on `next` on success; `/login?mfa=1&next=<next>` when TOTP is
+        enabled (finish with `POST /auth/mfa`); `/login?error=oidc_<code>` on
+        failure, where code is one of `expired`, `denied`, `failed`, `no_account`,
+        `disabled`, `ambiguous`, `already_linked`, `session_mismatch`.
+      security: []
+      parameters:
+        - $ref: "#/components/parameters/CsrfHeader"
+        - { name: slug, in: path, required: true, schema: { type: string } }
+      requestBody:
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/OidcStartRequest" }
+      responses:
+        "200":
+          description: IdP authorization URL.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/UrlResponse" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "502": { description: Identity provider unavailable (`provider_unavailable`). }
+  /auth/oidc/complete:
+    get:
+      tags: [auth]
+      operationId: completeOidc
+      summary: Admin-host end of a panel OIDC login or identity link (browser navigation).
+      description: |
+        Target of the 302 from `/api/oidc/callback`. Consumes the single-use ticket
+        (valid 2 minutes), verifies the `rdpanel_oauth` binding cookie against the
+        flow in constant time, then creates the session (or links the identity) and
+        redirects into the SPA: `next`, `/login?mfa=1&next=…`, `/login?error=oidc_<code>`,
+        or for linking `<next>?linked=<slug>` / `<next>?link_error=<code>`
+        (default `/my/profile`). Never answers JSON.
+      security: []
+      parameters:
+        - { name: ticket, in: query, required: true, schema: { type: string } }
+      responses:
+        "302": { description: Redirect into the SPA. }
+  /me:
+    patch:
+      tags: [security]
+      operationId: updateMyProfile
+      summary: Edit my display name and email.
+      parameters:
+        - $ref: "#/components/parameters/CsrfHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ProfileUpdate" }
+      responses:
+        "200":
+          description: Updated user.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/User" }
+        "400": { $ref: "#/components/responses/ValidationFailed" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /me/security:
+    get:
+      tags: [security]
+      operationId: getMySecurity
+      summary: 2FA / password state of the current user.
+      description: Reachable while a forced 2FA enrolment is pending (as are all /me/security routes).
+      responses:
+        "200":
+          description: Security overview.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SecurityOverview" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+  /me/security/totp/enroll:
+    post:
+      tags: [security]
+      operationId: enrollTotp
+      summary: Start (or restart) TOTP enrolment; returns the seed and otpauth URI (render it as a QR code).
+      parameters:
+        - $ref: "#/components/parameters/CsrfHeader"
+      responses:
+        "200":
+          description: New pending seed.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TotpEnrollment" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "409": { $ref: "#/components/responses/Conflict" }
+  /me/security/totp/confirm:
+    post:
+      tags: [security]
+      operationId: confirmTotp
+      summary: Confirm enrolment with a code; returns recovery codes (shown once).
+      parameters:
+        - $ref: "#/components/parameters/CsrfHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CodeRequest" }
+      responses:
+        "200":
+          description: 2FA enabled.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RecoveryCodes" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+  /me/security/totp/disable:
+    post:
+      tags: [security]
+      operationId: disableTotp
+      summary: Disable 2FA (requires the password or a TOTP/recovery code).
+      description: Refused with 403 `totp_required` when policy requires 2FA for this account.
+      parameters:
+        - $ref: "#/components/parameters/CsrfHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ReauthRequest" }
+      responses:
+        "204": { description: Disabled. }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+  /me/security/recovery-codes:
+    post:
+      tags: [security]
+      operationId: regenerateRecoveryCodes
+      summary: Replace recovery codes (requires the password or a TOTP code); shown once.
+      parameters:
+        - $ref: "#/components/parameters/CsrfHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ReauthRequest" }
+      responses:
+        "200":
+          description: New codes.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RecoveryCodes" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+  /me/security/sessions:
+    get:
+      tags: [security]
+      operationId: listMySessions
+      summary: Active panel sessions and client tokens of the current user.
+      responses:
+        "200":
+          description: Sessions, newest first.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items: { type: array, items: { $ref: "#/components/schemas/Session" } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+  /me/security/sessions/revoke-others:
+    post:
+      tags: [security]
+      operationId: revokeMyOtherSessions
+      summary: Revoke every session and client token except the current session.
+      parameters:
+        - $ref: "#/components/parameters/CsrfHeader"
+      responses:
+        "200":
+          description: Number of revoked sessions/tokens.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RevokeResult" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+  /me/security/sessions/{id}:
+    delete:
+      tags: [security]
+      operationId: revokeMySession
+      summary: Revoke one of my sessions or client tokens.
+      parameters:
+        - $ref: "#/components/parameters/CsrfHeader"
+        - { name: id, in: path, required: true, schema: { type: integer, format: int64 } }
+      responses:
+        "204": { description: Revoked. }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /me/security/password:
+    post:
+      tags: [security]
+      operationId: changeMyPassword
+      summary: Change password; revokes every other session and client token.
+      description: "`current_password` is required when the account has a password (401 `reauth_failed` when wrong)."
+      parameters:
+        - $ref: "#/components/parameters/CsrfHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ChangePasswordRequest" }
+      responses:
+        "204": { description: Changed. }
+        "400": { $ref: "#/components/responses/ValidationFailed" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+  /me/security/identities:
+    get:
+      tags: [security]
+      operationId: listMyIdentities
+      summary: Identities (GitHub, Google, OIDC) linked to my account.
+      responses:
+        "200":
+          description: Linked identities.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items: { type: array, items: { $ref: "#/components/schemas/UserIdentity" } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+  /me/security/identities/{id}:
+    delete:
+      tags: [security]
+      operationId: unlinkMyIdentity
+      summary: Unlink an identity (409 when it is the last sign-in method).
+      parameters:
+        - $ref: "#/components/parameters/CsrfHeader"
+        - { name: id, in: path, required: true, schema: { type: integer, format: int64 } }
+      responses:
+        "204": { description: Unlinked. }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+  /me/security/identities/link/{slug}:
+    post:
+      tags: [security]
+      operationId: linkMyIdentity
+      summary: Begin linking an identity of provider {slug}.
+      description: |
+        Returns the IdP URL to navigate to (same hand-off as `/auth/oidc/{slug}/start`).
+        The browser ends on `next` (default `/my/profile`) with `?linked=<slug>` or
+        `?link_error=<code>`.
+      parameters:
+        - $ref: "#/components/parameters/CsrfHeader"
+        - { name: slug, in: path, required: true, schema: { type: string } }
+      requestBody:
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/OidcStartRequest" }
+      responses:
+        "200":
+          description: IdP authorization URL.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/UrlResponse" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+  /identity-providers:
+    get:
+      tags: [identity-providers]
+      operationId: listIdentityProviders
+      summary: All identity providers (admin). Secrets are never returned.
+      responses:
+        "200":
+          description: Providers.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items: { type: array, items: { $ref: "#/components/schemas/IdentityProvider" } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+    post:
+      tags: [identity-providers]
+      operationId: createIdentityProvider
+      summary: Create an identity provider (admin).
+      parameters:
+        - $ref: "#/components/parameters/CsrfHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/IdentityProviderInput" }
+      responses:
+        "201":
+          description: Created.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/IdentityProvider" }
+        "400": { $ref: "#/components/responses/ValidationFailed" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409": { $ref: "#/components/responses/Conflict" }
+  /identity-providers/{id}:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: integer, format: int64 } }
+    get:
+      tags: [identity-providers]
+      operationId: getIdentityProvider
+      summary: One identity provider (admin).
+      responses:
+        "200":
+          description: Provider.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/IdentityProvider" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    patch:
+      tags: [identity-providers]
+      operationId: updateIdentityProvider
+      summary: Update an identity provider (admin); omitted fields keep their value, omitted/null `client_secret` keeps the secret.
+      parameters:
+        - $ref: "#/components/parameters/CsrfHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/IdentityProviderPatch" }
+      responses:
+        "200":
+          description: Updated.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/IdentityProvider" }
+        "400": { $ref: "#/components/responses/ValidationFailed" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+    delete:
+      tags: [identity-providers]
+      operationId: deleteIdentityProvider
+      summary: Delete an identity provider and its linked identities (admin).
+      parameters:
+        - $ref: "#/components/parameters/CsrfHeader"
+      responses:
+        "204": { description: Deleted. }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /identity-providers/{id}/test:
+    post:
+      tags: [identity-providers]
+      operationId: testIdentityProvider
+      summary: Run OIDC discovery for the provider and report the endpoints (admin).
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer, format: int64 } }
+        - $ref: "#/components/parameters/CsrfHeader"
+      responses:
+        "200":
+          description: Result (`ok=false` with `error` on failure).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/IdentityProviderTestResult" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
 
   # ───────────────────────────── stream D: resources ─────────────────────────────
 
@@ -1800,6 +2236,162 @@ components:
         totp_code:
           type: string
           description: 6-digit TOTP code or a recovery code.
+    LoginResponse:
+      type: object
+      required: [mfa_required]
+      properties:
+        mfa_required:
+          type: boolean
+          description: True when the password was accepted and `POST /auth/mfa` must follow (a 5 min pending session was issued).
+        me: { $ref: "#/components/schemas/Me" }
+    CodeRequest:
+      type: object
+      required: [code]
+      additionalProperties: false
+      properties:
+        code: { type: string, description: 6-digit TOTP code or a recovery code (xxxx-xxxx-xxxx-xxxx). }
+    ReauthRequest:
+      type: object
+      additionalProperties: false
+      description: Provide the current password or a TOTP/recovery code.
+      properties:
+        password: { type: string }
+        code: { type: string }
+    ChangePasswordRequest:
+      type: object
+      required: [new_password]
+      additionalProperties: false
+      properties:
+        current_password: { type: string }
+        new_password: { type: string, minLength: 8, maxLength: 1024 }
+    ProfileUpdate:
+      type: object
+      additionalProperties: false
+      properties:
+        display_name: { type: string, maxLength: 128 }
+        email: { type: [string, "null"], format: email, description: '"" or null clears it.' }
+    ProviderKind:
+      type: string
+      enum: [github, google, oidc]
+    LoginProvider:
+      type: object
+      required: [slug, display_name, kind]
+      properties:
+        slug: { type: string }
+        display_name: { type: string }
+        kind: { $ref: "#/components/schemas/ProviderKind" }
+    OidcStartRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        next:
+          type: string
+          description: Relative path to return to (anything else falls back to the default).
+    UrlResponse:
+      type: object
+      required: [url]
+      properties:
+        url: { type: string, format: uri }
+    SecurityOverview:
+      type: object
+      required: [has_password, totp_enabled, totp_pending, totp_required, must_enroll_totp, recovery_codes_remaining]
+      properties:
+        has_password: { type: boolean }
+        totp_enabled: { type: boolean }
+        totp_pending: { type: boolean, description: An unconfirmed enrolment exists. }
+        totp_required: { type: boolean, description: Policy (user flag or admin policy) requires 2FA. }
+        must_enroll_totp: { type: boolean }
+        recovery_codes_remaining: { type: integer }
+    TotpEnrollment:
+      type: object
+      required: [secret, otpauth_uri]
+      properties:
+        secret: { type: string, description: Base32 seed for manual entry. }
+        otpauth_uri: { type: string, description: otpauth://totp/... URI to render as a QR code. }
+    RecoveryCodes:
+      type: object
+      required: [recovery_codes]
+      properties:
+        recovery_codes:
+          type: array
+          items: { type: string }
+          description: Shown once; only hashes are stored.
+    IdentityProvider:
+      type: object
+      required: [id, slug, kind, display_name, client_id, has_client_secret, issuer, scopes, pkce_enabled, pkce_method, auto_register, link_by_verified_email, enabled, sort_order, callback_url, created_at, updated_at]
+      properties:
+        id: { type: integer, format: int64 }
+        slug: { type: string, description: Name clients see as oidc/<slug>. }
+        kind: { type: string, enum: [github, google, oidc, linuxdo] }
+        display_name: { type: string }
+        client_id: { type: string }
+        has_client_secret: { type: boolean, description: The secret itself is write-only. }
+        issuer: { type: [string, "null"], description: OIDC only; Google is fixed to https://accounts.google.com. }
+        scopes:
+          type: array
+          items: { type: string }
+          description: Empty = defaults (openid profile email; GitHub read:user user:email).
+        pkce_enabled: { type: boolean }
+        pkce_method: { type: string, enum: [S256, plain] }
+        auto_register: { type: boolean }
+        link_by_verified_email:
+          type: boolean
+          description: Link to an existing user by email only when the IdP asserts email_verified.
+        enabled: { type: boolean }
+        sort_order: { type: integer }
+        callback_url: { type: string, description: 'Redirect URI to register at the IdP ("" without a public URL).' }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+    IdentityProviderInput:
+      type: object
+      required: [slug, kind, client_id]
+      additionalProperties: false
+      properties:
+        slug: { type: string, pattern: "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$" }
+        kind: { $ref: "#/components/schemas/ProviderKind" }
+        display_name: { type: string, maxLength: 128 }
+        client_id: { type: string, maxLength: 512 }
+        client_secret:
+          type: [string, "null"]
+          description: Omitted/null keeps the stored secret; empty string clears it.
+        issuer: { type: [string, "null"], description: Required for kind=oidc. }
+        scopes: { type: array, items: { type: string } }
+        pkce_enabled: { type: boolean, default: true }
+        pkce_method: { type: string, enum: [S256, plain], default: S256 }
+        auto_register: { type: boolean, default: false }
+        link_by_verified_email: { type: boolean, default: false }
+        enabled: { type: boolean, default: true }
+        sort_order: { type: integer, default: 0 }
+    IdentityProviderPatch:
+      type: object
+      additionalProperties: false
+      description: Same fields as IdentityProviderInput, all optional.
+      properties:
+        slug: { type: string, pattern: "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$" }
+        kind: { $ref: "#/components/schemas/ProviderKind" }
+        display_name: { type: string, maxLength: 128 }
+        client_id: { type: string, maxLength: 512 }
+        client_secret: { type: [string, "null"], description: Omitted/null keeps the stored secret; empty string clears it. }
+        issuer: { type: [string, "null"] }
+        scopes: { type: array, items: { type: string } }
+        pkce_enabled: { type: boolean }
+        pkce_method: { type: string, enum: [S256, plain] }
+        auto_register: { type: boolean }
+        link_by_verified_email: { type: boolean }
+        enabled: { type: boolean }
+        sort_order: { type: integer }
+    IdentityProviderTestResult:
+      type: object
+      required: [ok, callback_url]
+      properties:
+        ok: { type: boolean }
+        error: { type: string }
+        issuer: { type: string }
+        authorization_endpoint: { type: string }
+        token_endpoint: { type: string }
+        userinfo_endpoint: { type: string }
+        jwks_uri: { type: string }
+        callback_url: { type: string }
     Role:
       type: string
       enum: [admin, user]
@@ -2144,17 +2736,19 @@ components:
     UserIdentity:
       type: object
       description: A linked IdP identity.
-      required: [id, provider_id, provider_slug, provider_kind, provider_name, subject, created_at]
+      required: [id, provider_id, provider_slug, provider_kind, provider_name, subject, email, email_verified, username, display_name, avatar_url, last_login_at, created_at]
       properties:
         id: { type: integer, format: int64 }
         provider_id: { type: integer, format: int64 }
         provider_slug: { type: string }
         provider_kind: { type: string, enum: [github, google, oidc, linuxdo] }
-        provider_name: { type: string }
+        provider_name: { type: string, description: Provider display name (slug when unnamed). }
         subject: { type: string }
         email: { type: [string, "null"] }
         email_verified: { type: boolean }
         username: { type: [string, "null"] }
+        display_name: { type: string }
+        avatar_url: { type: string }
         last_login_at: { type: [string, "null"], format: date-time }
         created_at: { type: string, format: date-time }
     UserDetail:
@@ -2689,12 +3283,17 @@ components:
 
     PanelSettings:
       type: object
-      required: [public_url, branding, auth, retention, rate_limits, trusted_proxies]
+      required: [public_url, admin_url, branding, auth, retention, rate_limits, trusted_proxies]
       properties:
-        public_url: { type: string, description: "e.g. https://desk.example.com; used for OIDC callbacks and links." }
+        public_url:
+          type: string
+          description: "Read-only (RDPANEL_PUBLIC_URL): client API base URL; OIDC redirect URI host."
+        admin_url:
+          type: string
+          description: "Read-only (RDPANEL_ADMIN_URL, default public_url): panel base URL."
         branding:
           type: object
-          required: [title, welcome_markdown, has_logo]
+          required: [title, welcome_markdown, has_logo, web_client_url]
           properties:
             title: { type: string, maxLength: 64 }
             welcome_markdown: { type: string, maxLength: 20000 }
@@ -2702,16 +3301,17 @@ components:
             web_client_url: { type: [string, "null"] }
         auth:
           type: object
+          description: Enforced at runtime (lifetimes apply to new sessions/tokens).
           required: [password_login_enabled, require_admin_2fa, session_idle_hours, session_absolute_days, client_token_lifetime_hours]
           properties:
-            password_login_enabled: { type: boolean }
+            password_login_enabled: { type: boolean, description: "False refuses password sign-in for the user role (panel and client); admins keep it." }
             require_admin_2fa: { type: boolean }
             session_idle_hours: { type: integer, minimum: 1, maximum: 720 }
             session_absolute_days: { type: integer, minimum: 1, maximum: 365 }
             client_token_lifetime_hours: { type: integer, minimum: 1, maximum: 87600 }
         retention:
           type: object
-          description: Days to keep each audit category; 0 = forever.
+          description: Days to keep each audit category (the janitor uses these values); 0 = forever.
           required: [login_events_days, connection_audits_days, file_transfer_audits_days, alarm_audits_days, admin_audit_days, punch_requests_days]
           properties:
             login_events_days: { type: integer, minimum: 0 }
@@ -2722,20 +3322,26 @@ components:
             punch_requests_days: { type: integer, minimum: 0 }
         rate_limits:
           type: object
-          required: [login_per_ip_per_minute, login_per_user_per_minute, client_api_per_ip_per_minute]
+          description: Read-only effective limits (server configuration).
+          required: [login_free_attempts, login_base_delay_seconds, login_max_delay_seconds, device_requests_per_second, device_burst]
           properties:
-            login_per_ip_per_minute: { type: integer, minimum: 1 }
-            login_per_user_per_minute: { type: integer, minimum: 1 }
-            client_api_per_ip_per_minute: { type: integer, minimum: 1 }
+            login_free_attempts: { type: integer, description: Failed logins per IP / username before backoff starts. }
+            login_base_delay_seconds: { type: integer, description: First backoff delay; doubles per further failure. }
+            login_max_delay_seconds: { type: integer }
+            device_requests_per_second: { type: number, description: Unauthenticated device endpoints, per client IP. }
+            device_burst: { type: integer }
         trusted_proxies:
           type: array
-          description: IPs/CIDRs whose X-Forwarded-For is trusted (default loopback only).
+          description: Read-only (RDPANEL_TRUSTED_PROXIES); IPs/CIDRs whose forwarding headers are trusted.
           items: { type: string }
     PanelSettingsPatch:
       type: object
       additionalProperties: false
+      description: |
+        Partial update. `public_url`, `admin_url`, `trusted_proxies` and `rate_limits`
+        are configuration values: sending them is a 400 `validation_failed` naming the
+        environment variable.
       properties:
-        public_url: { type: string }
         branding:
           type: object
           additionalProperties: false
@@ -2762,11 +3368,3 @@ components:
             alarm_audits_days: { type: integer, minimum: 0 }
             admin_audit_days: { type: integer, minimum: 0 }
             punch_requests_days: { type: integer, minimum: 0 }
-        rate_limits:
-          type: object
-          additionalProperties: false
-          properties:
-            login_per_ip_per_minute: { type: integer, minimum: 1 }
-            login_per_user_per_minute: { type: integer, minimum: 1 }
-            client_api_per_ip_per_minute: { type: integer, minimum: 1 }
-        trusted_proxies: { type: array, items: { type: string } }

@@ -224,6 +224,7 @@ The full list with comments is in [`values.yaml`](values.yaml). These are the ma
 | `server.env` | `{}` | extra env for hbbs/hbbr (for example `RUST_LOG`) |
 | `panel.listen` | `:21114` | `RDPANEL_LISTEN`. The container port comes from it. |
 | `panel.publicURL` | `""` | `RDPANEL_PUBLIC_URL` |
+| `panel.adminURL` | `""` | `RDPANEL_ADMIN_URL` (panel host when it differs from the public client-API host; expose only `/api/` minus `/api/v1/` publicly, see docs/deploy.md) |
 | `panel.dataDir` | `/data/panel` | `RDPANEL_DATA_DIR` |
 | `panel.hbbsPublicKeyFile` | `/data/id_ed25519.pub` | `RDPANEL_HBBS_PUBLIC_KEY_FILE` |
 | `panel.trustedProxies` | loopback | `RDPANEL_TRUSTED_PROXIES` |

@@ -7,7 +7,7 @@ import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { z } from "zod";
 
-import { auth, meQueryKey, oidcStartUrl } from "@/api/auth";
+import { auth, meQueryKey, navigateExternal } from "@/api/auth";
 import { ApiError } from "@/api/client";
 import { security } from "@/api/security";
 import { ConfirmDialog, Field, Mono, PageHeader, RelativeTime, useToastError } from "@/components";
@@ -18,6 +18,7 @@ import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/misc";
 import { useMe } from "@/lib/session";
 import { useTableSearch } from "@/lib/use-table";
+import { oidcErrorKey } from "@/pages/login-errors";
 import { TotpSection } from "@/pages/my/TotpSection";
 
 function Section({ title, description, children }: { title: string; description?: string; children: ReactNode }) {
@@ -143,6 +144,11 @@ function Identities() {
   const ids = useQuery({ queryKey: ["me", "identities"], queryFn: security.identities });
   const providers = useQuery({ queryKey: ["auth", "providers"], queryFn: () => auth.providers(), staleTime: 300_000 });
   const [unlinking, setUnlinking] = useState<number | null>(null);
+  const link = useMutation({
+    mutationFn: (slug: string) => security.linkIdentity(slug, "/my/profile"),
+    onSuccess: (url) => navigateExternal(url),
+    onError: toastError,
+  });
   const unlink = useMutation({
     mutationFn: (id: number) => security.unlinkIdentity(id),
     onSuccess: () => {
@@ -179,11 +185,9 @@ function Identities() {
       {linkable.length > 0 && (
         <div className="flex flex-wrap gap-2">
           {linkable.map((p) => (
-            <Button key={p.slug} size="sm" variant="outline" asChild>
-              <a href={oidcStartUrl(p.slug, { action: "bind", next: "/my/profile" })}>
-                <Link2 />
-                {t("identities.link", { name: p.display_name })}
-              </a>
+            <Button key={p.slug} size="sm" variant="outline" disabled={link.isPending} onClick={() => link.mutate(p.slug)}>
+              <Link2 />
+              {t("identities.link", { name: p.display_name })}
             </Button>
           ))}
         </div>
@@ -206,6 +210,20 @@ export function ProfilePage() {
   const { t } = useTranslation();
   const table = useTableSearch({});
   const autoEnroll = table.raw.enroll === true || table.raw.enroll === "true";
+  const linked = typeof table.raw.linked === "string" ? table.raw.linked : undefined;
+  const linkError = typeof table.raw.link_error === "string" ? table.raw.link_error : undefined;
+  const qc = useQueryClient();
+  // Result of an identity link round-trip through the IdP (?linked= / ?link_error=).
+  useEffect(() => {
+    if (linked) {
+      toast.success(t("identities.linked", { name: linked }));
+      void qc.invalidateQueries({ queryKey: ["me", "identities"] });
+    } else if (linkError) {
+      toast.error(t(oidcErrorKey(linkError)));
+    }
+    if (linked || linkError) table.setSearch({ linked: undefined, link_error: undefined });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [linked, linkError]);
   return (
     <div className="max-w-4xl space-y-4">
       <PageHeader title={t("nav.myProfile")} description={t("security.description")} />

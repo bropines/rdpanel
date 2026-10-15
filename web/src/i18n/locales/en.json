@@ -155,7 +155,20 @@
     "verify": "Verify",
     "back": "Back",
     "or": "or",
-    "continueWith": "Continue with {{name}}"
+    "continueWith": "Continue with {{name}}",
+    "passwordDisabled": "Password sign-in is turned off. Use an identity provider.",
+    "oidcNotConfigured": "Sign-in with identity providers is not configured on this server.",
+    "providerUnavailable": "The identity provider is unavailable. Try again later.",
+    "oidcErrors": {
+      "expired": "The sign-in link expired or was already used. Please start again.",
+      "denied": "Sign-in was cancelled at the identity provider.",
+      "failed": "Sign-in with the identity provider failed.",
+      "no_account": "No account is linked to this identity. Sign in with your password and link it on your profile, or ask an administrator.",
+      "disabled": "This account is disabled.",
+      "ambiguous": "Several accounts use this email address; ask an administrator to link your identity.",
+      "already_linked": "This identity is already linked to another account, or your account already has one from this provider.",
+      "session_mismatch": "Sign-in was started in another browser or tab. Please start again."
+    }
   },
   "placeholder": {
     "notFound": "Page not found",
@@ -610,7 +623,10 @@
     "emptyHint": "Add GitHub, Google or any OpenID Connect provider to enable single sign-on.",
     "deleteTitle": "Delete {{name}}?",
     "deleteDescription": "Users linked only through this provider will not be able to sign in.",
-    "deleted": "Provider deleted"
+    "deleted": "Provider deleted",
+    "testOk": "Discovery succeeded; the provider endpoints are reachable.",
+    "testFailed": "The test failed.",
+    "noPublicUrl": "Set RDPANEL_PUBLIC_URL to get a callback URL."
   },
   "server": {
     "description": "hbbs/hbbr health, runtime settings kept in sync by the panel, and diagnostics.",
@@ -734,13 +750,10 @@
       "retention": "Retention"
     },
     "publicUrl": "Public URL",
-    "publicUrlHint": "The address users and RustDesk clients use; OIDC callbacks are built from it.",
     "webClientUrl": "Web client URL",
     "webClientUrlHint": "Optional link to an external RustDesk web client.",
     "urlInvalid": "Enter an http(s) URL without query or fragment",
     "trustedProxies": "Trusted proxies",
-    "trustedProxiesHint": "Only these addresses may set X-Forwarded-For. One IP or CIDR per line.",
-    "proxiesInvalid": "Each line must be an IP address or CIDR",
     "branding": "Branding",
     "title": "Title",
     "logo": "Logo",
@@ -765,12 +778,8 @@
     "hours": "hours",
     "days": "days",
     "daysZeroForever": "days, 0 = keep forever",
-    "perMinute": "per minute",
     "rateLimits": "Rate limits",
-    "rateLimitsHint": "Failed attempts beyond these limits are delayed exponentially.",
-    "loginPerIp": "Sign-ins per IP",
-    "loginPerUser": "Sign-ins per username",
-    "clientApiPerIp": "Client API calls per IP",
+    "rateLimitsHint": "Effective limits of this server (not editable here).",
     "retention": "Audit retention",
     "retentionHint": "Older records are deleted automatically. 0 keeps them forever.",
     "retentionKeys": {
@@ -783,7 +792,17 @@
     },
     "unsaved": "You have unsaved changes",
     "fixErrors_one": "Fix {{count}} invalid field (check all tabs)",
-    "fixErrors_other": "Fix {{count}} invalid fields (check all tabs)"
+    "fixErrors_other": "Fix {{count}} invalid fields (check all tabs)",
+    "addresses": "Addresses",
+    "addressesHint": "Where RustDesk clients and the panel are reached. These come from the server environment.",
+    "adminUrl": "Panel (admin) URL",
+    "notSet": "not set",
+    "fromConfig": "set via {{env}}",
+    "serverConfig": "server configuration",
+    "loginBackoff": "Failed sign-ins (per IP and per username)",
+    "loginBackoffValue": "{{free}} free attempts, then a delay starting at {{base}} s that doubles up to {{max}} min",
+    "deviceRate": "Device API (per IP, unauthenticated)",
+    "deviceRateValue": "{{rate}} requests/s, bursts of {{burst}}"
   },
   "security": {
     "description": "Your profile, password, two-factor authentication and linked accounts.",
@@ -839,7 +858,8 @@
     "unlinkDescription": "Signing in with this provider will no longer work for this user.",
     "unlinked": "Account unlinked",
     "unverified": "unverified",
-    "lastUsed": "last used"
+    "lastUsed": "last used",
+    "linked": "Linked {{name}}"
   },
   "sessions": {
     "title": "Sessions",

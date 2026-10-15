@@ -1,6 +1,6 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ImageUp, RotateCcw, Save, Trash2 } from "lucide-react";
+import { ImageUp, Lock, RotateCcw, Save, Trash2 } from "lucide-react";
 import { useEffect, useRef, type ReactNode } from "react";
 import { Controller, useForm } from "react-hook-form";
 import { useTranslation } from "react-i18next";
@@ -9,12 +9,12 @@ import { z } from "zod";
 
 import { dashboardApi, settingsApi, type PanelSettings, type PanelSettingsPatch } from "@/api/system";
 import { ErrorState, Field, Markdown, PageHeader, useToastError } from "@/components";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Skeleton, Switch, Tabs, TabsContent, TabsList, TabsTrigger, Textarea } from "@/components/ui/misc";
 import { displayName, useMe } from "@/lib/session";
-import { isIpOrCidr, splitLines } from "@/lib/validate";
 
 const int = (min: number, max = Number.MAX_SAFE_INTEGER) =>
   z
@@ -39,7 +39,6 @@ const httpUrl = z
   }, "settings.urlInvalid");
 
 export const settingsSchema = z.object({
-  public_url: httpUrl.refine((v) => v !== "", "validation.required"),
   web_client_url: httpUrl,
   title: z.string().trim().min(1, "validation.required").max(64, "validation.tooLong"),
   welcome_markdown: z.string().max(20000, "validation.tooLong"),
@@ -48,10 +47,6 @@ export const settingsSchema = z.object({
   session_idle_hours: int(1, 720),
   session_absolute_days: int(1, 365),
   client_token_lifetime_hours: int(1, 87600),
-  login_per_ip_per_minute: int(1, 10000),
-  login_per_user_per_minute: int(1, 10000),
-  client_api_per_ip_per_minute: int(1, 100000),
-  trusted_proxies: z.string().refine((v) => splitLines(v).every(isIpOrCidr), "settings.proxiesInvalid"),
   login_events_days: int(0),
   connection_audits_days: int(0),
   file_transfer_audits_days: int(0),
@@ -72,7 +67,6 @@ const RETENTION = [
 
 function toValues(s: PanelSettings): SettingsValues {
   return {
-    public_url: s.public_url,
     web_client_url: s.branding.web_client_url ?? "",
     title: s.branding.title,
     welcome_markdown: s.branding.welcome_markdown,
@@ -81,18 +75,16 @@ function toValues(s: PanelSettings): SettingsValues {
     session_idle_hours: String(s.auth.session_idle_hours),
     session_absolute_days: String(s.auth.session_absolute_days),
     client_token_lifetime_hours: String(s.auth.client_token_lifetime_hours),
-    login_per_ip_per_minute: String(s.rate_limits.login_per_ip_per_minute),
-    login_per_user_per_minute: String(s.rate_limits.login_per_user_per_minute),
-    client_api_per_ip_per_minute: String(s.rate_limits.client_api_per_ip_per_minute),
-    trusted_proxies: s.trusted_proxies.join("\n"),
     ...Object.fromEntries(RETENTION.map((k) => [k, String(s.retention[k])])),
   } as SettingsValues;
 }
 
-/** Form values → PATCH body. Exported for tests. */
+/**
+ * Form values → PATCH body. public_url, admin_url, trusted_proxies and rate
+ * limits are configuration (environment) values and never sent. Exported for tests.
+ */
 export function toPatch(v: SettingsValues): PanelSettingsPatch {
   return {
-    public_url: v.public_url.trim().replace(/\/+$/, ""),
     branding: { title: v.title.trim(), welcome_markdown: v.welcome_markdown, web_client_url: v.web_client_url.trim() || null },
     auth: {
       password_login_enabled: v.password_login_enabled,
@@ -101,13 +93,7 @@ export function toPatch(v: SettingsValues): PanelSettingsPatch {
       session_absolute_days: Number(v.session_absolute_days),
       client_token_lifetime_hours: Number(v.client_token_lifetime_hours),
     },
-    rate_limits: {
-      login_per_ip_per_minute: Number(v.login_per_ip_per_minute),
-      login_per_user_per_minute: Number(v.login_per_user_per_minute),
-      client_api_per_ip_per_minute: Number(v.client_api_per_ip_per_minute),
-    },
     retention: Object.fromEntries(RETENTION.map((k) => [k, Number(v[k])])),
-    trusted_proxies: splitLines(v.trusted_proxies),
   };
 }
 
@@ -133,6 +119,23 @@ function SwitchRow({ id, label, hint, control }: { id: string; label: string; hi
         {hint && <p className="text-xs text-muted-foreground">{hint}</p>}
       </div>
       {control}
+    </div>
+  );
+}
+
+/** A value that comes from the server configuration (read-only in the UI). */
+function ConfigValue({ label, env, children }: { label: string; env: string; children: ReactNode }) {
+  const { t } = useTranslation();
+  return (
+    <div className="space-y-1">
+      <div className="flex flex-wrap items-center gap-2 text-sm font-medium">
+        {label}
+        <Badge variant="outline" className="gap-1 font-normal text-muted-foreground">
+          <Lock className="h-3 w-3" />
+          {t("settings.fromConfig", { env })}
+        </Badge>
+      </div>
+      <div className="rounded-md border bg-muted/40 px-3 py-2 font-mono text-sm">{children}</div>
     </div>
   );
 }
@@ -228,7 +231,7 @@ export function SettingsPage() {
     <form
       onSubmit={form.handleSubmit(
         (v) => save.mutate(v),
-        (errs) => toast.error(t("settings.fixErrors", { fields: Object.keys(errs).length })),
+        (errs) => toast.error(t("settings.fixErrors", { count: Object.keys(errs).length })),
       )}
       noValidate
       className="pb-20"
@@ -243,17 +246,18 @@ export function SettingsPage() {
         </TabsList>
 
         <TabsContent value="general" className="space-y-4">
-          <Section title={t("settings.publicUrl")} description={t("settings.publicUrlHint")}>
-            <Field label={t("settings.publicUrl")} htmlFor="s-public_url" error={err("public_url")}>
-              <Input id="s-public_url" placeholder="https://desk.example.com" {...form.register("public_url")} />
-            </Field>
+          <Section title={t("settings.addresses")} description={t("settings.addressesHint")}>
+            <ConfigValue label={t("settings.publicUrl")} env="RDPANEL_PUBLIC_URL">
+              {q.data.public_url || <span className="text-muted-foreground">{t("settings.notSet")}</span>}
+            </ConfigValue>
+            <ConfigValue label={t("settings.adminUrl")} env="RDPANEL_ADMIN_URL">
+              {q.data.admin_url || <span className="text-muted-foreground">{t("settings.notSet")}</span>}
+            </ConfigValue>
+            <ConfigValue label={t("settings.trustedProxies")} env="RDPANEL_TRUSTED_PROXIES">
+              {q.data.trusted_proxies.length ? q.data.trusted_proxies.join(", ") : <span className="text-muted-foreground">{t("settings.notSet")}</span>}
+            </ConfigValue>
             <Field label={t("settings.webClientUrl")} htmlFor="s-web_client_url" error={err("web_client_url")} hint={t("settings.webClientUrlHint")}>
               <Input id="s-web_client_url" placeholder="https://web.example.com" {...form.register("web_client_url")} />
-            </Field>
-          </Section>
-          <Section title={t("settings.trustedProxies")} description={t("settings.trustedProxiesHint")}>
-            <Field label={t("settings.trustedProxies")} htmlFor="s-trusted_proxies" error={err("trusted_proxies")}>
-              <Textarea id="s-trusted_proxies" rows={4} className="font-mono" placeholder={"127.0.0.1\n::1"} {...form.register("trusted_proxies")} />
             </Field>
           </Section>
         </TabsContent>
@@ -303,10 +307,17 @@ export function SettingsPage() {
             </div>
           </Section>
           <Section title={t("settings.rateLimits")} description={t("settings.rateLimitsHint")}>
-            <div className="grid gap-4 sm:grid-cols-3">
-              {num("login_per_ip_per_minute", t("settings.loginPerIp"), t("settings.perMinute"))}
-              {num("login_per_user_per_minute", t("settings.loginPerUser"), t("settings.perMinute"))}
-              {num("client_api_per_ip_per_minute", t("settings.clientApiPerIp"), t("settings.perMinute"))}
+            <div className="grid gap-4 sm:grid-cols-2">
+              <ConfigValue label={t("settings.loginBackoff")} env={t("settings.serverConfig")}>
+                {t("settings.loginBackoffValue", {
+                  free: q.data.rate_limits.login_free_attempts,
+                  base: q.data.rate_limits.login_base_delay_seconds,
+                  max: Math.round(q.data.rate_limits.login_max_delay_seconds / 60),
+                })}
+              </ConfigValue>
+              <ConfigValue label={t("settings.deviceRate")} env={t("settings.serverConfig")}>
+                {t("settings.deviceRateValue", { rate: q.data.rate_limits.device_requests_per_second, burst: q.data.rate_limits.device_burst })}
+              </ConfigValue>
             </div>
           </Section>
         </TabsContent>

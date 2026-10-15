@@ -7,7 +7,7 @@ import { useForm } from "react-hook-form";
 import { useTranslation } from "react-i18next";
 import { z } from "zod";
 
-import { auth, meQueryKey, oidcStartUrl, type AuthProvider, type Me } from "@/api/auth";
+import { auth, meQueryKey, navigateExternal, type AuthProvider, type Me } from "@/api/auth";
 import { dashboardApi } from "@/api/system";
 import { LanguageSwitcher } from "@/components/layout/LanguageSwitcher";
 import { ThemeToggle } from "@/components/layout/ThemeToggle";
@@ -17,7 +17,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/misc";
 import { safeNext } from "@/lib/redirect";
-import { loginErrorKey } from "@/pages/login-errors";
+import { loginErrorKey, oidcErrorKey } from "@/pages/login-errors";
 
 const route = getRouteApi("/login");
 
@@ -57,8 +57,8 @@ export function LoginPage() {
   const qc = useQueryClient();
   const search = route.useSearch();
   const next = safeNext(search.next);
-  const [step, setStep] = useState<"password" | "mfa">("password");
-  const [error, setError] = useState<string | null>(search.error ? "login.oidcFailed" : null);
+  const [step, setStep] = useState<"password" | "mfa">(search.mfa ? "mfa" : "password");
+  const [error, setError] = useState<string | null>(search.error ? oidcErrorKey(search.error) : null);
 
   const branding = useQuery({ queryKey: ["branding"], queryFn: () => dashboardApi.branding(), staleTime: 300_000 });
   const providers = useQuery({ queryKey: ["auth", "providers"], queryFn: () => auth.providers(), staleTime: 300_000 });
@@ -84,6 +84,12 @@ export function LoginPage() {
       }
       done(res.me);
     },
+    onError: (err) => setError(loginErrorKey(err)),
+  });
+
+  const oidcStart = useMutation({
+    mutationFn: (slug: string) => auth.oidcStart(slug, next),
+    onSuccess: (url) => navigateExternal(url),
     onError: (err) => setError(loginErrorKey(err)),
   });
 
@@ -157,11 +163,19 @@ export function LoginPage() {
                       <Separator className="flex-1" />
                     </div>
                     {oidc.map((p) => (
-                      <Button key={p.slug} variant="outline" className="w-full" asChild>
-                        <a href={oidcStartUrl(p.slug, { next })}>
-                          <ProviderIcon kind={p.kind} />
-                          {t("login.continueWith", { name: p.display_name })}
-                        </a>
+                      <Button
+                        key={p.slug}
+                        type="button"
+                        variant="outline"
+                        className="w-full"
+                        disabled={oidcStart.isPending}
+                        onClick={() => {
+                          setError(null);
+                          oidcStart.mutate(p.slug);
+                        }}
+                      >
+                        {oidcStart.isPending && oidcStart.variables === p.slug ? <Loader2 className="animate-spin" /> : <ProviderIcon kind={p.kind} />}
+                        {t("login.continueWith", { name: p.display_name })}
                       </Button>
                     ))}
                   </>

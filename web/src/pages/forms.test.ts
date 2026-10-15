@@ -184,7 +184,6 @@ describe("server settings form", () => {
 
 describe("panel settings form", () => {
   const values: SettingsValues = {
-    public_url: "https://desk.example.com/",
     web_client_url: "",
     title: " Panel ",
     welcome_markdown: "hi",
@@ -193,10 +192,6 @@ describe("panel settings form", () => {
     session_idle_hours: "12",
     session_absolute_days: "7",
     client_token_lifetime_hours: "4380",
-    login_per_ip_per_minute: "10",
-    login_per_user_per_minute: "5",
-    client_api_per_ip_per_minute: "600",
-    trusted_proxies: "127.0.0.1\n::1",
     login_events_days: "180",
     connection_audits_days: "365",
     file_transfer_audits_days: "365",
@@ -209,22 +204,22 @@ describe("panel settings form", () => {
     expect(settingsSchema.safeParse(values).success).toBe(true);
     expect(
       issues(
-        settingsSchema.safeParse({ ...values, public_url: "ftp://x", session_idle_hours: "0", trusted_proxies: "localhost", admin_audit_days: "-1" }),
+        settingsSchema.safeParse({ ...values, web_client_url: "ftp://x", session_idle_hours: "0", admin_audit_days: "-1" }),
       ),
     ).toEqual({
-      public_url: "settings.urlInvalid",
+      web_client_url: "settings.urlInvalid",
       session_idle_hours: "validation.range",
-      trusted_proxies: "settings.proxiesInvalid",
       admin_audit_days: "validation.integer",
     });
   });
 
   it("builds a typed PATCH body", () => {
     const p = toPatch(values);
-    expect(p.public_url).toBe("https://desk.example.com");
+    expect(p).not.toHaveProperty("public_url");
+    expect(p).not.toHaveProperty("trusted_proxies");
+    expect(p).not.toHaveProperty("rate_limits");
     expect(p.branding).toEqual({ title: "Panel", welcome_markdown: "hi", web_client_url: null });
     expect(p.auth?.client_token_lifetime_hours).toBe(4380);
-    expect(p.trusted_proxies).toEqual(["127.0.0.1", "::1"]);
     expect(p.retention?.admin_audit_days).toBe(0);
   });
 });

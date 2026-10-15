@@ -122,7 +122,8 @@ DB) succeeds.
 | `LIMIT_SPEED`, `SINGLE_BANDWIDTH`, `TOTAL_BANDWIDTH`, `DOWNGRADE_THRESHOLD`, `DOWNGRADE_START_CHECK` | hbbr | hbbr defaults | relay bandwidth limits |
 | `RUST_LOG` | hbbs, hbbr | `info` | log filter |
 | `RDPANEL_LISTEN` | panel | `:21114` | bind address (`127.0.0.1:21114` in the env example) |
-| `RDPANEL_PUBLIC_URL` | panel | — | external base URL (OIDC redirect, HSTS) |
+| `RDPANEL_PUBLIC_URL` | panel | — | external base URL RustDesk clients use as "API server"; the OIDC redirect URI is `<public_url>/api/oidc/callback` |
+| `RDPANEL_ADMIN_URL` | panel | = public URL | base URL of the panel (SPA + `/api/v1/*`) when it is served from another host; OIDC panel logins end there, panel cookies are `Secure` when it is https |
 | `RDPANEL_DATA_DIR` | panel, key-secret | `/data/panel` | panel.db, secret.key, jwt.key |
 | `RDPANEL_DB_PATH`, `RDPANEL_SECRET_KEY`, `RDPANEL_SECRET_KEY_FILE`, `RDPANEL_JWT_KEY_FILE` | panel | derived from data dir | storage and keys |
 | `RDPANEL_TOKEN_LIFETIME`, `RDPANEL_JWT_LIFETIME`, `RDPANEL_SESSION_IDLE`, `RDPANEL_SESSION_ABSOLUTE` | panel | `4380h`, = token, `12h`, `168h` | token/session lifetimes |
@@ -177,6 +178,65 @@ server {
     }
 }
 ```
+
+### Split hosts: public client API + internal admin panel
+
+The panel can serve RustDesk clients from a public host while the panel UI and
+its API (`/api/v1/*`) are reachable only on an internal host (VPN/tailnet):
+
+```sh
+RDPANEL_PUBLIC_URL=https://desk-ru-api.bropinus.ru            # clients' "API server"
+RDPANEL_ADMIN_URL=https://desk-ru-api-internal.bropines.ru     # panel (tailnet only)
+```
+
+Register only `<public_url>/api/oidc/callback` at GitHub/Google/OIDC providers.
+Panel OIDC logins and identity linking start on the admin host (which sets an
+HttpOnly binding cookie there), the IdP returns to the callback on the public
+host, which exchanges the code and redirects the browser to
+`<admin_url>/api/v1/admin/auth/oidc/complete?ticket=…`; that endpoint checks the
+binding cookie (constant time), accepts each ticket once and only within 2
+minutes, and only then creates the session or links the identity. Nothing
+panel-related needs to be reachable on the public host.
+
+```nginx
+# Public host: client API only.
+server {
+    listen 443 ssl;
+    http2 on;
+    server_name desk-ru-api.bropinus.ru;
+    # ssl_certificate ...
+
+    location ^~ /api/v1/ { return 404; }               # panel API + SSE: internal only
+    location = /api/oidc/callback { include rdpanel-proxy.conf; }
+    location /api/ { include rdpanel-proxy.conf; }      # RustDesk client API
+    location = /metrics { return 404; }
+    location / { return 302 https://desk-ru-api-internal.bropines.ru$request_uri; }
+}
+
+# Admin host (tailnet only): everything.
+server {
+    listen 100.64.0.10:443 ssl;                         # tailnet address
+    http2 on;
+    server_name desk-ru-api-internal.bropines.ru;
+    # ssl_certificate ...
+
+    location / { include rdpanel-proxy.conf; }
+}
+
+# rdpanel-proxy.conf
+#   proxy_pass http://127.0.0.1:31114;
+#   proxy_set_header Host $host;
+#   proxy_set_header X-Forwarded-For $remote_addr;   # overwrite, never append
+#   proxy_set_header X-Forwarded-Proto $scheme;
+#   proxy_http_version 1.1;
+#   proxy_buffering off;                              # /api/v1/events (SSE)
+#   proxy_read_timeout 1h;
+```
+
+`/metrics` is answered only when the resolved client IP **and** every address in
+any forwarding header (`X-Forwarded-For`, `X-Real-IP`, `Forwarded`, …) are in
+`RDPANEL_METRICS_ALLOW`, so a loopback proxy never makes remote scrapers look
+local; blocking it on the public vhost (as above) is still recommended.
 
 - **Trusted proxies.** The panel only honours `RDPANEL_REAL_IP_HEADER` from
   peers in `RDPANEL_TRUSTED_PROXIES` (default: loopback). With host networking

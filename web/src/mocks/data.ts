@@ -88,6 +88,8 @@ export const users: MockUser[] = [
         email: "alexei@example.com",
         email_verified: true,
         username: "avolkov",
+        display_name: "Alexei Volkov",
+        avatar_url: "",
         last_login_at: iso(3 * DAY),
         created_at: iso(120 * DAY),
       },
@@ -125,6 +127,8 @@ export const users: MockUser[] = [
         email: "maria@example.com",
         email_verified: true,
         username: null,
+        display_name: "Maria Kuznetsova",
+        avatar_url: "",
         last_login_at: iso(1 * DAY),
         created_at: iso(40 * DAY),
       },
@@ -556,6 +560,7 @@ export const punchRequests: S["PunchRequest"][] = Array.from({ length: 64 }, (_,
 
 export const panelSettings: S["PanelSettings"] = {
   public_url: "https://desk.example.com",
+  admin_url: "https://desk-admin.example.com",
   branding: {
     title: "RustDesk Panel",
     welcome_markdown:
@@ -578,7 +583,7 @@ export const panelSettings: S["PanelSettings"] = {
     admin_audit_days: 0,
     punch_requests_days: 30,
   },
-  rate_limits: { login_per_ip_per_minute: 10, login_per_user_per_minute: 5, client_api_per_ip_per_minute: 600 },
+  rate_limits: { login_free_attempts: 3, login_base_delay_seconds: 1, login_max_delay_seconds: 900, device_requests_per_second: 50, device_burst: 300 },
   trusted_proxies: ["127.0.0.1", "::1"],
 };
 
