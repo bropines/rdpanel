@@ -26,6 +26,9 @@ Usage:
   rdpanel serve                                   run the HTTP server
   rdpanel user create [--admin] [--password-stdin] [--email E] [--display-name N] <username>
   rdpanel user reset-password [--password-stdin] <username>
+  rdpanel migrate-legacy --from <rustdeskapi.db> [--dry-run] [--report <file>] [--force]
+                         [--allow-version N] [--legacy-tz Z]
+                                                  import a lejianwen/rustdesk-api v2.7 database
   rdpanel config print                            show effective config (secrets redacted)
   rdpanel version                                 show build information
 
@@ -71,6 +74,8 @@ func run(ctx context.Context, args []string, env config.LookupFunc, stdio Stdio)
 			return fmt.Errorf("%w: serve takes no arguments", errUsage)
 		}
 		return cmdServe(ctx, env, stdio)
+	case "migrate-legacy":
+		return cmdMigrateLegacy(ctx, args[1:], env, stdio)
 	case "config":
 		if len(args) != 2 || args[1] != "print" {
 			return fmt.Errorf("%w: expected `config print`", errUsage)
