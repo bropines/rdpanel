@@ -1,0 +1,16 @@
+#!/bin/sh
+# Make /data and the panel data dir exist and belong to PUID:PGID, so the
+# unprivileged services (and `rdpanel` CLI runs) can write them, also on data
+# dirs created by root-run images or fresh root-owned volumes. Needs root
+# (CAP_CHOWN); no-op when PUID=0. Used by key-secret and the rdpanel wrapper.
+set -eu
+uid=${PUID:-10001}
+gid=${PGID:-10001}
+case "$uid$gid" in *[!0-9]*|'') echo "fix-ownership: PUID/PGID must be numeric" >&2; exit 1 ;; esac
+[ "$(id -u)" = 0 ] || exit 0
+panel=${RDPANEL_DATA_DIR:-/data/panel}
+mkdir -p -m 0700 /data "$panel"
+[ "$uid" = 0 ] && exit 0
+for d in /data "$panel"; do
+	find "$d" \( ! -user "$uid" -o ! -group "$gid" \) -exec chown -h "$uid:$gid" {} +
+done

@@ -1,0 +1,13 @@
+#!/bin/sh
+# Exec "$@" as PUID:PGID (default 10001:10001) with no supplementary groups.
+# No-op when already unprivileged or when PUID=0 (run everything as root).
+uid=${PUID:-10001}
+gid=${PGID:-10001}
+if [ "$(id -u)" = 0 ] && [ "$uid" != 0 ]; then
+	# The service uid has no passwd entry or home; hbbs' bundled client-config
+	# code wants a writable ~/.config (contents are irrelevant to the server).
+	HOME=/tmp
+	export HOME
+	exec /command/s6-applyuidgid -u "$uid" -g "$gid" -G "" "$@"
+fi
+exec "$@"

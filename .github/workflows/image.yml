@@ -1,0 +1,170 @@
+name: image
+
+# Multi-arch all-in-one image: hbbs/hbbr from bropines/rustdesk-server (built
+# here with cross, static musl) + rdpanel and the web UI (built inside the
+# Dockerfile) on alpine + s6-overlay. Pushes to ghcr.io with GITHUB_TOKEN only.
+#
+#   tag v1.2.3      -> :1.2.3, :1.2, :latest (no :latest for pre-releases v1.2.3-rc.1)
+#   push to main    -> :edge, :sha-<short>
+#   manual dispatch -> as for the ref it runs on (main -> :edge); set push=false
+#                      to only build.
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      server_ref:
+        description: bropines/rustdesk-server ref (branch, tag or sha) for hbbs/hbbr
+        default: merge-upstream-1.1.16
+        required: true
+      push:
+        description: push the image to ghcr.io
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: image-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref_type != 'tag' }}
+
+env:
+  IMAGE: ghcr.io/bropines/rustdesk-panel
+  SERVER_REPO: bropines/rustdesk-server
+  SERVER_REF: ${{ inputs.server_ref || 'merge-upstream-1.1.16' }}
+
+jobs:
+  hbb:
+    name: hbbs/hbbr (${{ matrix.arch }})
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - { arch: amd64, target: x86_64-unknown-linux-musl }
+          - { arch: arm64, target: aarch64-unknown-linux-musl }
+    outputs:
+      server_sha: ${{ steps.rev.outputs.sha }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ env.SERVER_REPO }}
+          ref: ${{ env.SERVER_REF }}
+          submodules: recursive
+          path: rustdesk-server
+          persist-credentials: false
+      - id: rev
+        working-directory: rustdesk-server
+        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+      # sqlx::query! checks queries at compile time against DATABASE_URL, which
+      # the server repo provides via its committed .env + db_v2.sqlite3. cross
+      # mounts the checkout as the build cwd, so the relative URL resolves.
+      - name: sqlx compile-time database present
+        working-directory: rustdesk-server
+        run: |
+          test -s db_v2.sqlite3 || { echo "::error::db_v2.sqlite3 missing in $SERVER_REPO@$SERVER_REF (sqlx needs it)"; exit 1; }
+          grep -q '^DATABASE_URL=' .env || { echo "::error::.env with DATABASE_URL missing in $SERVER_REPO@$SERVER_REF"; exit 1; }
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: rustdesk-server
+          key: ${{ matrix.target }}
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cross
+      - name: cross build
+        working-directory: rustdesk-server
+        run: cross build --release --locked --target ${{ matrix.target }} --bin hbbs --bin hbbr --bin rustdesk-utils
+      - name: collect binaries
+        run: |
+          mkdir -p out
+          for b in hbbs hbbr rustdesk-utils; do
+            install -m 0755 "rustdesk-server/target/${{ matrix.target }}/release/$b" out/
+          done
+          file out/*
+      - uses: actions/upload-artifact@v4
+        with:
+          name: hbb-${{ matrix.arch }}
+          path: out/
+          if-no-files-found: error
+          retention-days: 7
+
+  image:
+    name: image
+    needs: hbb
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      packages: write
+      id-token: write      # build provenance attestation (sigstore)
+      attestations: write
+    env:
+      PUSH: ${{ github.event_name != 'workflow_dispatch' || inputs.push }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        with: { name: hbb-amd64, path: deploy/bin/amd64 }
+      - uses: actions/download-artifact@v4
+        with: { name: hbb-arm64, path: deploy/bin/arm64 }
+      - run: chmod 0755 deploy/bin/*/* && ls -l deploy/bin/*
+      # Only the final stage's few RUN steps execute on the target platform;
+      # web/Go/s6 stages run on the build platform.
+      - uses: docker/setup-qemu-action@v3
+        with: { platforms: arm64 }
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        if: env.PUSH == 'true'
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.IMAGE }}
+          flavor: latest=false
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}},enable=${{ !contains(github.ref_name, '-') }}
+            type=raw,value=latest,enable=${{ github.ref_type == 'tag' && !contains(github.ref_name, '-') }}
+            type=edge,branch=main
+            type=sha,enable=${{ github.ref_type != 'tag' }}
+          labels: |
+            org.opencontainers.image.title=rustdesk-panel
+            org.opencontainers.image.licenses=MIT AND AGPL-3.0-only
+            io.github.bropines.rustdesk-server.ref=${{ needs.hbb.outputs.server_sha }}
+          annotations: |
+            org.opencontainers.image.licenses=MIT AND AGPL-3.0-only
+      - id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: deploy/Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: ${{ env.PUSH == 'true' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          annotations: ${{ steps.meta.outputs.annotations }}
+          build-args: |
+            VERSION=${{ steps.meta.outputs.version }}
+            COMMIT=${{ github.sha }}
+            DATE=${{ fromJSON(steps.meta.outputs.json).labels['org.opencontainers.image.created'] }}
+            HBB_REPO=https://github.com/${{ env.SERVER_REPO }}
+            HBB_REF=${{ needs.hbb.outputs.server_sha }}
+          provenance: mode=max
+          sbom: true
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      - uses: actions/attest-build-provenance@v2
+        if: env.PUSH == 'true'
+        with:
+          subject-name: ${{ env.IMAGE }}
+          subject-digest: ${{ steps.build.outputs.digest }}
+          push-to-registry: true

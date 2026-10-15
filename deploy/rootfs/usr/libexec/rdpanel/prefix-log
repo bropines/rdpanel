@@ -1,0 +1,4 @@
+#!/bin/sh
+# s6-rc pipeline consumer: copy the producer's output to the container's stdout,
+# one line at a time, prefixed with "[<name>] ".
+exec /command/s6-setuidgid nobody awk -v p="[$1] " '{ print p $0; fflush() }'

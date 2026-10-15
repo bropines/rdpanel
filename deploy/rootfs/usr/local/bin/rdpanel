@@ -1,0 +1,11 @@
+#!/bin/sh
+# CLI wrapper (`docker exec <c> rdpanel ...`, `kubectl exec ... rdpanel ...`, the
+# Helm migration Job which bypasses s6): when started as root, make sure the
+# data dirs exist and belong to PUID:PGID, then run /usr/bin/rdpanel as that
+# user so files it creates stay writable by the running panel. Files it must
+# read (e.g. a legacy rustdeskapi.db) have to be readable by PUID:PGID.
+# When RUSTDESK_API_JWT_KEY is unset the panel reads its jwt.key file itself.
+if [ "$(id -u)" = 0 ]; then
+	/usr/libexec/rdpanel/fix-ownership || exit 1
+fi
+exec /usr/libexec/rdpanel/as-service-user /usr/bin/rdpanel "$@"

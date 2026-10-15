@@ -1,0 +1,64 @@
+# Production-style compose file for the all-in-one image (hbbs + hbbr + panel).
+#
+#   cp deploy/compose.example.yml compose.yml
+#   cp deploy/rdpanel.env.example rdpanel.env && chmod 600 rdpanel.env   # edit it
+#   docker compose up -d
+#   docker compose exec rustdesk rdpanel user create --admin <name>
+#
+# Host networking: hbbs must see real client IPs (UDP 21116 hole punching,
+# IP blocker, logs) and the panel talks to the hbbs/hbbr admin channel over
+# loopback. Ports used on the host: 21114 (panel, loopback by default),
+# 21115-21117/tcp, 21116/udp, 21118-21119/tcp (WebSocket; see docs/deploy.md
+# before exposing those two).
+services:
+  rustdesk:
+    image: ghcr.io/bropines/rustdesk-panel:latest
+    container_name: rustdesk
+    network_mode: host
+    restart: unless-stopped
+    env_file: rdpanel.env
+    volumes:
+      # hbbs/hbbr keys (id_ed25519{,.pub}), db_v2.sqlite3, black/blocklist and
+      # the panel data in ./data/panel.
+      - ./data:/data
+    # s6 needs ~8 s to stop all services gracefully; docker's default is 10 s.
+    stop_grace_period: 20s
+    ulimits:
+      nofile: { soft: 1048576, hard: 1048576 }
+    logging:
+      driver: json-file
+      options: { max-size: 20m, max-file: "5" }
+
+# --------------------------------------------------------------------------
+# msk00 layout (existing lejianwen s6 deployment, reverse proxy = Angie):
+#
+#   /opt/rustdesk/
+#     hbbs-data/      existing hbbs data dir (id_ed25519, id_ed25519.pub,
+#                     db_v2.sqlite3) -> reused as-is, clients keep their key
+#     panel-data/     new: panel.db, secret.key, jwt.key
+#     rustdeskapi.db  copy of the old lejianwen API database (one-time import)
+#     rdpanel.env     RELAY=..., RDPANEL_LISTEN=127.0.0.1:31114,
+#                     RDPANEL_PUBLIC_URL=https://desk-ru-api.bropinus.ru,
+#                     RUSTDESK_API_JWT_KEY=<same value as the old API>,
+#                     ENCRYPTED_ONLY / MUST_LOGIN / ALWAYS_USE_RELAY as before
+#
+# services:
+#   rustdesk:
+#     image: ghcr.io/bropines/rustdesk-panel:1
+#     container_name: rustdesk
+#     network_mode: host
+#     restart: unless-stopped
+#     env_file: rdpanel.env
+#     environment:
+#       RDPANEL_LISTEN: 127.0.0.1:31114     # Angie vhost desk-ru-api.bropinus.ru -> here
+#     volumes:
+#       - ./hbbs-data:/data                 # keys reused; chowned to PUID:PGID on start
+#       - ./panel-data:/data/panel
+#       - ./rustdeskapi.db:/import/rustdeskapi.db:ro
+#     stop_grace_period: 20s
+#     ulimits:
+#       nofile: { soft: 1048576, hard: 1048576 }
+#
+# One-time import, before users log in to the new panel (container running):
+#   docker compose exec rustdesk rdpanel migrate-legacy --from /import/rustdeskapi.db --dry-run
+#   docker compose exec rustdesk rdpanel migrate-legacy --from /import/rustdeskapi.db

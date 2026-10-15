@@ -1,0 +1,30 @@
+#!/bin/sh
+# Docker HEALTHCHECK: all three services up, hbbs/hbbr ports listening and the
+# panel answering /healthz (which also pings its database).
+#
+# HEALTHCHECK_PORTS overrides the TCP ports expected in LISTEN state
+# (default: 21115-21119, i.e. hbbs NAT-test/admin, rendezvous, hbbr, both WS).
+set -u
+
+fail() { echo "unhealthy: $*"; exit 1; }
+
+for s in hbbs hbbr panel; do
+	[ "$(/command/s6-svstat -o up "/run/service/$s" 2>/dev/null)" = true ] || fail "service $s is not up"
+done
+
+# Listening sockets from /proc (no connections: connecting to the hbbs/hbbr
+# ports would be logged or, for the loopback admin ports, read as a command).
+listening=$(awk 'FNR > 1 && $4 == "0A" { split($2, a, ":"); print a[2] }' /proc/net/tcp /proc/net/tcp6 2>/dev/null)
+for p in ${HEALTHCHECK_PORTS:-21115 21116 21117 21118 21119}; do
+	hex=$(printf '%04X' "$p")
+	printf '%s\n' "$listening" | grep -qx "$hex" || fail "nothing listens on tcp/$p"
+done
+
+listen=${RDPANEL_LISTEN:-:21114}
+port=${listen##*:}
+host=${listen%:*}
+case "$host" in
+	''|0.0.0.0|'[::]'|'*') host=127.0.0.1 ;;
+esac
+wget -q -T 4 -O /dev/null "http://$host:$port/healthz" || fail "panel /healthz on $host:$port failed"
+echo healthy

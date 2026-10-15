@@ -1,0 +1,28 @@
+#!/command/with-contenv sh
+# hbbs (ID/rendezvous server): 21115 NAT test + loopback admin, 21116 tcp/udp,
+# 21118 WebSocket. Reads id_ed25519 and db_v2.sqlite3 from its cwd (/data).
+#
+# Env: RELAY          -> -r <relay servers>, comma separated host[:port]
+#      ENCRYPTED_ONLY -> 1 adds `-k _` (only clients that know the key)
+#      KEY            -> read by hbbs itself when ENCRYPTED_ONLY is not 1
+#      ALWAYS_USE_RELAY, MUST_LOGIN, RUSTDESK_API_JWT_KEY, RUST_LOG
+#                     -> read by hbbs itself from the environment
+exec 2>&1
+cd /data || exit 1
+
+set --
+if [ -n "${RELAY:-}" ]; then set -- "$@" -r "$RELAY"; fi
+if [ "${ENCRYPTED_ONLY:-0}" = 1 ]; then set -- "$@" -k _; fi
+
+# MUST_LOGIN tokens are verified with RUSTDESK_API_JWT_KEY. When it is not set
+# on the container, use the panel's generated key file (see key-secret) so the
+# panel and hbbs always agree.
+if [ -z "${RUSTDESK_API_JWT_KEY:-}" ]; then
+	f=${RDPANEL_JWT_KEY_FILE:-${RDPANEL_DATA_DIR:-/data/panel}/jwt.key}
+	if [ -s "$f" ]; then
+		RUSTDESK_API_JWT_KEY=$(cat "$f")
+		export RUSTDESK_API_JWT_KEY
+	fi
+fi
+
+exec /usr/libexec/rdpanel/as-service-user /usr/bin/hbbs "$@"

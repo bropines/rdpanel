@@ -1,0 +1,15 @@
+#!/command/with-contenv sh
+# hbbr (relay server): 21117 tcp + loopback admin, 21119 WebSocket.
+# Reads id_ed25519 and blacklist.txt/blocklist.txt from its cwd (/data).
+#
+# Env: ENCRYPTED_ONLY -> 1 adds `-k _`; otherwise hbbr reads KEY itself.
+#      LIMIT_SPEED, SINGLE_BANDWIDTH, TOTAL_BANDWIDTH, DOWNGRADE_THRESHOLD,
+#      DOWNGRADE_START_CHECK, RUST_LOG -> read by hbbr from the environment.
+# Do not set PORT on the container: hbbr would listen on PORT+1.
+exec 2>&1
+cd /data || exit 1
+
+set --
+if [ "${ENCRYPTED_ONLY:-0}" = 1 ]; then set -- "$@" -k _; fi
+
+exec /usr/libexec/rdpanel/as-service-user /usr/bin/hbbr "$@"

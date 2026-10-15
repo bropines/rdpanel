@@ -1,0 +1,7 @@
+#!/command/with-contenv sh
+# rdpanel: RustDesk client API + admin panel. Configured by RDPANEL_* env and
+# RUSTDESK_API_JWT_KEY (see docs/deploy.md). Data: $RDPANEL_DATA_DIR (/data/panel).
+# SIGTERM -> graceful HTTP shutdown; s6 sends SIGKILL after timeout-kill.
+exec 2>&1
+cd "${RDPANEL_DATA_DIR:-/data/panel}" || exit 1
+exec /usr/libexec/rdpanel/as-service-user /usr/bin/rdpanel serve
