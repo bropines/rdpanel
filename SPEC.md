@@ -165,7 +165,8 @@ Legacy ids preserved for users, user_groups, address books (collections), device
 ## 7. Legacy migration
 
 `rdpanel migrate-legacy --from /path/rustdeskapi.db [--dry-run] [--report out.json]` implements §7.4 of the
-migration doc in one transaction, idempotent refusal if the target DB is non-empty (unless `--force-empty-check=false`).
+migration doc in one transaction, idempotent refusal if the target DB is non-empty (unless `--force`).
+Operator guide: `docs/migration.md`.
 Reports duplicates, orphans, collisions, pre-v245 Google identities. Production volumes: users 2, tokens 58
 (45 client JWT / 2 unexpired), peers 53, address-book entries 34, groups 2, oauths 2 (github, google),
 user_thirds 3, login_logs 73, audit_conns 1086, audit_files 54.
