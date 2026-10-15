@@ -10,6 +10,8 @@ automatically on start (`rdpanel serve`, `rdpanel user ...`).
 | `00001_identity.sql` | user_groups, users, auth_tokens, identity_providers, user_identities, oauth_states, totp_secrets, recovery_codes |
 | `00002_devices_addressbooks.sql` | device_groups, devices, address_books, address_book_shares, address_book_entries, address_book_tags, address_book_entry_tags, share_links |
 | `00003_audit_settings.sql` | login_events, connection_audits, file_transfer_audits, alarm_audits, audit_nonces, admin_audit, server_commands, server_settings, settings, migration_runs |
+| `00004_device_public_key.sql` | devices.pk |
+| `00005_b2a_panel.sql` | panel_assets (branding logo), presence_samples (dashboard online series) |
 
 Later streams add new numbered files; never edit an applied migration.
 
@@ -247,6 +249,19 @@ Desired hbbs/hbbr runtime state re-applied by the reconciler. PK (`target`, `key
 ### `settings`
 Panel key/value settings (`key` PK, `value` JSON, `updated_by`, `updated_at`).
 Well-known keys are constants in `internal/store/settings.go`.
+
+Keys written by `PATCH /settings` are constants in `internal/store/panel.go`
+(`panel.public_url`, `branding.*`, `auth.*`, `retention.*_days`, `rate_limits.*`,
+`http.trusted_proxies`); unset keys fall back to the configuration / built-in defaults.
+
+### `panel_assets`
+Small binary assets served by the panel: `name` PK (`branding.logo`), `content_type`
+(`image/png`/`image/jpeg`/`image/webp`, SVG is refused), `data` (≤ 256 KiB), `sha256`
+(cache-busting `?v=`), `updated_by`, `updated_at`.
+
+### `presence_samples`
+Hourly maximum of online devices (`hour_start` unix ms PK, `max_online`), written every
+minute by the presence sampler and kept 7 days; feeds the dashboard `series.online`.
 
 ### `migration_runs`
 Legacy import bookkeeping: `source`, `source_path`, `source_version` (expect 265),

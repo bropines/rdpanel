@@ -34,6 +34,7 @@ var wantTables = []string{
 	"file_transfer_audits", "identity_providers", "login_events", "migration_runs", "oauth_states",
 	"recovery_codes", "server_commands", "server_settings", "settings", "share_links", "totp_secrets",
 	"user_groups", "user_identities", "users",
+	"panel_assets", "presence_samples", // 00005_b2a_panel
 }
 
 func tables(t *testing.T, d *DB) []string {
