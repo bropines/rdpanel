@@ -11,6 +11,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/collectors"
 
+	"github.com/bropines/rustdesk-panel/internal/adminapi"
 	"github.com/bropines/rustdesk-panel/internal/auth"
 	"github.com/bropines/rustdesk-panel/internal/config"
 	"github.com/bropines/rustdesk-panel/internal/crypto"
@@ -37,6 +38,9 @@ type App struct {
 	Limiter  *auth.Backoff
 	Registry *prometheus.Registry
 	SPA      *web.SPA
+	// TOTP verifies second factors; it implements clientapi's TOTPVerifier
+	// (Enrolled/Verify) for the client /api/login tfa step.
+	TOTP *adminapi.TOTPService
 
 	httpMetrics *httpx.Metrics
 }
@@ -55,6 +59,7 @@ func New(ctx context.Context, cfg *config.Config, log *slog.Logger) (*App, error
 		return nil, err
 	}
 	a.Limiter = auth.NewBackoff(auth.DefaultBackoffConfig, nil)
+	a.TOTP = adminapi.NewTOTPService(a.Store, a.AEAD)
 	a.Registry = prometheus.NewRegistry()
 	a.Registry.MustRegister(
 		collectors.NewGoCollector(),

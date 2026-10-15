@@ -31,6 +31,13 @@ type Store struct {
 	AuthTokens *AuthTokens
 	Settings   *Settings
 	AdminAudit *AdminAudit
+
+	// Identity / OIDC / 2FA (stream B1).
+	IdentityProviders *IdentityProviders
+	UserIdentities    *UserIdentities
+	OAuthStates       *OAuthStates
+	TOTPSecrets       *TOTPSecrets
+	RecoveryCodes     *RecoveryCodes
 }
 
 // New returns a Store backed by d.
@@ -50,6 +57,11 @@ func build(d *db.DB, q db.Querier, now func() time.Time) *Store {
 	s.AuthTokens = &AuthTokens{q: q, now: now}
 	s.Settings = &Settings{q: q, now: now}
 	s.AdminAudit = &AdminAudit{q: q, now: now}
+	s.IdentityProviders = &IdentityProviders{q: q, now: now}
+	s.UserIdentities = &UserIdentities{q: q, now: now}
+	s.OAuthStates = &OAuthStates{q: q, now: now}
+	s.TOTPSecrets = &TOTPSecrets{q: q, now: now}
+	s.RecoveryCodes = &RecoveryCodes{q: q, now: now}
 	return s
 }
 
