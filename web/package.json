@@ -15,7 +15,11 @@
     "lint": "eslint .",
     "test": "vitest run",
     "test:watch": "vitest",
-    "gen:api": "openapi-typescript ../api/openapi.yaml -o src/api/schema.d.ts"
+    "gen:api": "openapi-typescript ../api/openapi.yaml -o src/api/schema.d.ts",
+    "dev:mock": "vite --mode mock",
+    "build:mock": "tsc -b && vite build --mode mock",
+    "preview:mock": "vite preview --mode mock --outDir dist-mock --port 4174 --strictPort",
+    "screenshots": "playwright test --config e2e/playwright.config.ts"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.2.2",
