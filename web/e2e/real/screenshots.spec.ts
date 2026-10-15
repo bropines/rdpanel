@@ -104,7 +104,7 @@ test.describe("@screenshots", () => {
     await shot(page, "my-devices");
   });
 
-  test("dark and russian", async ({ page }) => {
+  test("dark", async ({ page }) => {
     await theme(page, "dark");
     await loginAdmin(page);
     await page.goto("/");
@@ -118,7 +118,7 @@ test.describe("@screenshots", () => {
     await page.goto("/login");
     await page.getByLabel("Имя пользователя").fill("admin");
     await page.getByLabel("Пароль").fill(process.env.E2E_ADMIN_PASSWORD ?? "e2e-admin-password-1");
-    await page.getByRole("button", { name: "Войти" }).click();
+    await page.getByRole("button", { name: "Войти", exact: true }).click();
     await expect(page).not.toHaveURL(/\/login/);
     await page.goto("/devices");
     await shot(page, "devices-ru");

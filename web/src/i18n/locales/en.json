@@ -843,7 +843,7 @@
     "savedCodes": "I have saved these codes",
     "download": "Download",
     "disableTitle": "Turn off two-factor authentication?",
-    "disableHint": "Confirm with your password and a current code.",
+    "disableHint": "Confirm with your password or a current code.",
     "disabled": "Two-factor authentication turned off",
     "regenerateTitle": "Generate new recovery codes",
     "regenerateHint": "Old recovery codes stop working immediately."
