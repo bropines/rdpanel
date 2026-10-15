@@ -470,14 +470,19 @@ func TestRunStopsOnCancel(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})
 	go func() { p.Run(ctx); close(done) }()
-	time.Sleep(60 * time.Millisecond)
+	// Wait for at least two polls instead of sleeping a fixed time: under
+	// -race with parallel packages a fixed 60 ms window is not always enough.
+	deadline := time.Now().Add(3 * time.Second)
+	for p.Health().Polls < 2 && time.Now().Before(deadline) {
+		time.Sleep(5 * time.Millisecond)
+	}
+	if got := p.Health().Polls; got < 2 {
+		t.Fatalf("polls %d", got)
+	}
 	cancel()
 	select {
 	case <-done:
 	case <-time.After(3 * time.Second):
 		t.Fatal("Run did not stop")
-	}
-	if p.Health().Polls < 2 {
-		t.Fatalf("polls %d", p.Health().Polls)
 	}
 }
