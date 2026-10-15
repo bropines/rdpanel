@@ -1,14 +1,22 @@
-import type { components } from "@/api/schema";
+import type { components, operations } from "@/api/schema";
 
 /** Panel API base path (see api/openapi.yaml `servers`). */
 export const API_BASE = "/api/v1/admin";
+/** SSE endpoint (outside the admin base path). */
+export const EVENTS_URL = "/api/v1/events";
 /** CSRF double-submit cookie set by the server (readable by JS by design). */
 export const CSRF_COOKIE = "rdpanel_csrf";
 /** Header that must echo the CSRF cookie on every non-GET request. */
 export const CSRF_HEADER = "X-CSRF-Token";
 
 export type Schemas = components["schemas"];
+export type Operations = operations;
 export type ErrorBody = Schemas["Error"];
+
+/** Query parameters of an operation (from the generated OpenAPI types). */
+export type QueryOf<K extends keyof operations> = operations[K] extends { parameters: { query?: infer Q } }
+  ? NonNullable<Q>
+  : never;
 
 /** Error thrown for every non-2xx response; mirrors `{"error":{"code","message"}}`. */
 export class ApiError extends Error {
@@ -36,11 +44,32 @@ export function readCookie(name: string, cookieString: string = document.cookie)
   return undefined;
 }
 
+export type QueryValue = string | number | boolean | undefined | null | readonly (string | number)[];
+export type Query = Record<string, QueryValue>;
+
+/** Serialises a query object: undefined/null/"" are dropped, arrays repeat the key. */
+export function buildQuery(query: Query | undefined): string {
+  if (!query) return "";
+  const qs = new URLSearchParams();
+  for (const [k, v] of Object.entries(query)) {
+    if (v === undefined || v === null || v === "") continue;
+    if (Array.isArray(v)) {
+      for (const item of v) qs.append(k, String(item));
+    } else {
+      qs.set(k, String(v));
+    }
+  }
+  return qs.toString();
+}
+
 export interface RequestOptions {
   method?: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
   /** JSON-serialised request body. */
   body?: unknown;
-  query?: Record<string, string | number | boolean | undefined>;
+  /** Raw body (e.g. an uploaded image) sent with `contentType`. */
+  rawBody?: Blob;
+  contentType?: string;
+  query?: Query;
   signal?: AbortSignal;
 }
 
@@ -48,6 +77,17 @@ export interface ClientDeps {
   fetch: typeof fetch;
   getCookie: (name: string) => string | undefined;
   base: string;
+}
+
+/** Paths whose 401 is an expected answer (login flow), not an expired session. */
+const AUTH_FLOW = /^\/auth\/(login|mfa|me|csrf|providers)/;
+
+type UnauthorizedHandler = () => void;
+let onUnauthorized: UnauthorizedHandler | undefined;
+
+/** Registers the global handler for "session expired" 401s (redirect to /login). */
+export function setUnauthorizedHandler(fn: UnauthorizedHandler | undefined) {
+  onUnauthorized = fn;
 }
 
 /**
@@ -66,35 +106,45 @@ export function createClient(deps: Partial<ClientDeps> = {}) {
     return res.csrf_token;
   }
 
-  async function request<T>(path: string, opts: RequestOptions = {}): Promise<T> {
+  function url(path: string, query?: Query): string {
+    let u = base + path;
+    const s = buildQuery(query);
+    if (s) u += (u.includes("?") ? "&" : "?") + s;
+    return u;
+  }
+
+  async function send(path: string, opts: RequestOptions, accept: string): Promise<Response> {
     const method = opts.method ?? "GET";
-    const headers: Record<string, string> = { Accept: "application/json" };
-    let body: string | undefined;
-    if (opts.body !== undefined) {
+    const headers: Record<string, string> = { Accept: accept };
+    let body: BodyInit | undefined;
+    if (opts.rawBody !== undefined) {
+      headers["Content-Type"] = opts.contentType ?? (opts.rawBody.type || "application/octet-stream");
+      body = opts.rawBody;
+    } else if (opts.body !== undefined) {
       headers["Content-Type"] = "application/json";
       body = JSON.stringify(opts.body);
     }
     if (!SAFE_METHODS.has(method)) {
       headers[CSRF_HEADER] = await csrfToken();
     }
-    let url = base + path;
-    if (opts.query) {
-      const qs = new URLSearchParams();
-      for (const [k, v] of Object.entries(opts.query)) {
-        if (v !== undefined) qs.set(k, String(v));
-      }
-      const s = qs.toString();
-      if (s) url += (url.includes("?") ? "&" : "?") + s;
-    }
-
-    const res = await doFetch(url, {
+    return doFetch(url(path, opts.query), {
       method,
       headers,
       body,
       credentials: "same-origin",
       signal: opts.signal ?? null,
     });
-    if (res.status === 204) return undefined as T;
+  }
+
+  async function fail(res: Response, path: string, data: unknown): Promise<never> {
+    const err = (data as Partial<ErrorBody> | undefined)?.error;
+    if (res.status === 401 && !AUTH_FLOW.test(path)) onUnauthorized?.();
+    throw new ApiError(res.status, err?.code ?? `http_${res.status}`, err?.message ?? res.statusText, err?.fields);
+  }
+
+  async function request<T>(path: string, opts: RequestOptions = {}): Promise<T> {
+    const res = await send(path, opts, "application/json");
+    if (res.status === 204 || res.status === 202) return undefined as T;
 
     const text = await res.text();
     let data: unknown = undefined;
@@ -105,17 +155,43 @@ export function createClient(deps: Partial<ClientDeps> = {}) {
         if (res.ok) throw new ApiError(res.status, "invalid_response", "invalid JSON from server");
       }
     }
-    if (!res.ok) {
-      const err = (data as Partial<ErrorBody> | undefined)?.error;
-      throw new ApiError(res.status, err?.code ?? `http_${res.status}`, err?.message ?? res.statusText, err?.fields);
-    }
+    if (!res.ok) return fail(res, path, data);
     return data as T;
   }
 
-  return { request, csrfToken };
+  /** GET a non-JSON resource (CSV export): returns the blob and the suggested filename. */
+  async function download(path: string, query?: Query): Promise<{ blob: Blob; filename: string | undefined }> {
+    const res = await send(path, { query }, "*/*");
+    if (!res.ok) {
+      let data: unknown;
+      try {
+        data = JSON.parse(await res.text());
+      } catch {
+        data = undefined;
+      }
+      return fail(res, path, data);
+    }
+    const cd = res.headers.get("Content-Disposition") ?? "";
+    const m = /filename="?([^";]+)"?/i.exec(cd);
+    return { blob: await res.blob(), filename: m?.[1] };
+  }
+
+  return { request, download, csrfToken, url };
 }
 
 export type ApiClient = ReturnType<typeof createClient>;
 
 /** Shared client instance for the app. */
 export const api = createClient();
+
+/** Triggers a browser download of a blob. */
+export function saveBlob(blob: Blob, filename: string) {
+  const href = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = href;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(href), 1000);
+}

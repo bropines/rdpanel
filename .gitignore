@@ -15,6 +15,9 @@ coverage.*
 node_modules/
 *.tsbuildinfo
 web/.vite/
+web/dist-mock/
+web/test-results/
+web/playwright-report/
 
 # Local data / secrets
 /data/
