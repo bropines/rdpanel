@@ -1,0 +1,46 @@
+{{- if .Values.serviceMonitor.enabled }}
+{{- $m := .Values.serviceMonitor }}
+{{- if not .Values.service.enabled }}
+{{- fail "serviceMonitor.enabled requires service.enabled" }}
+{{- end }}
+# /metrics is IP-restricted by panel.metricsAllow (RDPANEL_METRICS_ALLOW):
+# it must include the Prometheus pod IP range or scrapes get 403.
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: {{ include "rustdesk-panel.fullname" . }}
+  namespace: {{ $m.namespace | default .Release.Namespace }}
+  labels:
+    {{- include "rustdesk-panel.labels" . | nindent 4 }}
+    {{- with $m.labels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+  {{- with include "rustdesk-panel.annotations" (dict "root" . "extra" $m.annotations) }}{{ . | nindent 2 }}{{ end }}
+spec:
+  namespaceSelector:
+    matchNames:
+      - {{ .Release.Namespace }}
+  selector:
+    matchLabels:
+      {{- include "rustdesk-panel.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: panel
+  endpoints:
+    - port: http
+      path: {{ $m.path }}
+      scheme: {{ $m.scheme }}
+      interval: {{ $m.interval }}
+      scrapeTimeout: {{ $m.scrapeTimeout }}
+      honorLabels: {{ $m.honorLabels }}
+      {{- with $m.tlsConfig }}
+      tlsConfig:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with $m.relabelings }}
+      relabelings:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with $m.metricRelabelings }}
+      metricRelabelings:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+{{- end }}

@@ -1,0 +1,49 @@
+# MetalLB, split TCP/UDP Services sharing one IP, server keys migrated from an
+# existing install, ServiceMonitor + NetworkPolicy + PDB enabled.
+server:
+  relay: 203.0.113.10:21117
+  encryptedOnly: true
+
+panel:
+  publicURL: https://rustdesk.example.com
+  metricsAllow: [127.0.0.0/8, 10.244.0.0/16]
+
+secrets:
+  existingSecret: rustdesk-panel-keys
+
+serverKeys:
+  enabled: true
+  existingSecret: rustdesk-server-keypair
+
+rendezvous:
+  service:
+    type: LoadBalancer
+    split: true
+    loadBalancerIP: 203.0.113.10
+    externalTrafficPolicy: Local
+    annotations:
+      metallb.universe.tf/allow-shared-ip: rustdesk
+      metallb.universe.tf/loadBalancerIPs: 203.0.113.10
+    ports:
+      relay:
+        enabled: true
+        port: 21117
+
+serviceMonitor:
+  enabled: true
+  labels:
+    release: kube-prometheus-stack
+
+networkPolicy:
+  enabled: true
+  metricsNamespaceSelector:
+    matchLabels:
+      kubernetes.io/metadata.name: monitoring
+
+podDisruptionBudget:
+  enabled: true
+  maxUnavailable: 1
+
+persistence:
+  storageClass: local-path
+  size: 1Gi

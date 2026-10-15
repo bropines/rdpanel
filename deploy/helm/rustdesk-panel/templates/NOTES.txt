@@ -1,0 +1,84 @@
+{{- $fullname := include "rustdesk-panel.fullname" . -}}
+{{- $ns := .Release.Namespace -}}
+rustdesk-panel {{ .Chart.AppVersion }} (chart {{ .Chart.Version }}) — release "{{ .Release.Name }}" in namespace "{{ $ns }}".
+{{- if eq (int .Values.replicaCount) 0 }}
+
+*** replicaCount=0: the server is STOPPED. ***
+{{- end }}
+{{- if .Values.migration.enabled }}
+
+Legacy migration Job: {{ $fullname }}-migrate-{{ .Release.Revision }}
+  kubectl -n {{ $ns }} logs -f job/{{ $fullname }}-migrate-{{ .Release.Revision }}
+When it has completed, start the server again:
+  helm upgrade {{ .Release.Name }} <chart> -n {{ $ns }} --reuse-values --set migration.enabled=false --set replicaCount=1
+{{- end }}
+
+1. Panel / API server
+{{- if .Values.ingress.enabled }}
+{{- range .Values.ingress.hosts }}
+   http{{ if $.Values.ingress.tls }}s{{ end }}://{{ .host }}/
+{{- end }}
+{{- else if .Values.httpRoute.enabled }}
+   HTTPRoute {{ $fullname }} -> hostnames: {{ join ", " .Values.httpRoute.hostnames }}
+{{- else if .Values.hostNetwork }}
+   http://<node-address>:{{ include "rustdesk-panel.httpPort" . }}/  (hostNetwork; put a TLS reverse proxy in front)
+{{- else if .Values.service.enabled }}
+   kubectl -n {{ $ns }} port-forward svc/{{ $fullname }} {{ .Values.service.port }}:{{ .Values.service.port }}
+   then open http://127.0.0.1:{{ .Values.service.port }}/
+{{- end }}
+{{- if .Values.panel.publicURL }}
+   Public URL (RustDesk client "API server"): {{ .Values.panel.publicURL }}
+{{- else }}
+   WARNING: panel.publicURL is empty. Set it to the external https URL (OIDC needs it).
+{{- end }}
+
+   Create the first admin:
+     kubectl -n {{ $ns }} exec -it {{ $fullname }}-0 -- rdpanel user create --admin admin
+
+2. RustDesk client settings
+{{- if .Values.hostNetwork }}
+   ID server:    <node public address>   (ports {{ .Values.ports.natTest }}-{{ .Values.ports.relay }} on the node, 21116 TCP+UDP)
+   Relay server: {{ .Values.server.relay | default "<node public address>:21117" }}
+{{- else if .Values.rendezvous.service.enabled }}
+   ID server:    <external IP / DNS of the rendezvous Service>
+     kubectl -n {{ $ns }} get svc -l app.kubernetes.io/instance={{ .Release.Name }},app.kubernetes.io/component=rendezvous
+   Relay server: {{ .Values.server.relay | default "<same address>:21117" }}
+{{- end }}
+   Key:          kubectl -n {{ $ns }} exec {{ $fullname }}-0 -- cat /data/id_ed25519.pub
+{{- if not .Values.server.relay }}
+
+   WARNING: server.relay is empty. hbbs hands this address to clients for relayed
+   sessions; set it to the public "<host>:21117" or relaying will not work.
+{{- end }}
+{{- if and (not .Values.hostNetwork) .Values.rendezvous.service.enabled (ne .Values.rendezvous.service.externalTrafficPolicy "Local") }}
+
+   WARNING: rendezvous externalTrafficPolicy is not Local: hbbs will see node IPs
+   instead of client IPs (breaks NAT detection, IP blocker and logs).
+{{- end }}
+{{- if and (or .Values.ingress.enabled .Values.httpRoute.enabled) (eq (join "," .Values.panel.trustedProxies) "127.0.0.0/8,::1/128") }}
+
+   WARNING: panel.trustedProxies only contains loopback, but traffic arrives
+   through an Ingress/Gateway. Add the controller's pod CIDR, otherwise every
+   request appears to come from the controller IP (rate limits, audit).
+{{- end }}
+{{- if or .Values.rendezvous.service.ports.rendezvousWs.enabled .Values.rendezvous.service.ports.relayWs.enabled }}
+
+   WARNING: WebSocket ports 21118/21119 are exposed directly on the rendezvous
+   Service. hbbs/hbbr trust X-Real-IP/X-Forwarded-For there: clients can spoof
+   their IP. Prefer websocket.ingress behind a header-overwriting proxy.
+{{- end }}
+
+3. Secrets
+{{- if .Values.secrets.existingSecret }}
+   Using existing Secret "{{ .Values.secrets.existingSecret }}".
+{{- else }}
+   Secret "{{ $fullname }}" holds RUSTDESK_API_JWT_KEY and RDPANEL_SECRET_KEY{{ if .Values.secrets.keep }} (kept on uninstall){{ end }}.
+   BACK THEM UP:
+     kubectl -n {{ $ns }} get secret {{ $fullname }} -o yaml > rustdesk-panel-secret.yaml
+   Losing secret-key makes encrypted data (address-book passwords, TOTP, OIDC secrets) unreadable;
+   changing jwt-key logs every client out.
+{{- end }}
+{{- if not .Values.persistence.enabled }}
+
+WARNING: persistence is disabled — keys and databases are lost when the pod restarts.
+{{- end }}

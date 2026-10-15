@@ -1,0 +1,70 @@
+name: helm
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - deploy/helm/**
+      - .github/workflows/helm.yml
+  pull_request:
+    paths:
+      - deploy/helm/**
+      - .github/workflows/helm.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: helm-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CHART: deploy/helm/rustdesk-panel
+  HELM_VERSION: v3.16.4
+  KUBECONFORM_VERSION: v0.6.7
+
+jobs:
+  lint:
+    name: lint + kubeconform
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        kube: ["1.26.0", "1.30.0"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: azure/setup-helm@v4
+        with:
+          version: ${{ env.HELM_VERSION }}
+      - name: install kubeconform
+        run: |
+          curl -fsSL "https://github.com/yannh/kubeconform/releases/download/${KUBECONFORM_VERSION}/kubeconform-linux-amd64.tar.gz" \
+            | tar -xz -C /usr/local/bin kubeconform
+          kubeconform -v
+      - name: helm lint
+        run: |
+          helm lint --strict "$CHART"
+          for f in "$CHART"/ci/*.yaml; do helm lint --strict "$CHART" -f "$f"; done
+      - name: template + kubeconform
+        run: |
+          set -euo pipefail
+          for v in default "$CHART"/ci/*.yaml; do
+            echo "::group::$v"
+            if [ "$v" = default ]; then args=(); else args=(-f "$v"); fi
+            helm template rd "$CHART" -n rustdesk "${args[@]}" \
+              | kubeconform -strict -summary -kubernetes-version "${{ matrix.kube }}" \
+                  -schema-location default \
+                  -schema-location 'https://raw.githubusercontent.com/datreeio/CRDs-catalog/main/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json' \
+                  -
+            echo "::endgroup::"
+          done
+      - name: schema rejects invalid values
+        run: |
+          set -u
+          for bad in "replicaCount=2" "secrets.secretKey=short" "rendezvous.service.type=Foo" "panel.realIPHeader=X-Foo"; do
+            if helm template rd "$CHART" --set "$bad" >/dev/null 2>&1; then
+              echo "expected failure for --set $bad"; exit 1
+            fi
+          done
+      - name: package
+        run: helm package "$CHART" -d /tmp/charts
