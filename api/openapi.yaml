@@ -1,0 +1,325 @@
+openapi: 3.1.0
+info:
+  title: rustdesk-panel admin API
+  version: 0.1.0
+  summary: Panel JSON API consumed by the embedded React SPA.
+  description: |
+    Contract between the backend (`internal/adminapi`) and the web UI (`web/`).
+    Regenerate the TypeScript types with `npm run gen:api` (in `web/`).
+
+    **Authentication.** Cookie session: `rdpanel_session` (HttpOnly, SameSite=Lax,
+    Secure on https) holding an opaque token (sha256 stored server-side, kind `web`),
+    12 h idle / 7 d absolute.
+
+    **CSRF.** Double submit: every non-GET request must send header `X-CSRF-Token`
+    equal to the `rdpanel_csrf` cookie (obtain/refresh it with `GET /auth/csrf`).
+
+    **Errors.** Every non-2xx response has the body `{"error":{"code","message"}}`.
+    `code` is stable and machine-readable (`unauthorized`, `forbidden`, `csrf_failed`,
+    `not_found`, `conflict`, `validation_failed`, `rate_limited`, `totp_required`,
+    `totp_invalid`, `internal`).
+
+    **Timestamps** are RFC 3339 UTC strings. **Ids** are integers.
+
+    Status: skeleton by stream F; stream B completes resources and endpoints.
+  license:
+    name: MIT
+    identifier: MIT
+servers:
+  - url: /api/v1/admin
+security:
+  - sessionCookie: []
+tags:
+  - name: auth
+  - name: users
+  - name: devices
+  - name: address-books
+paths:
+  /auth/csrf:
+    get:
+      tags: [auth]
+      operationId: getCsrf
+      summary: Issue (or re-issue) the CSRF token and set the rdpanel_csrf cookie.
+      security: []
+      responses:
+        "200":
+          description: CSRF token.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CsrfToken" }
+  /auth/login:
+    post:
+      tags: [auth]
+      operationId: login
+      summary: Password login (optionally with a TOTP or recovery code).
+      description: |
+        On success sets the session cookie and returns the current user.
+        When the user has 2FA enabled and no `totp_code` was given, responds
+        401 with error code `totp_required`. Failed attempts are rate limited per
+        IP and per username (429 `rate_limited`, `Retry-After` header).
+      security: []
+      parameters:
+        - $ref: "#/components/parameters/CsrfHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/LoginRequest" }
+      responses:
+        "200":
+          description: Logged in.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Me" }
+        "400": { $ref: "#/components/responses/ValidationFailed" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+  /auth/logout:
+    post:
+      tags: [auth]
+      operationId: logout
+      summary: Revoke the current session and clear cookies.
+      parameters:
+        - $ref: "#/components/parameters/CsrfHeader"
+      responses:
+        "204": { description: Logged out. }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /auth/me:
+    get:
+      tags: [auth]
+      operationId: getMe
+      summary: The currently authenticated user.
+      responses:
+        "200":
+          description: Current user.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Me" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+components:
+  securitySchemes:
+    sessionCookie:
+      type: apiKey
+      in: cookie
+      name: rdpanel_session
+  parameters:
+    CsrfHeader:
+      name: X-CSRF-Token
+      in: header
+      required: true
+      description: Must equal the rdpanel_csrf cookie.
+      schema: { type: string }
+    Limit:
+      name: limit
+      in: query
+      schema: { type: integer, minimum: 1, maximum: 1000, default: 50 }
+    Offset:
+      name: offset
+      in: query
+      schema: { type: integer, minimum: 0, default: 0 }
+  responses:
+    Unauthorized:
+      description: Not authenticated (or session expired).
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    Forbidden:
+      description: Authenticated but not allowed, or CSRF check failed.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    NotFound:
+      description: Resource not found.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    Conflict:
+      description: Uniqueness conflict.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    ValidationFailed:
+      description: Request body or parameters are invalid.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    RateLimited:
+      description: Too many failed attempts.
+      headers:
+        Retry-After:
+          schema: { type: integer }
+          description: Seconds to wait.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+  schemas:
+    Error:
+      type: object
+      required: [error]
+      additionalProperties: false
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          additionalProperties: false
+          properties:
+            code:
+              type: string
+              examples: [unauthorized]
+            message:
+              type: string
+              examples: [authentication required]
+            fields:
+              type: object
+              description: Per-field validation messages (validation_failed only).
+              additionalProperties: { type: string }
+    CsrfToken:
+      type: object
+      required: [csrf_token]
+      properties:
+        csrf_token: { type: string }
+    LoginRequest:
+      type: object
+      required: [username, password]
+      additionalProperties: false
+      properties:
+        username: { type: string, minLength: 1, maxLength: 128 }
+        password: { type: string, minLength: 1, maxLength: 1024 }
+        totp_code:
+          type: string
+          description: 6-digit TOTP code or a recovery code.
+    Role:
+      type: string
+      enum: [admin, user]
+    UserStatus:
+      type: string
+      enum: [active, disabled]
+    User:
+      type: object
+      required: [id, username, display_name, role, status, has_password, totp_enabled, created_at, updated_at]
+      properties:
+        id: { type: integer, format: int64 }
+        username: { type: string }
+        email: { type: [string, "null"] }
+        display_name: { type: string }
+        avatar_url: { type: string }
+        note: { type: string }
+        role: { $ref: "#/components/schemas/Role" }
+        status: { $ref: "#/components/schemas/UserStatus" }
+        user_group_id: { type: [integer, "null"], format: int64 }
+        has_password: { type: boolean }
+        totp_enabled: { type: boolean }
+        totp_required: { type: boolean }
+        last_login_at: { type: [string, "null"], format: date-time }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+    Me:
+      type: object
+      required: [user, csrf_token]
+      properties:
+        user: { $ref: "#/components/schemas/User" }
+        csrf_token: { type: string }
+        must_enroll_totp:
+          type: boolean
+          description: True when 2FA is required for this account but not yet enrolled.
+    Session:
+      type: object
+      description: An active panel session or client token of a user.
+      required: [id, kind, created_at, expires_at, current]
+      properties:
+        id: { type: integer, format: int64 }
+        kind: { type: string, enum: [client, web] }
+        device_rustdesk_id: { type: [string, "null"] }
+        device_uuid: { type: [string, "null"] }
+        client_platform: { type: [string, "null"] }
+        user_agent: { type: [string, "null"] }
+        ip: { type: [string, "null"] }
+        created_at: { type: string, format: date-time }
+        last_used_at: { type: [string, "null"], format: date-time }
+        expires_at: { type: string, format: date-time }
+        current: { type: boolean, description: True for the session making the request. }
+    Device:
+      type: object
+      required: [id, rustdesk_id, online, created_at, updated_at]
+      properties:
+        id: { type: integer, format: int64 }
+        rustdesk_id: { type: string }
+        uuid: { type: [string, "null"] }
+        hostname: { type: string }
+        os: { type: string }
+        cpu: { type: string }
+        memory: { type: string }
+        os_username: { type: string }
+        client_version: { type: string }
+        alias: { type: string }
+        note: { type: string }
+        owner_user_id: { type: [integer, "null"], format: int64 }
+        device_group_id: { type: [integer, "null"], format: int64 }
+        online: { type: boolean, description: Live presence (hbbs OnlineRequest, heartbeat fallback). }
+        last_seen_at: { type: [string, "null"], format: date-time }
+        last_seen_ip: { type: [string, "null"] }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+    Permission:
+      type: string
+      enum: [read, read_write, full]
+    AddressBook:
+      type: object
+      required: [id, guid, owner_user_id, name, is_personal, permission, entry_count, created_at, updated_at]
+      properties:
+        id: { type: integer, format: int64 }
+        guid: { type: string }
+        owner_user_id: { type: integer, format: int64 }
+        name: { type: string }
+        note: { type: string }
+        is_personal: { type: boolean }
+        permission:
+          $ref: "#/components/schemas/Permission"
+          description: Effective permission of the current user.
+        entry_count: { type: integer }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+    Entry:
+      type: object
+      description: Address-book entry. Passwords/hashes are write-only (never returned).
+      required: [id, address_book_id, rustdesk_id, tags, has_password, created_at, updated_at]
+      properties:
+        id: { type: integer, format: int64 }
+        address_book_id: { type: integer, format: int64 }
+        rustdesk_id: { type: string }
+        alias: { type: string }
+        os_username: { type: string }
+        hostname: { type: string }
+        platform: { type: string }
+        login_name: { type: string }
+        note: { type: [string, "null"] }
+        tags: { type: array, items: { type: string } }
+        has_password: { type: boolean }
+        force_always_relay: { type: boolean }
+        rdp_port: { type: string }
+        rdp_username: { type: string }
+        same_server: { type: boolean }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+    Tag:
+      type: object
+      required: [id, address_book_id, name, color_argb]
+      properties:
+        id: { type: integer, format: int64 }
+        address_book_id: { type: integer, format: int64 }
+        name: { type: string }
+        color_argb:
+          type: integer
+          format: int64
+          minimum: 0
+          maximum: 4294967295
+          description: Flutter ARGB uint32, e.g. 4288585374 (0xFF9E9E9E).
+    Page:
+      type: object
+      description: Generic page envelope; stream B specialises per resource.
+      required: [total, items]
+      properties:
+        total: { type: integer }
+        items: { type: array, items: {} }

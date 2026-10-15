@@ -1,0 +1,61 @@
+{
+  "app": {
+    "title": "RustDesk Panel",
+    "skipToContent": "Skip to content"
+  },
+  "nav": {
+    "overview": "Overview",
+    "my": "My",
+    "system": "System",
+    "dashboard": "Dashboard",
+    "myProfile": "Profile & security",
+    "myDevices": "My devices",
+    "myAddressBooks": "My address books",
+    "mySessions": "My sessions",
+    "devices": "Devices",
+    "users": "Users",
+    "groups": "Groups",
+    "addressBooks": "Address books",
+    "audit": "Audit",
+    "identityProviders": "Identity providers",
+    "server": "Server",
+    "settings": "Settings",
+    "openMenu": "Open navigation",
+    "closeMenu": "Close navigation"
+  },
+  "theme": {
+    "toggle": "Toggle theme",
+    "light": "Light",
+    "dark": "Dark",
+    "system": "System"
+  },
+  "language": {
+    "label": "Language",
+    "en": "English",
+    "ru": "Русский"
+  },
+  "user": {
+    "menu": "Account menu",
+    "logout": "Log out"
+  },
+  "login": {
+    "title": "Sign in",
+    "description": "Use your RustDesk account to manage devices and address books.",
+    "username": "Username",
+    "password": "Password",
+    "totp": "Authentication code",
+    "totpHint": "Enter the 6-digit code from your authenticator app or a recovery code.",
+    "submit": "Sign in",
+    "submitting": "Signing in…",
+    "usernameRequired": "Username is required",
+    "passwordRequired": "Password is required",
+    "failed": "Sign-in failed",
+    "invalidCredentials": "Invalid username or password",
+    "rateLimited": "Too many attempts. Try again later."
+  },
+  "placeholder": {
+    "comingSoon": "This page is not implemented yet.",
+    "notFound": "Page not found",
+    "backHome": "Back to dashboard"
+  }
+}
