@@ -35,3 +35,6 @@ jwt.key
 *.swp
 .DS_Store
 Thumbs.db
+
+# agent worktrees
+.claude/

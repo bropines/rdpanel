@@ -1,0 +1,87 @@
+{{- if .Values.networkPolicy.enabled }}
+{{- $n := .Values.networkPolicy }}
+# Note: most CNIs do not enforce NetworkPolicy on hostNetwork pods.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "rustdesk-panel.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "rustdesk-panel.labels" . | nindent 4 }}
+  {{- with include "rustdesk-panel.annotations" (dict "root" .) }}{{ . | nindent 2 }}{{ end }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "rustdesk-panel.selectorLabels" . | nindent 6 }}
+  policyTypes:
+    - Ingress
+    {{- if $n.egress.enabled }}
+    - Egress
+    {{- end }}
+  ingress:
+    # Panel HTTP: only from the ingress controller / gateway (+ Prometheus, + extras).
+    - from:
+        - namespaceSelector:
+            {{- toYaml $n.ingressControllerNamespaceSelector | nindent 12 }}
+          {{- with $n.ingressControllerPodSelector }}
+          podSelector:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+        {{- with $n.metricsNamespaceSelector }}
+        - namespaceSelector:
+            {{- toYaml . | nindent 12 }}
+        {{- end }}
+        {{- with $n.extraPanelFrom }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      ports:
+        - port: http
+          protocol: TCP
+    {{- if include "rustdesk-panel.websocketServiceEnabled" . }}
+    # WebSocket ports: only via the ingress controller / gateway (header-overwriting proxy).
+    - from:
+        - namespaceSelector:
+            {{- toYaml $n.ingressControllerNamespaceSelector | nindent 12 }}
+          {{- with $n.ingressControllerPodSelector }}
+          podSelector:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+      ports:
+        - port: hbbs-ws
+          protocol: TCP
+        - port: hbbr-ws
+          protocol: TCP
+    {{- end }}
+    # RustDesk rendezvous / relay ports: from anywhere (clients on the internet).
+    - from:
+        {{- range $n.rendezvousFrom }}
+        - ipBlock:
+            cidr: {{ . }}
+        {{- end }}
+      ports:
+        - port: nat-test
+          protocol: TCP
+        - port: hbbs-tcp
+          protocol: TCP
+        - port: hbbs-udp
+          protocol: UDP
+        - port: hbbr
+          protocol: TCP
+        {{- if or .Values.rendezvous.service.ports.rendezvousWs.enabled .Values.rendezvous.service.ports.relayWs.enabled }}
+        - port: hbbs-ws
+          protocol: TCP
+        - port: hbbr-ws
+          protocol: TCP
+        {{- end }}
+  {{- if $n.egress.enabled }}
+  egress:
+    - ports:
+        - port: 53
+          protocol: UDP
+        - port: 53
+          protocol: TCP
+    {{- with $n.egress.rules }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+  {{- end }}
+{{- end }}

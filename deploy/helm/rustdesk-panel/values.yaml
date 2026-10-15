@@ -1,0 +1,546 @@
+# Default values for rustdesk-panel.
+#
+# One pod runs the whole RustDesk server stack (one s6-overlay container):
+#   hbbs    rendezvous / ID server   21115/tcp (NAT test + loopback admin), 21116/tcp+udp, 21118/tcp (WebSocket)
+#   hbbr    relay server             21117/tcp (+ loopback admin), 21119/tcp (WebSocket)
+#   rdpanel API server + admin panel 21114/tcp (HTTP: /api, SPA, /healthz, /metrics)
+#
+# Data volume /data holds the hbbs key pair (id_ed25519, id_ed25519.pub), the hbbs
+# peer DB (db_v2.sqlite3) and the panel data dir (/data/panel: panel.db, ...).
+
+# -- Override the chart name used in resource names.
+nameOverride: ""
+# -- Override the full resource name prefix.
+fullnameOverride: ""
+# -- Extra labels added to every resource.
+commonLabels: {}
+# -- Extra annotations added to every resource.
+commonAnnotations: {}
+
+image:
+  repository: ghcr.io/bropines/rustdesk-panel
+  # -- Image tag. Defaults to the chart appVersion.
+  tag: ""
+  # -- Optional digest (sha256:...). Takes precedence over the tag when set.
+  digest: ""
+  pullPolicy: IfNotPresent
+
+imagePullSecrets: []
+#  - name: ghcr-pull
+
+# -- Number of replicas. ONLY 0 or 1 is allowed (enforced by values.schema.json).
+# hbbs keeps peer registrations and punch-hole state in memory, the panel uses
+# SQLite (single writer) and the server key pair must be unique: running two pods
+# would split clients between two independent ID servers. Use 0 to stop the
+# server (e.g. for the legacy migration job) without uninstalling the release.
+replicaCount: 1
+
+# -----------------------------------------------------------------------------
+# RustDesk server (hbbs / hbbr) settings, passed to the container as env.
+# -----------------------------------------------------------------------------
+server:
+  # -- Public relay address handed out to clients (env RELAY, `hbbs -r`), e.g.
+  # "rustdesk.example.com:21117" or a comma-separated list. Must be reachable by
+  # clients: the LoadBalancer IP / DNS name, or the node address with hostNetwork.
+  relay: ""
+  # -- ENCRYPTED_ONLY=1: hbbs/hbbr only accept clients that know the server public key (`-k _`).
+  encryptedOnly: true
+  # -- ALWAYS_USE_RELAY=Y: never attempt P2P, always relay through hbbr.
+  alwaysUseRelay: false
+  # -- MUST_LOGIN=Y: hbbs rejects connection requests without a valid panel JWT
+  # (signed with RUSTDESK_API_JWT_KEY, see `secrets`). UX gate, not a hard boundary.
+  mustLogin: false
+  # -- Extra env for the server processes (rendered into the ConfigMap), e.g. RUST_LOG: info.
+  env: {}
+
+# -----------------------------------------------------------------------------
+# rdpanel (API server + admin panel) settings. Every key maps to an RDPANEL_* env
+# var (see the README "Configuration" table). Empty strings are not rendered, so
+# the binary's built-in default applies.
+# -----------------------------------------------------------------------------
+panel:
+  # -- RDPANEL_LISTEN. HTTP bind address. The container port is taken from it.
+  # If you bind to loopback (e.g. "127.0.0.1:31114" with hostNetwork behind a
+  # node-local reverse proxy) set `probes.type: exec` and disable the panel Service.
+  listen: ":21114"
+  # -- RDPANEL_PUBLIC_URL. External base URL clients use as "API server", e.g.
+  # https://rustdesk.example.com. Required for OIDC; https enables HSTS + Secure cookies.
+  publicURL: ""
+  # -- RDPANEL_DATA_DIR. Panel data dir inside the data volume (container contract: /data/panel).
+  dataDir: /data/panel
+  # -- RDPANEL_HBBS_PUBLIC_KEY_FILE. hbbs writes its key pair into /data.
+  hbbsPublicKeyFile: /data/id_ed25519.pub
+  # -- RDPANEL_HBBS_ID_SERVER (loopback; the hbbs admin channel is port-1).
+  hbbsIdServer: "127.0.0.1:21116"
+  # -- RDPANEL_HBBS_RELAY_SERVER (loopback; the hbbr admin channel is the same port).
+  hbbsRelayServer: "127.0.0.1:21117"
+  # -- RDPANEL_TRUSTED_PROXIES. IPs/CIDRs whose forwarding headers are honoured.
+  # Behind an Ingress controller add its pod CIDR (or the cluster pod CIDR, e.g.
+  # 10.244.0.0/16), otherwise the panel sees the controller IP as the client IP
+  # (rate limits and audit logs get wrong addresses). Never add 0.0.0.0/0.
+  trustedProxies:
+    - 127.0.0.0/8
+    - ::1/128
+  # -- RDPANEL_REAL_IP_HEADER: X-Forwarded-For, X-Real-IP or CF-Connecting-IP.
+  realIPHeader: X-Forwarded-For
+  # -- RDPANEL_METRICS_ALLOW. Client IPs allowed to GET /metrics. With the
+  # ServiceMonitor enabled this MUST include the Prometheus pod IP range (pod CIDR).
+  metricsAllow:
+    - 127.0.0.0/8
+    - ::1/128
+  # -- RDPANEL_TOKEN_LIFETIME (Go duration, e.g. 4380h). Empty = binary default.
+  tokenLifetime: ""
+  # -- RDPANEL_JWT_LIFETIME. Empty = same as tokenLifetime.
+  jwtLifetime: ""
+  # -- RDPANEL_SESSION_IDLE. Empty = binary default (12h).
+  sessionIdle: ""
+  # -- RDPANEL_SESSION_ABSOLUTE. Empty = binary default (168h).
+  sessionAbsolute: ""
+  log:
+    # -- RDPANEL_LOG_LEVEL: debug, info, warn, error.
+    level: info
+    # -- RDPANEL_LOG_FORMAT: json or text.
+    format: json
+  # -- Extra RDPANEL_* (or any) env rendered into the ConfigMap, e.g. RDPANEL_CONFIG.
+  env: {}
+
+# -----------------------------------------------------------------------------
+# Secrets
+# -----------------------------------------------------------------------------
+secrets:
+  # -- Use an existing Secret instead of creating one. It must contain the keys
+  # named by `jwtKeyKey` and (when `setSecretKey`) `secretKeyKey`.
+  existingSecret: ""
+  # -- Key in the Secret holding RUSTDESK_API_JWT_KEY (HS256 key shared by hbbs
+  # MUST_LOGIN and the panel; used verbatim). When migrating from
+  # lejianwen/rustdesk-api it MUST be the old value, or every client is logged out.
+  jwtKeyKey: jwt-key
+  # -- Key in the Secret holding RDPANEL_SECRET_KEY (base64 of 32 bytes, AEAD key
+  # for secrets at rest: address-book passwords, TOTP, OIDC client secrets).
+  secretKeyKey: secret-key
+  # -- Explicit JWT key. Empty = generate a random 64-char key on first install.
+  jwtKey: ""
+  # -- Explicit panel secret key (base64, 32 bytes: `openssl rand -base64 32`).
+  # Empty = generate on first install.
+  secretKey: ""
+  # -- Pass RDPANEL_SECRET_KEY from the Secret. Set false to let the panel keep
+  # using/generating <dataDir>/secret.key on the volume (e.g. when migrating a
+  # docker install whose secret.key file you copied over).
+  setSecretKey: true
+  # -- Add `helm.sh/resource-policy: keep` so `helm uninstall` does not delete the
+  # generated keys (losing secret-key makes encrypted data unreadable).
+  keep: true
+  # Generated values are kept stable across `helm upgrade` by reading the live
+  # Secret with `lookup`. `helm template`, `--dry-run` (client) and GitOps tools
+  # that render offline (Argo CD, Flux with helm-controller is fine) cannot
+  # lookup and would generate NEW random keys on each render: in those setups
+  # always set `existingSecret` or explicit `jwtKey`/`secretKey`.
+
+# -- Optional: provide the hbbs/hbbr server key pair (env KEY_PRIV / KEY_PUB),
+# e.g. to migrate an existing server so clients keep their configured key. The
+# container's key-secret init copies them into /data/id_ed25519{,.pub}.
+# Both-or-neither. Leave disabled to let hbbs generate a pair on first start.
+serverKeys:
+  enabled: false
+  # -- Existing Secret containing the pair (keys `privateKeyKey` / `publicKeyKey`).
+  existingSecret: ""
+  privateKeyKey: id_ed25519
+  publicKeyKey: id_ed25519.pub
+  # -- Inline values (contents of id_ed25519 and id_ed25519.pub) used when no existingSecret.
+  privateKey: ""
+  publicKey: ""
+
+# -----------------------------------------------------------------------------
+# Networking mode
+# -----------------------------------------------------------------------------
+# -- Run the pod in the node's network namespace. RECOMMENDED for production:
+# hbbs sees real client IPs and replies to UDP from the address clients sent to,
+# so NAT hole punching (P2P) works as well as on bare metal. Ports 21114-21119 are
+# bound directly on the node: pin the pod with nodeSelector/affinity, open the
+# ports in the node firewall, and remember that the loopback admin channels
+# (127.0.0.1:21115 / :21117) are then reachable by every process on that node.
+# NetworkPolicy does not apply to hostNetwork pods.
+hostNetwork: false
+# -- dnsPolicy. Empty = ClusterFirstWithHostNet when hostNetwork, else ClusterFirst.
+dnsPolicy: ""
+dnsConfig: {}
+
+# -----------------------------------------------------------------------------
+# Container ports (only change if the image is configured differently).
+# -----------------------------------------------------------------------------
+ports:
+  natTest: 21115
+  rendezvous: 21116
+  relay: 21117
+  rendezvousWs: 21118
+  relayWs: 21119
+
+# -----------------------------------------------------------------------------
+# Services
+# -----------------------------------------------------------------------------
+# Panel HTTP Service (21114). Usually ClusterIP behind the Ingress / HTTPRoute.
+service:
+  enabled: true
+  type: ClusterIP
+  port: 21114
+  nodePort: null
+  annotations: {}
+  labels: {}
+  loadBalancerIP: ""
+  loadBalancerClass: ""
+  loadBalancerSourceRanges: []
+  externalTrafficPolicy: ""
+  ipFamilyPolicy: ""
+  ipFamilies: []
+
+# Rendezvous/relay Service: the raw RustDesk ports clients connect to.
+rendezvous:
+  service:
+    enabled: true
+    # -- LoadBalancer | NodePort | ClusterIP
+    type: LoadBalancer
+    # -- Local keeps the client source IP (no SNAT to a node IP): hbbs needs the
+    # real IP for NAT type detection, hole punching, IP blocker and logs. Traffic
+    # only goes to nodes running the pod (the LB health-checks healthCheckNodePort).
+    # Cluster spreads load but SNATs, so every client appears as a node IP.
+    externalTrafficPolicy: Local
+    # -- Create separate -tcp and -udp Services. Mixed-protocol LoadBalancers
+    # (TCP+UDP on one Service) are GA since Kubernetes 1.26 but some cloud
+    # providers / MetalLB versions still refuse them. When split, both Services
+    # can share one IP (MetalLB: same `metallb.universe.tf/allow-shared-ip` key
+    # + same loadBalancerIP; see README).
+    split: false
+    loadBalancerIP: ""
+    loadBalancerClass: ""
+    loadBalancerSourceRanges: []
+    # -- Annotations for the Service(s), e.g. MetalLB or cloud LB settings.
+    annotations: {}
+    # -- Extra annotations only for the -tcp Service (split mode).
+    tcpAnnotations: {}
+    # -- Extra annotations only for the -udp Service (split mode).
+    udpAnnotations: {}
+    labels: {}
+    ipFamilyPolicy: ""
+    ipFamilies: []
+    # -- Optional fixed healthCheckNodePort (LoadBalancer + Local).
+    healthCheckNodePort: null
+    # Per-port switches. `port` is the Service port; nodePort only for NodePort/LoadBalancer.
+    ports:
+      natTest:
+        enabled: true
+        port: 21115
+        nodePort: null
+      rendezvousTcp:
+        enabled: true
+        port: 21116
+        nodePort: null
+      rendezvousUdp:
+        enabled: true
+        port: 21116
+        nodePort: null
+      relay:
+        enabled: true
+        port: 21117
+        nodePort: null
+      # WebSocket ports are OFF by default on the L4 Service: hbbs/hbbr trust
+      # X-Real-IP / X-Forwarded-For unconditionally on 21118/21119, so exposing
+      # them directly lets clients spoof their IP (logs, IP blocker, blocklist).
+      # Publish them through `websocket.ingress` (a proxy that overwrites the headers).
+      rendezvousWs:
+        enabled: false
+        port: 21118
+        nodePort: null
+      relayWs:
+        enabled: false
+        port: 21119
+        nodePort: null
+
+# -----------------------------------------------------------------------------
+# Ingress / Gateway API for the panel (21114)
+# -----------------------------------------------------------------------------
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+    # nginx.ingress.kubernetes.io/proxy-body-size: 16m
+    # cert-manager.io/cluster-issuer: letsencrypt
+  labels: {}
+  hosts:
+    - host: rustdesk.example.com
+      paths:
+        - path: /
+          pathType: Prefix
+  tls: []
+  #  - secretName: rustdesk-panel-tls
+  #    hosts: [rustdesk.example.com]
+
+# Gateway API HTTPRoute (gateway.networking.k8s.io/v1) for the panel.
+httpRoute:
+  enabled: false
+  annotations: {}
+  labels: {}
+  parentRefs: []
+  #  - name: public-gateway
+  #    namespace: gateway-system
+  #    sectionName: https
+  hostnames: []
+  #  - rustdesk.example.com
+  # -- Path matches routed to the panel.
+  matches:
+    - path:
+        type: PathPrefix
+        value: /
+  # -- Also route /ws/id -> 21118 and /ws/relay -> 21119 (requires websocket.service).
+  # The Gateway must overwrite X-Real-IP / X-Forwarded-For (see websocket notes).
+  websocketRules: false
+
+# -----------------------------------------------------------------------------
+# WebSocket endpoints (hbbs 21118 -> /ws/id, hbbr 21119 -> /ws/relay)
+# Used by the RustDesk web client and by clients with "use WebSocket" enabled.
+# SECURITY: hbbs/hbbr take the client IP from X-Real-IP / X-Forwarded-For
+# without any trust check. The proxy in front MUST overwrite (not append) both
+# headers with the real peer address. ingress-nginx sets X-Real-IP to
+# $remote_addr; keep `use-forwarded-headers: false` (default) and
+# `compute-full-forwarded-for: false` so X-Forwarded-For is not client-controlled.
+# -----------------------------------------------------------------------------
+websocket:
+  service:
+    # -- ClusterIP Service exposing 21118/21119 for the Ingress/HTTPRoute backends.
+    # Auto-enabled when websocket.ingress or httpRoute.websocketRules is on.
+    enabled: false
+    annotations: {}
+  ingress:
+    enabled: false
+    className: ""
+    annotations: {}
+      # nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+      # nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+    labels: {}
+    hosts:
+      - host: rustdesk.example.com
+    # -- Paths; RustDesk clients use exactly /ws/id and /ws/relay.
+    idPath: /ws/id
+    relayPath: /ws/relay
+    pathType: Prefix
+    tls: []
+
+# -----------------------------------------------------------------------------
+# Extra non-secret env / config
+# -----------------------------------------------------------------------------
+# -- Extra env entries (full EnvVar objects) appended to the container.
+extraEnv: []
+#  - name: TZ
+#    value: Europe/Moscow
+# -- Extra envFrom sources (ConfigMapRef / SecretRef).
+extraEnvFrom: []
+# -- Extra pod volumes.
+extraVolumes: []
+# -- Extra container volume mounts.
+extraVolumeMounts: []
+# -- Extra containers (sidecars).
+extraContainers: []
+# -- Init containers.
+initContainers: []
+
+# -----------------------------------------------------------------------------
+# Persistence (/data)
+# -----------------------------------------------------------------------------
+persistence:
+  # -- Without persistence (emptyDir) the server key pair, peer DB and panel DB
+  # are lost on every restart. Only for testing.
+  enabled: true
+  # -- Use an existing PVC instead of the volumeClaimTemplate.
+  existingClaim: ""
+  # -- StorageClass ("" = cluster default, "-" = no class / static binding).
+  storageClass: ""
+  accessModes:
+    - ReadWriteOnce
+  size: 1Gi
+  annotations: {}
+  labels: {}
+  # -- Optional selector for static PVs.
+  selector: {}
+  # -- Mount path (container contract: /data).
+  mountPath: /data
+  subPath: ""
+  # -- StatefulSet persistentVolumeClaimRetentionPolicy, e.g. {whenDeleted: Retain, whenScaled: Retain}.
+  retentionPolicy: {}
+
+# -----------------------------------------------------------------------------
+# Pod / container settings
+# -----------------------------------------------------------------------------
+serviceAccount:
+  create: true
+  name: ""
+  annotations: {}
+  # The pod does not talk to the Kubernetes API.
+  automountServiceAccountToken: false
+
+podAnnotations: {}
+podLabels: {}
+priorityClassName: ""
+runtimeClassName: ""
+schedulerName: ""
+# -- s6 gives services a grace period; keep this above S6_KILL_GRACETIME.
+terminationGracePeriodSeconds: 30
+nodeSelector: {}
+tolerations: []
+affinity: {}
+topologySpreadConstraints: []
+hostAliases: []
+
+# -- Pod securityContext. The image runs s6-overlay as root (it chowns /run and
+# the data dir), so runAsNonRoot is not set by default.
+podSecurityContext:
+  seccompProfile:
+    type: RuntimeDefault
+  # fsGroup: 0
+
+# -- Container securityContext. Capabilities are reduced to what s6-overlay and
+# the init scripts need (chown/chmod of /data, dropping privileges).
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: false
+  capabilities:
+    drop:
+      - ALL
+    add:
+      - CHOWN
+      - DAC_OVERRIDE
+      - FOWNER
+      - SETGID
+      - SETUID
+      - KILL
+
+resources: {}
+#  requests:
+#    cpu: 50m
+#    memory: 64Mi
+#  limits:
+#    memory: 512Mi
+
+# -- Override the container command / args (default: image ENTRYPOINT /init).
+command: []
+args: []
+lifecycle: {}
+
+# Probes target GET /healthz on the panel port.
+probes:
+  # -- httpGet: kubelet calls the pod IP. exec: `wget` against 127.0.0.1 inside
+  # the container (needed when panel.listen binds loopback only).
+  type: httpGet
+  path: /healthz
+  startup:
+    enabled: true
+    initialDelaySeconds: 2
+    periodSeconds: 5
+    timeoutSeconds: 3
+    failureThreshold: 60
+  liveness:
+    enabled: true
+    initialDelaySeconds: 0
+    periodSeconds: 20
+    timeoutSeconds: 5
+    failureThreshold: 3
+  readiness:
+    enabled: true
+    initialDelaySeconds: 0
+    periodSeconds: 10
+    timeoutSeconds: 3
+    failureThreshold: 3
+    successThreshold: 1
+# -- Fully custom probes (Probe objects); when set they replace the generated ones.
+customStartupProbe: {}
+customLivenessProbe: {}
+customReadinessProbe: {}
+
+updateStrategy:
+  type: RollingUpdate
+
+# -----------------------------------------------------------------------------
+# Optional extras
+# -----------------------------------------------------------------------------
+# Prometheus Operator ServiceMonitor for /metrics on the panel Service.
+# NOTE: /metrics is IP-restricted by panel.metricsAllow; add the Prometheus pod CIDR.
+serviceMonitor:
+  enabled: false
+  namespace: ""
+  labels: {}
+  annotations: {}
+  interval: 30s
+  scrapeTimeout: 10s
+  path: /metrics
+  scheme: http
+  tlsConfig: {}
+  relabelings: []
+  metricRelabelings: []
+  honorLabels: false
+
+# NetworkPolicy (ignored for hostNetwork pods by most CNIs).
+networkPolicy:
+  enabled: false
+  # -- Namespace selector for the Ingress controller / Gateway that may reach 21114.
+  ingressControllerNamespaceSelector:
+    matchLabels:
+      kubernetes.io/metadata.name: ingress-nginx
+  # -- Optional pod selector within those namespaces.
+  ingressControllerPodSelector: {}
+  # -- Namespace selector for Prometheus (allowed to 21114 for /metrics), {} = disabled.
+  metricsNamespaceSelector: {}
+  # -- Additional peers allowed to 21114 (NetworkPolicyPeer objects).
+  extraPanelFrom: []
+  # -- CIDRs allowed to reach the rendezvous/relay ports (default: anywhere).
+  rendezvousFrom:
+    - 0.0.0.0/0
+    - ::/0
+  # -- Restrict egress. Off by default: OIDC providers and DNS need egress.
+  egress:
+    enabled: false
+    # -- Extra egress rules (NetworkPolicyEgressRule objects); DNS is always allowed.
+    rules: []
+
+# PodDisruptionBudget. Off by default: with one replica a PDB either blocks node
+# drains (minAvailable: 1) or does nothing.
+podDisruptionBudget:
+  enabled: false
+  minAvailable: null
+  maxUnavailable: 1
+
+# -----------------------------------------------------------------------------
+# One-shot legacy migration from lejianwen/rustdesk-api (see README).
+# Procedure: helm upgrade --set replicaCount=0 --set migration.enabled=true ...
+# wait for the Job, inspect the report, then upgrade with replicaCount=1 and
+# migration.enabled=false.
+# -----------------------------------------------------------------------------
+migration:
+  enabled: false
+  # -- Command run in the image (bypasses s6 /init).
+  command:
+    - rdpanel
+  # -- Arguments (plain strings). Adjust --from if the legacy file has another name.
+  args:
+    - migrate-legacy
+    - --from
+    - /legacy/rustdeskapi.db
+    - --report
+    - /data/panel/migration-report.json
+  # -- Append --dry-run.
+  dryRun: false
+  legacy:
+    # -- PVC holding the legacy rustdeskapi.db (mounted read-only at /legacy).
+    existingClaim: ""
+    # -- Alternatively a hostPath directory (requires scheduling on that node).
+    hostPath: ""
+    subPath: ""
+    mountPath: /legacy
+    # -- Mount read-only. Set false if the legacy DB is in WAL mode with leftover
+    # -wal/-shm files (SQLite then needs write access to the directory).
+    readOnly: true
+  backoffLimit: 0
+  activeDeadlineSeconds: 1800
+  ttlSecondsAfterFinished: 86400
+  resources: {}
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+  annotations: {}

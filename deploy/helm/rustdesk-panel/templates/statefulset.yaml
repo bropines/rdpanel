@@ -1,0 +1,243 @@
+{{- if gt (int .Values.replicaCount) 1 }}
+{{- fail "replicaCount must be 0 or 1: hbbs state, SQLite and the server key pair cannot be shared between pods" }}
+{{- end }}
+{{- $fullname := include "rustdesk-panel.fullname" . }}
+{{- $httpPort := include "rustdesk-panel.httpPort" . | int }}
+{{- $useVCT := and .Values.persistence.enabled (not .Values.persistence.existingClaim) }}
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ $fullname }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "rustdesk-panel.labels" . | nindent 4 }}
+  {{- with include "rustdesk-panel.annotations" (dict "root" .) }}{{ . | nindent 2 }}{{ end }}
+spec:
+  # Fixed: 0 or 1. See values.yaml `replicaCount`.
+  replicas: {{ .Values.replicaCount }}
+  serviceName: {{ $fullname }}-headless
+  podManagementPolicy: OrderedReady
+  {{- with .Values.updateStrategy }}
+  updateStrategy:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  {{- with .Values.persistence.retentionPolicy }}
+  persistentVolumeClaimRetentionPolicy:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "rustdesk-panel.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "rustdesk-panel.selectorLabels" . | nindent 8 }}
+        {{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+        {{- with .Values.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      serviceAccountName: {{ include "rustdesk-panel.serviceAccountName" . }}
+      automountServiceAccountToken: {{ .Values.serviceAccount.automountServiceAccountToken }}
+      enableServiceLinks: false
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- if .Values.hostNetwork }}
+      hostNetwork: true
+      {{- end }}
+      dnsPolicy: {{ .Values.dnsPolicy | default (ternary "ClusterFirstWithHostNet" "ClusterFirst" .Values.hostNetwork) }}
+      {{- with .Values.dnsConfig }}
+      dnsConfig:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.priorityClassName }}
+      priorityClassName: {{ . }}
+      {{- end }}
+      {{- with .Values.runtimeClassName }}
+      runtimeClassName: {{ . }}
+      {{- end }}
+      {{- with .Values.schedulerName }}
+      schedulerName: {{ . }}
+      {{- end }}
+      terminationGracePeriodSeconds: {{ .Values.terminationGracePeriodSeconds }}
+      {{- with .Values.podSecurityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.hostAliases }}
+      hostAliases:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.topologySpreadConstraints }}
+      topologySpreadConstraints:
+        {{- tpl (toYaml .) $ | nindent 8 }}
+      {{- end }}
+      {{- with .Values.initContainers }}
+      initContainers:
+        {{- tpl (toYaml .) $ | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: rustdesk
+          image: {{ include "rustdesk-panel.image" . }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          {{- with .Values.command }}
+          command:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.args }}
+          args:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.securityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          ports:
+            # With hostNetwork these are bound on the node (hostPort == containerPort).
+            - name: http
+              containerPort: {{ $httpPort }}
+              protocol: TCP
+            - name: nat-test
+              containerPort: {{ .Values.ports.natTest }}
+              protocol: TCP
+            - name: hbbs-tcp
+              containerPort: {{ .Values.ports.rendezvous }}
+              protocol: TCP
+            - name: hbbs-udp
+              containerPort: {{ .Values.ports.rendezvous }}
+              protocol: UDP
+            - name: hbbr
+              containerPort: {{ .Values.ports.relay }}
+              protocol: TCP
+            - name: hbbs-ws
+              containerPort: {{ .Values.ports.rendezvousWs }}
+              protocol: TCP
+            - name: hbbr-ws
+              containerPort: {{ .Values.ports.relayWs }}
+              protocol: TCP
+          envFrom:
+            - configMapRef:
+                name: {{ $fullname }}
+            {{- with .Values.extraEnvFrom }}
+            {{- tpl (toYaml .) $ | nindent 12 }}
+            {{- end }}
+          env:
+            {{- include "rustdesk-panel.env" . | nindent 12 }}
+            {{- if .Values.serverKeys.enabled }}
+            # Consumed by the image's key-secret oneshot: written to /data/id_ed25519{,.pub}.
+            - name: KEY_PRIV
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "rustdesk-panel.serverKeysSecretName" . }}
+                  key: {{ .Values.serverKeys.privateKeyKey }}
+            - name: KEY_PUB
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "rustdesk-panel.serverKeysSecretName" . }}
+                  key: {{ .Values.serverKeys.publicKeyKey }}
+            {{- end }}
+            {{- with .Values.extraEnv }}
+            {{- tpl (toYaml .) $ | nindent 12 }}
+            {{- end }}
+          {{- if .Values.customStartupProbe }}
+          startupProbe:
+            {{- toYaml .Values.customStartupProbe | nindent 12 }}
+          {{- else if .Values.probes.startup.enabled }}
+          startupProbe:
+            {{- include "rustdesk-panel.probe" (dict "root" . "probe" (omit .Values.probes.startup "enabled")) | nindent 12 }}
+          {{- end }}
+          {{- if .Values.customLivenessProbe }}
+          livenessProbe:
+            {{- toYaml .Values.customLivenessProbe | nindent 12 }}
+          {{- else if .Values.probes.liveness.enabled }}
+          livenessProbe:
+            {{- include "rustdesk-panel.probe" (dict "root" . "probe" (omit .Values.probes.liveness "enabled")) | nindent 12 }}
+          {{- end }}
+          {{- if .Values.customReadinessProbe }}
+          readinessProbe:
+            {{- toYaml .Values.customReadinessProbe | nindent 12 }}
+          {{- else if .Values.probes.readiness.enabled }}
+          readinessProbe:
+            {{- include "rustdesk-panel.probe" (dict "root" . "probe" (omit .Values.probes.readiness "enabled")) | nindent 12 }}
+          {{- end }}
+          {{- with .Values.lifecycle }}
+          lifecycle:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          volumeMounts:
+            - name: data
+              mountPath: {{ .Values.persistence.mountPath }}
+              {{- with .Values.persistence.subPath }}
+              subPath: {{ . }}
+              {{- end }}
+            {{- with .Values.extraVolumeMounts }}
+            {{- tpl (toYaml .) $ | nindent 12 }}
+            {{- end }}
+        {{- with .Values.extraContainers }}
+        {{- tpl (toYaml .) $ | nindent 8 }}
+        {{- end }}
+      {{- if or (not $useVCT) .Values.extraVolumes }}
+      volumes:
+        {{- if not .Values.persistence.enabled }}
+        - name: data
+          emptyDir: {}
+        {{- else if .Values.persistence.existingClaim }}
+        - name: data
+          persistentVolumeClaim:
+            claimName: {{ tpl .Values.persistence.existingClaim . }}
+        {{- end }}
+        {{- with .Values.extraVolumes }}
+        {{- tpl (toYaml .) $ | nindent 8 }}
+        {{- end }}
+      {{- end }}
+  {{- if $useVCT }}
+  volumeClaimTemplates:
+    - apiVersion: v1
+      kind: PersistentVolumeClaim
+      metadata:
+        name: data
+        labels:
+          {{- include "rustdesk-panel.selectorLabels" . | nindent 10 }}
+          {{- with .Values.persistence.labels }}
+          {{- toYaml . | nindent 10 }}
+          {{- end }}
+        {{- with .Values.persistence.annotations }}
+        annotations:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+      spec:
+        accessModes:
+          {{- toYaml .Values.persistence.accessModes | nindent 10 }}
+        {{- with .Values.persistence.storageClass }}
+        storageClassName: {{ if eq . "-" }}""{{ else }}{{ . | quote }}{{ end }}
+        {{- end }}
+        {{- with .Values.persistence.selector }}
+        selector:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+        resources:
+          requests:
+            storage: {{ .Values.persistence.size | quote }}
+  {{- end }}

@@ -1,0 +1,118 @@
+{{- if .Values.migration.enabled }}
+{{- $m := .Values.migration }}
+{{- if not .Values.persistence.enabled }}
+{{- fail "migration.enabled requires persistence.enabled (the job writes into the data volume)" }}
+{{- end }}
+{{- if not (or $m.legacy.existingClaim $m.legacy.hostPath) }}
+{{- fail "migration.enabled requires migration.legacy.existingClaim or migration.legacy.hostPath" }}
+{{- end }}
+{{- if ne (int .Values.replicaCount) 0 }}
+{{- fail "migration.enabled requires replicaCount=0: stop the server before importing into its database (see README)" }}
+{{- end }}
+# One-shot import from lejianwen/rustdesk-api. The name carries the release
+# revision because Job specs are immutable.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "rustdesk-panel.fullname" . }}-migrate-{{ .Release.Revision }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "rustdesk-panel.labels" . | nindent 4 }}
+    app.kubernetes.io/component: migration
+  {{- with include "rustdesk-panel.annotations" (dict "root" . "extra" $m.annotations) }}{{ . | nindent 2 }}{{ end }}
+spec:
+  backoffLimit: {{ $m.backoffLimit }}
+  {{- with $m.activeDeadlineSeconds }}
+  activeDeadlineSeconds: {{ . }}
+  {{- end }}
+  {{- with $m.ttlSecondsAfterFinished }}
+  ttlSecondsAfterFinished: {{ . }}
+  {{- end }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: {{ include "rustdesk-panel.name" . }}-migration
+        app.kubernetes.io/instance: {{ .Release.Name }}
+        app.kubernetes.io/component: migration
+    spec:
+      restartPolicy: Never
+      serviceAccountName: {{ include "rustdesk-panel.serviceAccountName" . }}
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.podSecurityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with ($m.nodeSelector | default .Values.nodeSelector) }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with ($m.affinity | default .Values.affinity) }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with ($m.tolerations | default .Values.tolerations) }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: migrate
+          image: {{ include "rustdesk-panel.image" . }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command:
+            {{- toYaml $m.command | nindent 12 }}
+          args:
+            {{- toYaml $m.args | nindent 12 }}
+            {{- if $m.dryRun }}
+            - --dry-run
+            {{- end }}
+          {{- with .Values.securityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          envFrom:
+            - configMapRef:
+                name: {{ include "rustdesk-panel.fullname" . }}
+            {{- with .Values.extraEnvFrom }}
+            {{- tpl (toYaml .) $ | nindent 12 }}
+            {{- end }}
+          env:
+            {{- include "rustdesk-panel.env" . | nindent 12 }}
+            {{- with .Values.extraEnv }}
+            {{- tpl (toYaml .) $ | nindent 12 }}
+            {{- end }}
+          {{- with $m.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          volumeMounts:
+            - name: data
+              mountPath: {{ .Values.persistence.mountPath }}
+              {{- with .Values.persistence.subPath }}
+              subPath: {{ . }}
+              {{- end }}
+            - name: legacy
+              mountPath: {{ $m.legacy.mountPath }}
+              readOnly: {{ $m.legacy.readOnly }}
+              {{- with $m.legacy.subPath }}
+              subPath: {{ . }}
+              {{- end }}
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: {{ include "rustdesk-panel.dataClaimName" . }}
+        - name: legacy
+          {{- if $m.legacy.existingClaim }}
+          persistentVolumeClaim:
+            claimName: {{ $m.legacy.existingClaim }}
+            readOnly: {{ $m.legacy.readOnly }}
+          {{- else }}
+          hostPath:
+            path: {{ $m.legacy.hostPath }}
+            type: Directory
+          {{- end }}
+{{- end }}

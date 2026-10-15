@@ -26,9 +26,11 @@ Later streams add new numbered files; never edit an applied migration.
   `device_groups` and `identity_providers`, then the sequence continues after `max(id)`.
 - **Secrets**: verify-only secrets are stored as `sha256` digests (`*_sha256 BLOB`, 32 bytes);
   secrets that must be returned are AEAD-encrypted (`*_enc BLOB`, XChaCha20-Poly1305,
-  key from `secret.key` / `RDPANEL_SECRET_KEY`) with associated data
-  `"<table>.<column>:<row id>"` (TOTP: `"totp:<user_id>"`) so ciphertexts cannot be moved
-  between rows.
+  key from `secret.key` / `RDPANEL_SECRET_KEY`) with associated data `"<scope>:<row id>"`
+  so ciphertexts cannot be moved between rows or columns. The scopes are fixed in
+  `internal/crypto/ad.go` (always use its helpers): `ab_entry.password`, `ab_entry.hash`,
+  `address_book.password`, `identity_provider.client_secret`, `share_link.password`,
+  `oauth_state.pkce_verifier`, `totp` (keyed by user id).
 - **Foreign keys** are real, with explicit `ON DELETE` rules (CASCADE for owned rows,
   SET NULL for optional references, so audit trails survive deletions).
 - **Case**: usernames and group names are unique case-insensitively (`COLLATE NOCASE`);
