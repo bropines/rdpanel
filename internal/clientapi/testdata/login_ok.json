@@ -1,0 +1,1 @@
+{"type":"access_token","access_token":"<token>","user":{"name":"alice","display_name":"Alice","avatar":"","email":"alice@example.test","note":"n","status":1,"is_admin":true,"info":{"email_verification":false,"email_alarm_notification":false}}}

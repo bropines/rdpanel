@@ -1,0 +1,1 @@
+{"type":"email_check","tfa_type":"tfa_check","secret":"<secret>","user":{"name":"carol","display_name":"","avatar":"","email":"","note":"","status":1,"is_admin":false,"info":{"email_verification":false,"email_alarm_notification":false}}}
