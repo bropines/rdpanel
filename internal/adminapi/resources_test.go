@@ -183,8 +183,6 @@ func ids(m map[string]any, key string) []string {
 	return out
 }
 
-func i64(v int64) *int64 { return &v }
-
 func num(v any) int64 {
 	f, _ := v.(float64)
 	return int64(f)
@@ -296,6 +294,9 @@ func TestDevicesListFiltersSortPaging(t *testing.T) {
 		t.Fatalf("device dto: %v", d)
 	}
 	code, m, _ = e.admin.do("GET", "/devices?q=100", nil)
+	if code != 200 {
+		t.Fatalf("search: %d %v", code, m)
+	}
 	d = items(m)[0]
 	if owner, _ := d["owner"].(map[string]any); owner == nil || owner["username"] != "bob" || num(d["owner_user_id"]) != bob.ID {
 		t.Fatalf("owner embed: %v", d)
