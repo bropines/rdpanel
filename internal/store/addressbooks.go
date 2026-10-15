@@ -172,9 +172,12 @@ func (r *AddressBooks) open(ct []byte, ad string) (string, error) {
 	return pt, nil
 }
 
-func entryPasswordAD(id int64) string { return "ab_entry.password:" + strconv.FormatInt(id, 10) }
-func entryHashAD(id int64) string     { return "ab_entry.hash:" + strconv.FormatInt(id, 10) }
-func bookPasswordAD(id int64) string  { return "address_book.password:" + strconv.FormatInt(id, 10) }
+// AD helpers: the on-disk conventions live in internal/crypto (ad.go).
+var (
+	entryPasswordAD = crypto.ABEntryPasswordAD
+	entryHashAD     = crypto.ABEntryHashAD
+	bookPasswordAD  = crypto.AddressBookDefaultPasswordAD
+)
 
 const bookColumns = `b.id, b.guid, b.owner_user_id, b.name, b.note, b.is_personal, b.legacy_collection_id,
 	b.legacy_guid, b.default_password_enc, b.created_at, b.updated_at, coalesce(u.username, '')`
