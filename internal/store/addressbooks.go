@@ -97,6 +97,8 @@ type ABEntry struct {
 
 	// DeviceGroupName is joined from devices (same RustDesk ID), "" if unknown.
 	DeviceGroupName string
+	// DeviceID is the devices row with the same RustDesk ID (nil if unknown).
+	DeviceID *int64
 }
 
 // ABEntryPatch is a partial entry update; nil fields are left unchanged.
@@ -387,11 +389,7 @@ type SharedBook struct {
 // ListShared returns the non-personal books userID owns or that are shared
 // with the user or the user's group, ordered by name, and the total count.
 func (r *AddressBooks) ListShared(ctx context.Context, userID int64, limit, offset int) ([]SharedBook, int, error) {
-	// rule: 3 for owned books, else the best grant.
-	const ruleExpr = `CASE WHEN b.owner_user_id = ?1 THEN 3 ELSE (SELECT max(CASE s.permission
-		WHEN 'full' THEN 3 WHEN 'read_write' THEN 2 WHEN 'read' THEN 1 ELSE 0 END)
-		FROM address_book_shares s WHERE s.address_book_id = b.id AND (s.grantee_user_id = ?1
-		OR s.grantee_group_id = (SELECT user_group_id FROM users WHERE id = ?1))) END`
+	const ruleExpr = abRuleSQL
 	where := ` WHERE b.is_personal = 0 AND (` + ruleExpr + `) > 0`
 	var total int
 	if err := r.q.QueryRowContext(ctx, `SELECT count(*) FROM address_books b`+where, userID).Scan(&total); err != nil {
@@ -419,6 +417,15 @@ func (r *AddressBooks) ListShared(ctx context.Context, userID int64, limit, offs
 	return out, total, mapErr(rows.Err())
 }
 
+// abRuleSQL is the effective rule (0 none, 1 read, 2 read/write, 3 full) of
+// the user bound to ?1 on the book aliased b: 3 for the owner, else the best
+// grant to the user or the user's group. It is the SQL form of Permission and
+// is shared by the client API (ListShared) and the panel API (ListBooks).
+const abRuleSQL = `CASE WHEN b.owner_user_id = ?1 THEN 3 ELSE coalesce((SELECT max(CASE s.permission
+	WHEN 'full' THEN 3 WHEN 'read_write' THEN 2 WHEN 'read' THEN 1 ELSE 0 END)
+	FROM address_book_shares s WHERE s.address_book_id = b.id AND (s.grantee_user_id = ?1
+	OR s.grantee_group_id = (SELECT user_group_id FROM users WHERE id = ?1))), 0) END`
+
 type scanFunc func(dest ...any) error
 
 func (f scanFunc) Scan(dest ...any) error { return f(dest...) }
@@ -427,7 +434,7 @@ func (f scanFunc) Scan(dest ...any) error { return f(dest...) }
 
 const entryColumns = `e.id, e.address_book_id, e.rustdesk_id, e.alias, e.os_username, e.hostname, e.platform,
 	e.login_name, e.note, e.password_enc, e.hash_enc, e.force_always_relay, e.rdp_port, e.rdp_username,
-	e.same_server, e.created_at, e.updated_at, coalesce(g.name, '')`
+	e.same_server, e.created_at, e.updated_at, coalesce(g.name, ''), d.id`
 
 const entryFrom = ` FROM address_book_entries e
 	LEFT JOIN devices d ON d.rustdesk_id = e.rustdesk_id
@@ -440,13 +447,15 @@ func (r *AddressBooks) scanEntry(row interface{ Scan(...any) error }) (*ABEntry,
 		pwEnc, hashEnc       []byte
 		relay, same          int
 		createdAt, updatedAt int64
+		deviceID             sql.NullInt64
 	)
 	err := row.Scan(&e.ID, &e.AddressBookID, &e.RustdeskID, &e.Alias, &e.OSUsername, &e.Hostname, &e.Platform,
 		&e.LoginName, &note, &pwEnc, &hashEnc, &relay, &e.RDPPort, &e.RDPUsername, &same, &createdAt, &updatedAt,
-		&e.DeviceGroupName)
+		&e.DeviceGroupName, &deviceID)
 	if err != nil {
 		return nil, mapErr(err)
 	}
+	e.DeviceID = ptrID(deviceID)
 	e.Note = note.String
 	e.ForceAlwaysRelay, e.SameServer = relay == 1, same == 1
 	e.CreatedAt, e.UpdatedAt = fromMs(createdAt), fromMs(updatedAt)

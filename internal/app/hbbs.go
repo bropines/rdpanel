@@ -3,6 +3,8 @@ package app
 import (
 	"log/slog"
 
+	"github.com/bropines/rustdesk-panel/internal/adminapi"
+
 	"github.com/bropines/rustdesk-panel/internal/events"
 	"github.com/bropines/rustdesk-panel/internal/hbbs/control"
 	"github.com/bropines/rustdesk-panel/internal/hbbs/presence"
@@ -50,6 +52,8 @@ func (a *App) initHBBS() error {
 		return nil
 	}
 	a.HBBS.Control = ctl
+	// Persist mutating and console admin-channel calls in admin_audit.
+	ctl.SetAudit(adminapi.NewCommandAudit(a.Store, log))
 	r, err := reconcile.New(reconcile.Config{
 		Control: ctl, Store: &reconcile.Store{DB: a.DB}, Bus: a.Events, Log: log,
 		Registerer: a.Registry, Interval: cfg.ReconcileInterval, ListDir: cfg.ListDir,

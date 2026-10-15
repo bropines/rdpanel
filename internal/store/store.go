@@ -47,6 +47,8 @@ type Store struct {
 	OAuthStates       *OAuthStates
 	TOTPSecrets       *TOTPSecrets
 	RecoveryCodes     *RecoveryCodes
+	// PunchRequests holds hbbs punch requests collected by the panel (stream B2b).
+	PunchRequests *PunchRequests
 }
 
 // Option configures a Store.
@@ -104,6 +106,7 @@ func build(d *db.DB, q db.Querier, o options) *Store {
 	s.OAuthStates = &OAuthStates{q: q, now: now}
 	s.TOTPSecrets = &TOTPSecrets{q: q, now: now}
 	s.RecoveryCodes = &RecoveryCodes{q: q, now: now}
+	s.PunchRequests = &PunchRequests{q: q, d: d, now: now}
 	return s
 }
 

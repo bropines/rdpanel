@@ -69,14 +69,7 @@ func (c *authCore) handleSecurity(w http.ResponseWriter, r *http.Request) {
 }
 
 func (c *authCore) audit(ctx context.Context, r *http.Request, action, targetType, targetID string, details map[string]any) {
-	e := &store.AuditEntry{Action: action, TargetType: targetType, TargetID: targetID, Details: details,
-		ActorIP: httpx.ClientIPString(r)}
-	if s := CurrentSession(ctx); s != nil {
-		e.ActorUserID, e.ActorName = &s.User.ID, s.User.Username
-	}
-	if err := c.d.Store.AdminAudit.Record(ctx, e); err != nil {
-		c.d.Log.WarnContext(ctx, "admin audit", "action", action, "err", err)
-	}
+	recordAudit(ctx, c.d, r, action, targetType, targetID, details)
 }
 
 type totpEnrollDTO struct {

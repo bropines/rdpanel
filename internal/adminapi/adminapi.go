@@ -48,6 +48,19 @@ type Deps struct {
 	TOTP *TOTPService
 	// LoginEvents records login attempts (default: loginlog.DB on Store).
 	LoginEvents loginlog.Recorder
+
+	// ---- stream B2b: address books, audit, server (hbbs/hbbr) ----
+	// Presence is the live device presence (nil: devices report offline and
+	// /server/health reports the heartbeat fallback).
+	Presence PresenceSource
+	// Control is the hbbs/hbbr admin channel (nil: hbbs-backed /server/*
+	// endpoints answer 503 server_unavailable).
+	Control ServerControl
+	// Reconciler owns the desired hbbs/hbbr settings (nil: /server/settings 503).
+	Reconciler SettingsReconciler
+	// ConsoleLimit caps raw console commands per admin per minute (default 30).
+	ConsoleLimit int
+	// ---- end stream B2b ----
 }
 
 // Register mounts the admin API on r (already scoped to /api/v1/admin).
@@ -61,4 +74,5 @@ func Register(r chi.Router, d Deps) {
 	c.registerAuth(r)
 	c.registerSecurity(r)
 	c.registerProviders(r)
+	registerB2b(r, d)
 }

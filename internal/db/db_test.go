@@ -32,7 +32,7 @@ var wantTables = []string{
 	"address_book_entries", "address_book_entry_tags", "address_book_shares", "address_book_tags",
 	"address_books", "admin_audit", "alarm_audits", "audit_nonces", "auth_tokens", "connection_audits", "device_groups", "devices",
 	"file_transfer_audits", "identity_providers", "login_events", "migration_runs", "oauth_states",
-	"recovery_codes", "server_commands", "server_settings", "settings", "share_links", "totp_secrets",
+	"punch_requests", "recovery_codes", "server_commands", "server_settings", "settings", "share_links", "totp_secrets",
 	"user_groups", "user_identities", "users",
 }
 
