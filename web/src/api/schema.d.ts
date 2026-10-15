@@ -2289,6 +2289,12 @@ export interface components {
             relay_servers?: string[] | null;
             always_use_relay?: boolean | null;
             must_login?: boolean | null;
+            /**
+             * @description TCP_KEEPALIVE (bropines/rustdesk-server fork): hbbs sends an empty frame every 12 s on registered
+             *     TCP/WebSocket rendezvous connections so clients in TCP/WebSocket mode stay online. In `applied`,
+             *     null also means the running hbbs does not support the command.
+             */
+            tcp_keepalive?: boolean | null;
             /** @description hbbr throttled IPs. */
             blacklist?: string[] | null;
             /** @description hbbr refused IPs. */
@@ -2304,6 +2310,7 @@ export interface components {
             relay_servers?: string[];
             always_use_relay?: boolean;
             must_login?: boolean;
+            tcp_keepalive?: boolean;
             blacklist?: string[];
             blocklist?: string[];
             limit_speed_mbps?: number;
@@ -2313,7 +2320,7 @@ export interface components {
             downgrade_start_check_s?: number;
         };
         /** @enum {string} */
-        ServerSettingKey: "relay_servers" | "always_use_relay" | "must_login" | "blacklist" | "blocklist" | "limit_speed_mbps" | "total_bandwidth_mbps" | "single_bandwidth_mbps" | "downgrade_threshold" | "downgrade_start_check_s";
+        ServerSettingKey: "relay_servers" | "always_use_relay" | "must_login" | "tcp_keepalive" | "blacklist" | "blocklist" | "limit_speed_mbps" | "total_bandwidth_mbps" | "single_bandwidth_mbps" | "downgrade_threshold" | "downgrade_start_check_s";
         ServerSettingStatus: {
             key: components["schemas"]["ServerSettingKey"];
             /** @enum {string} */

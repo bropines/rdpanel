@@ -39,6 +39,14 @@ func TestIntegrationRealAdmin(t *testing.T) {
 			t.Fatalf("must-login %v: %v %v", want, got, err)
 		}
 	}
+	for _, want := range []bool{true, false} {
+		if err := c.SetTCPKeepalive(ctx, want); err != nil {
+			t.Fatal(err)
+		}
+		if got, err := c.TCPKeepalive(ctx); err != nil || got != want {
+			t.Fatalf("tcp-keepalive %v: %v %v (needs bropines/rustdesk-server >= 393f872)", want, got, err)
+		}
+	}
 	if err := c.SetRelayServers(ctx, []string{"127.0.0.1:21117"}); err != nil {
 		t.Fatal(err)
 	}

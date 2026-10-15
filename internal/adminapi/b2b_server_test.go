@@ -70,27 +70,28 @@ func TestServerHealthAndSettings(t *testing.T) {
 	}
 	if desired["must_login"] != nil || applied["must_login"] != false || b2bNum(applied["limit_speed_mbps"]) != 32 ||
 		!hasStr(applied["relay_servers"], "relay.example.com") || b2bNum(applied["downgrade_start_check_s"]) != 1800 ||
-		len(keys) != 10 || keys["must_login"]["managed"] != false || keys["must_login"]["in_sync"] != true {
+		len(keys) != 11 || keys["must_login"]["managed"] != false || keys["must_login"]["in_sync"] != true ||
+		applied["tcp_keepalive"] != false || desired["tcp_keepalive"] != nil || keys["tcp_keepalive"]["target"] != "hbbs" {
 		t.Fatalf("settings: %v", m)
 	}
 
-	code, m, _ = admin.do(http.MethodPatch, "/server/settings", map[string]any{"must_login": true,
+	code, m, _ = admin.do(http.MethodPatch, "/server/settings", map[string]any{"must_login": true, "tcp_keepalive": true,
 		"limit_speed_mbps": 16, "blacklist": []string{"1.2.3.4"}, "downgrade_start_check_s": 900})
 	want(t, "patch", code, 200, m)
 	_, _, ml, black, _, rates, _, tsec := e.fake.State()
-	if !ml || rates["limit-speed"] != 16 || !slices.Equal(black, []string{"1.2.3.4"}) || tsec != 900 {
+	if !ml || !e.fake.TCPKeepalive() || rates["limit-speed"] != 16 || !slices.Equal(black, []string{"1.2.3.4"}) || tsec != 900 {
 		t.Fatalf("fake state: ml=%v rates=%v black=%v t=%d", ml, rates, black, tsec)
 	}
 	for _, k := range m["keys"].([]any) {
 		km := k.(map[string]any)
 		switch km["key"] {
-		case "must_login", "limit_speed_mbps", "blacklist", "downgrade_start_check_s":
+		case "must_login", "tcp_keepalive", "limit_speed_mbps", "blacklist", "downgrade_start_check_s":
 			if km["managed"] != true || km["in_sync"] != true || km["updated_by"] != "root" || km["applied_at"] == nil {
 				t.Fatalf("key status: %v", km)
 			}
 		}
 	}
-	if d := m["desired"].(map[string]any); d["must_login"] != true || b2bNum(d["limit_speed_mbps"]) != 16 {
+	if d := m["desired"].(map[string]any); d["must_login"] != true || d["tcp_keepalive"] != true || b2bNum(d["limit_speed_mbps"]) != 16 {
 		t.Fatalf("desired: %v", d)
 	}
 	// Partial: other keys keep their desired value; null unmanages.
@@ -101,7 +102,7 @@ func TestServerHealthAndSettings(t *testing.T) {
 	}
 	for _, bad := range []map[string]any{
 		{"relay_servers": []string{"a b"}}, {"limit_speed_mbps": -1}, {"blocklist": []string{"not-an-ip"}},
-		{"frobnicate": true}, {"must_login": "yes"}, {"relay_servers": []string{}},
+		{"frobnicate": true}, {"must_login": "yes"}, {"tcp_keepalive": "Y"}, {"relay_servers": []string{}},
 	} {
 		code, m, _ := admin.do(http.MethodPatch, "/server/settings", bad)
 		wantErr(t, "invalid patch", code, 400, m, "validation_failed")
@@ -112,13 +113,13 @@ func TestServerHealthAndSettings(t *testing.T) {
 	code, m, _ = admin.do(http.MethodGet, "/server/settings", nil)
 	want(t, "get after restart", code, 200, m)
 	for _, k := range m["keys"].([]any) {
-		if km := k.(map[string]any); km["key"] == "must_login" && km["in_sync"] != false {
+		if km := k.(map[string]any); (km["key"] == "must_login" || km["key"] == "tcp_keepalive") && km["in_sync"] != false {
 			t.Fatalf("drift not reported: %v", km)
 		}
 	}
 	code, m, _ = admin.do(http.MethodPost, "/server/settings/reapply", nil)
 	want(t, "reapply", code, 200, m)
-	if _, _, ml, _, _, rates, _, _ := e.fake.State(); !ml || rates["limit-speed"] != 16 {
+	if _, _, ml, _, _, rates, _, _ := e.fake.State(); !ml || !e.fake.TCPKeepalive() || rates["limit-speed"] != 16 {
 		t.Fatalf("reapply did not restore: ml=%v rates=%v", ml, rates)
 	}
 

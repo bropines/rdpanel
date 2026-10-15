@@ -194,7 +194,7 @@ function health(): S["ServerHealth"] {
   };
 }
 
-const HBBS_KEYS = new Set(["relay_servers", "always_use_relay", "must_login"]);
+const HBBS_KEYS = new Set(["relay_servers", "always_use_relay", "must_login", "tcp_keepalive"]);
 function serverState(): S["ServerSettingsState"] {
   const keys = Object.keys(db.serverDesired) as S["ServerSettingKey"][];
   return {
@@ -1173,6 +1173,7 @@ export const handlers = [
       "ip-blocker": `${db.ipBlocker.length}\n${db.ipBlocker.map((x) => `${x.ip}: ${x.attempts}/60s ${x.ids}/86400s`).join("\n")}\n`,
       "relay-servers": `${(db.serverApplied.relay_servers ?? []).join("\n")}\n`,
       "must-login": b.args?.length ? "" : `MUST_LOGIN: ${db.serverApplied.must_login}\n`,
+      "tcp-keepalive": b.args?.length ? "" : `TCP_KEEPALIVE: ${db.serverApplied.tcp_keepalive}\n`,
       "always-use-relay": b.args?.length ? "" : `ALWAYS_USE_RELAY: ${db.serverApplied.always_use_relay}\n`,
       blacklist: `${(db.serverApplied.blacklist ?? []).join("\n")}\n`,
       blocklist: `${(db.serverApplied.blocklist ?? []).join("\n")}\n`,

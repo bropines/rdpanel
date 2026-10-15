@@ -22,6 +22,7 @@ interface Draft {
   relay_servers: string;
   always_use_relay: boolean;
   must_login: boolean;
+  tcp_keepalive: boolean;
   blacklist: string;
   blocklist: string;
   limit_speed_mbps: string;
@@ -39,6 +40,7 @@ function toDraft(v: Values): Draft {
     relay_servers: (v.relay_servers ?? []).join("\n"),
     always_use_relay: !!v.always_use_relay,
     must_login: !!v.must_login,
+    tcp_keepalive: !!v.tcp_keepalive,
     blacklist: (v.blacklist ?? []).join("\n"),
     blocklist: (v.blocklist ?? []).join("\n"),
     limit_speed_mbps: n(v.limit_speed_mbps),
@@ -71,6 +73,7 @@ export function diffDraft(desired: Values, d: Draft): ServerSettingsPatch {
   if (d.relay_servers !== base.relay_servers) patch.relay_servers = splitLines(d.relay_servers);
   if (d.always_use_relay !== base.always_use_relay) patch.always_use_relay = d.always_use_relay;
   if (d.must_login !== base.must_login) patch.must_login = d.must_login;
+  if (d.tcp_keepalive !== base.tcp_keepalive) patch.tcp_keepalive = d.tcp_keepalive;
   if (d.blacklist !== base.blacklist) patch.blacklist = splitLines(d.blacklist);
   if (d.blocklist !== base.blocklist) patch.blocklist = splitLines(d.blocklist);
   for (const k of NUM_KEYS) {
@@ -253,6 +256,9 @@ export function ServerSettingsForm() {
           </Row>
           <Row k="must_login" state={state} label={t("server.keys.must_login")} hint={t("server.hints.must_login")} dirty={dirtyKeys.has("must_login")}>
             <Switch id="srv-must_login" checked={draft.must_login} onCheckedChange={(v) => set("must_login", v)} />
+          </Row>
+          <Row k="tcp_keepalive" state={state} label={t("server.keys.tcp_keepalive")} hint={t("server.hints.tcp_keepalive")} dirty={dirtyKeys.has("tcp_keepalive")}>
+            <Switch id="srv-tcp_keepalive" checked={draft.tcp_keepalive} onCheckedChange={(v) => set("tcp_keepalive", v)} />
           </Row>
         </CardContent>
       </Card>

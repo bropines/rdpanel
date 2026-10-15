@@ -3129,6 +3129,12 @@ components:
         relay_servers: { type: [array, "null"], items: { type: string } }
         always_use_relay: { type: [boolean, "null"] }
         must_login: { type: [boolean, "null"] }
+        tcp_keepalive:
+          type: [boolean, "null"]
+          description: |
+            TCP_KEEPALIVE (bropines/rustdesk-server fork): hbbs sends an empty frame every 12 s on registered
+            TCP/WebSocket rendezvous connections so clients in TCP/WebSocket mode stay online. In `applied`,
+            null also means the running hbbs does not support the command.
         blacklist: { type: [array, "null"], items: { type: string }, description: hbbr throttled IPs. }
         blocklist: { type: [array, "null"], items: { type: string }, description: hbbr refused IPs. }
         limit_speed_mbps: { type: [number, "null"], description: Speed for blacklisted/downgraded relays (Mibit/s). }
@@ -3143,6 +3149,7 @@ components:
         relay_servers: { type: array, maxItems: 32, items: { type: string, pattern: "^[^\\s,]+$" } }
         always_use_relay: { type: boolean }
         must_login: { type: boolean }
+        tcp_keepalive: { type: boolean }
         blacklist: { type: array, maxItems: 10000, items: { type: string } }
         blocklist: { type: array, maxItems: 10000, items: { type: string } }
         limit_speed_mbps: { type: number, exclusiveMinimum: 0 }
@@ -3152,7 +3159,7 @@ components:
         downgrade_start_check_s: { type: integer, minimum: 1 }
     ServerSettingKey:
       type: string
-      enum: [relay_servers, always_use_relay, must_login, blacklist, blocklist, limit_speed_mbps, total_bandwidth_mbps, single_bandwidth_mbps, downgrade_threshold, downgrade_start_check_s]
+      enum: [relay_servers, always_use_relay, must_login, tcp_keepalive, blacklist, blocklist, limit_speed_mbps, total_bandwidth_mbps, single_bandwidth_mbps, downgrade_threshold, downgrade_start_check_s]
     ServerSettingStatus:
       type: object
       required: [key, target, in_sync]

@@ -102,6 +102,21 @@ func TestHBBSTyped(t *testing.T) {
 	if got := hs.Commands(); got[len(got)-2] != "must-login Y" {
 		t.Fatalf("wire %q", got)
 	}
+	if v, err := c.TCPKeepalive(ctx); err != nil || v {
+		t.Fatalf("tk default %v %v", v, err)
+	}
+	if err := c.SetTCPKeepalive(ctx, true); err != nil {
+		t.Fatal(err)
+	}
+	if v, err := c.TCPKeepalive(ctx); err != nil || !v || !hs.TCPKeepalive() {
+		t.Fatalf("tk %v %v", v, err)
+	}
+	if got := hs.Commands(); got[len(got)-2] != "tcp-keepalive Y" || got[len(got)-1] != "tcp-keepalive" {
+		t.Fatalf("wire %q", got)
+	}
+	if err := c.SetTCPKeepalive(ctx, false); err != nil || hs.TCPKeepalive() {
+		t.Fatalf("tk off: %v", err)
+	}
 
 	page, err := c.IPBlocker(ctx, 0)
 	if err != nil || page.Total != 2 || len(page.Entries) != 2 {
@@ -267,6 +282,9 @@ func TestAllowListAndValidation(t *testing.T) {
 		{"x", "h", ErrNotAllowed},
 		{HBBS, "ml maybe", ErrInvalidArgs},
 		{HBBS, "ml Y extra", ErrInvalidArgs},
+		{HBBS, "tk maybe", ErrInvalidArgs},
+		{HBBS, "tcp-keepalive Y N", ErrInvalidArgs},
+		{HBBR, "tk", ErrNotAllowed},
 		{HBBS, "h now", ErrInvalidArgs},
 		{HBBS, "ib 1.2.3.4 +", ErrInvalidArgs},
 		{HBBS, "ib not-an-ip", ErrInvalidArgs},
@@ -299,13 +317,16 @@ func TestAllowListAndValidation(t *testing.T) {
 	if _, err := c.ExecLine(ctx, HBBS, "  ml   y "); err != nil {
 		t.Fatal(err)
 	}
+	if _, err := c.ExecLine(ctx, HBBS, "tk y"); err != nil {
+		t.Fatal(err)
+	}
 	if _, err := c.ExecLine(ctx, HBBR, "B ::ffff:1.2.3.4"); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := c.ExecLine(ctx, HBBR, "b"); err != nil {
 		t.Fatal(err)
 	}
-	if hs.Commands()[0] != "must-login Y" || hr.Commands()[0] != "blocklist 1.2.3.4" || hr.Commands()[1] != "blacklist" {
+	if hs.Commands()[0] != "must-login Y" || hs.Commands()[1] != "tcp-keepalive Y" || !hs.TCPKeepalive() || hr.Commands()[0] != "blocklist 1.2.3.4" || hr.Commands()[1] != "blacklist" {
 		t.Fatalf("canonical: %q %q", hs.Commands(), hr.Commands())
 	}
 	if r := au.last(); !r.Raw || r.Mutating || r.Command != "blacklist" {
@@ -334,6 +355,10 @@ func TestTransportFailures(t *testing.T) {
 		t.Fatalf("garbage: %v", err)
 	}
 	// Unparseable replies for typed getters.
+	hs.SetOverride(func(string) (string, bool) { return "MUST_LOGIN: true\n", true })
+	if _, err := c.TCPKeepalive(ctx); !errors.Is(err, ErrBadResponse) {
+		t.Fatalf("tk with wrong prefix: %v", err)
+	}
 	hs.SetOverride(func(string) (string, bool) { return "MUST_LOGIN: perhaps\n", true })
 	if _, err := c.MustLogin(ctx); !errors.Is(err, ErrBadResponse) {
 		t.Fatalf("bad bool: %v", err)

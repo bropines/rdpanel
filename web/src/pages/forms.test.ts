@@ -133,6 +133,7 @@ describe("server settings form", () => {
     relay_servers: ["relay.example.com:21117"],
     always_use_relay: false,
     must_login: true,
+    tcp_keepalive: null,
     blacklist: [],
     blocklist: ["198.51.100.0/24"],
     limit_speed_mbps: 32,
@@ -145,6 +146,7 @@ describe("server settings form", () => {
     relay_servers: "relay.example.com:21117",
     always_use_relay: false,
     must_login: true,
+    tcp_keepalive: false,
     blacklist: "",
     blocklist: "198.51.100.0/24",
     limit_speed_mbps: "32",
@@ -161,6 +163,12 @@ describe("server settings form", () => {
       total_bandwidth_mbps: 512,
       blacklist: ["1.2.3.4"],
     });
+  });
+
+  it("maps the TCP keepalive toggle (unmanaged = off)", () => {
+    expect(diffDraft(desired, { ...draft, tcp_keepalive: true })).toEqual({ tcp_keepalive: true });
+    expect(diffDraft({ ...desired, tcp_keepalive: true }, { ...draft, tcp_keepalive: true })).toEqual({});
+    expect(diffDraft({ ...desired, tcp_keepalive: true }, draft)).toEqual({ tcp_keepalive: false });
   });
 
   it("validates hosts, IPs and positive numbers", () => {

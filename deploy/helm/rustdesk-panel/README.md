@@ -221,6 +221,7 @@ The full list with comments is in [`values.yaml`](values.yaml). These are the ma
 | `server.encryptedOnly` | `true` | `ENCRYPTED_ONLY=1` |
 | `server.alwaysUseRelay` | `false` | `ALWAYS_USE_RELAY=Y/N` |
 | `server.mustLogin` | `false` | `MUST_LOGIN=Y/N` (hbbs requires a panel JWT) |
+| `server.tcpKeepalive` | `false` | `TCP_KEEPALIVE=Y/N`: keepalives for clients in TCP/WebSocket mode ("Use WebSocket", UDP blocked) so they stay online; see docs/deploy.md |
 | `server.env` | `{}` | extra env for hbbs/hbbr (for example `RUST_LOG`) |
 | `panel.listen` | `:21114` | `RDPANEL_LISTEN`. The container port comes from it. |
 | `panel.publicURL` | `""` | `RDPANEL_PUBLIC_URL` |

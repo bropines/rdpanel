@@ -76,6 +76,7 @@
         "encryptedOnly": { "type": "boolean" },
         "alwaysUseRelay": { "type": "boolean" },
         "mustLogin": { "type": "boolean" },
+        "tcpKeepalive": { "type": "boolean" },
         "env": { "$ref": "#/definitions/stringMap" }
       }
     },

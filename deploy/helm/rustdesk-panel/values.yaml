@@ -50,6 +50,11 @@ server:
   # -- MUST_LOGIN=Y: hbbs rejects connection requests without a valid panel JWT
   # (signed with RUSTDESK_API_JWT_KEY, see `secrets`). UX gate, not a hard boundary.
   mustLogin: false
+  # -- TCP_KEEPALIVE=Y: hbbs sends a keepalive every 12 s on TCP/WebSocket rendezvous
+  # connections, so clients using "Use WebSocket"/TCP mode stay online (false =
+  # upstream behaviour: they show online ~30 s of every 90 s). Also settable at runtime
+  # on the panel's Server page, which then overrides this value.
+  tcpKeepalive: false
   # -- Extra env for the server processes (rendered into the ConfigMap), e.g. RUST_LOG: info.
   env: {}
 

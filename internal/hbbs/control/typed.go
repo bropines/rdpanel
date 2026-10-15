@@ -106,6 +106,24 @@ func (c *Client) SetMustLogin(ctx context.Context, on bool) error {
 	return err
 }
 
+// TCPKeepalive reads TCP_KEEPALIVE (bropines/rustdesk-server fork): whether
+// hbbs sends periodic empty frames on registered TCP/WebSocket rendezvous
+// connections so clients in TCP/WebSocket mode stay online.
+func (c *Client) TCPKeepalive(ctx context.Context) (bool, error) {
+	out, err := c.Exec(ctx, HBBS, "tcp-keepalive")
+	if err != nil {
+		return false, err
+	}
+	return parseFlag(out, "TCP_KEEPALIVE")
+}
+
+// SetTCPKeepalive sets TCP_KEEPALIVE; it takes effect on the next keepalive
+// tick of every open connection.
+func (c *Client) SetTCPKeepalive(ctx context.Context, on bool) error {
+	_, err := c.Exec(ctx, HBBS, "tcp-keepalive", yn(on))
+	return err
+}
+
 // IPBlockerEntry is one row of hbbs' registration rate limiter.
 type IPBlockerEntry struct {
 	IP string `json:"ip"`
