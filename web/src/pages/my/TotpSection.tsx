@@ -185,6 +185,8 @@ function CodeDialog({
   const { t } = useTranslation();
   const qc = useQueryClient();
   const errMsg = useErrorMessage();
+  const me = useMe();
+  const hasPassword = me.user.has_password;
   const [password, setPassword] = useState("");
   const [code, setCode] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -199,11 +201,13 @@ function CodeDialog({
   }, [open]);
   const run = useMutation({
     mutationFn: async () => {
+      // The server accepts the password or a TOTP/recovery code (re-authentication).
+      const body = { password: password || undefined, code: code || undefined };
       if (mode === "disable") {
-        await security.disableTotp({ password, code });
+        await security.disableTotp(body);
         return null;
       }
-      return (await security.regenerateRecoveryCodes(code)).recovery_codes;
+      return (await security.regenerateRecoveryCodes(body)).recovery_codes;
     },
     onSuccess: (r) => {
       void qc.invalidateQueries({ queryKey: meQueryKey });
@@ -233,7 +237,7 @@ function CodeDialog({
               run.mutate();
             }}
           >
-            {mode === "disable" && (
+            {mode === "disable" && hasPassword && (
               <Field label={t("security.currentPassword")} htmlFor="cd-pass">
                 <Input id="cd-pass" type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} />
               </Field>
@@ -245,7 +249,7 @@ function CodeDialog({
               <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
                 {t("common.cancel")}
               </Button>
-              <Button type="submit" variant={mode === "disable" ? "destructive" : "default"} disabled={run.isPending || !code || (mode === "disable" && !password)}>
+              <Button type="submit" variant={mode === "disable" ? "destructive" : "default"} disabled={run.isPending || (!code && !password)}>
                 {mode === "disable" ? t("security.disable") : t("security.regenerate")}
               </Button>
             </DialogFooter>

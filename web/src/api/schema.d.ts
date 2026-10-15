@@ -36,9 +36,11 @@ export interface paths {
          *     session and CSRF cookies and returns `{mfa_required: false, me}`.
          *     When the user has TOTP enabled and no `totp_code` was given, a short-lived
          *     (5 min) pending session is issued and the response is `{mfa_required: true}`;
-         *     finish with `POST /auth/mfa`. Errors are generic (`invalid_credentials`)
-         *     whether the user exists or not. Failed attempts are rate limited per IP and
-         *     per username with exponential backoff (429 `rate_limited`, `Retry-After`).
+         *     finish with `POST /auth/mfa`. Errors are generic (401 `invalid_credentials`)
+         *     whether the user exists or not; 403 `password_login_disabled` when password
+         *     sign-in is turned off for the `user` role (Settings → auth). Failed attempts
+         *     are rate limited per IP and per username with exponential backoff
+         *     (429 `rate_limited`, `Retry-After`).
          */
         post: operations["login"];
         delete?: never;
@@ -56,8 +58,25 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Revoke the current session (if any) and clear the session cookie. Idempotent. */
+        /** Revoke the current session and clear cookies. */
         post: operations["logout"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/me": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The currently authenticated user. */
+        get: operations["getMe"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -75,7 +94,9 @@ export interface paths {
         put?: never;
         /**
          * Complete a pending login with a TOTP code or a recovery code.
-         * @description Requires the pending session issued by `/auth/login` (or an OIDC login of a user with TOTP). Rotates the session.
+         * @description Requires the short-lived pending session issued by `/auth/login` (or by an
+         *     OIDC login of a user with TOTP, which lands on `/login?mfa=1&next=…`).
+         *     Rotates the session.
          */
         post: operations["completeMfa"];
         delete?: never;
@@ -112,19 +133,63 @@ export interface paths {
         put?: never;
         /**
          * Begin a panel login with an identity provider.
-         * @description Sets an HttpOnly browser-binding cookie and returns the IdP URL; the SPA must
-         *     navigate to it (`window.location`). The IdP redirects to `/api/oidc/callback`,
-         *     which then redirects the browser to:
-         *     `next` on success; `/login?mfa=1&next=<next>` when TOTP is enabled (finish with
-         *     `POST /auth/mfa`); `/login?error=oidc_<code>` on failure, where code is one of
-         *     `expired`, `denied`, `failed`, `no_account`, `disabled`, `ambiguous`,
-         *     `already_linked`, `session_mismatch`.
+         * @description Sets an HttpOnly browser-binding cookie (`rdpanel_oauth`, admin host) and
+         *     returns the IdP URL; the SPA navigates to it (`window.location`). The IdP
+         *     redirects to `<public_url>/api/oidc/callback` (the only redirect URI
+         *     registered at the IdP, possibly on another host), which exchanges the code
+         *     and hands off to `<admin_url>/api/v1/admin/auth/oidc/complete`. The browser
+         *     finally lands on `next` on success; `/login?mfa=1&next=<next>` when TOTP is
+         *     enabled (finish with `POST /auth/mfa`); `/login?error=oidc_<code>` on
+         *     failure, where code is one of `expired`, `denied`, `failed`, `no_account`,
+         *     `disabled`, `ambiguous`, `already_linked`, `session_mismatch`.
          */
         post: operations["startOidcLogin"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
+        trace?: never;
+    };
+    "/auth/oidc/complete": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Admin-host end of a panel OIDC login or identity link (browser navigation).
+         * @description Target of the 302 from `/api/oidc/callback`. Consumes the single-use ticket
+         *     (valid 2 minutes), verifies the `rdpanel_oauth` binding cookie against the
+         *     flow in constant time, then creates the session (or links the identity) and
+         *     redirects into the SPA: `next`, `/login?mfa=1&next=…`, `/login?error=oidc_<code>`,
+         *     or for linking `<next>?linked=<slug>` / `<next>?link_error=<code>`
+         *     (default `/my/profile`). Never answers JSON.
+         */
+        get: operations["completeOidc"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Edit my display name and email. */
+        patch: operations["updateMyProfile"];
         trace?: never;
     };
     "/me/security": {
@@ -235,6 +300,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/me/security/sessions/revoke-others": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Revoke every session and client token except the current session. */
+        post: operations["revokeMyOtherSessions"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/me/security/sessions/{id}": {
         parameters: {
             query?: never;
@@ -263,7 +345,7 @@ export interface paths {
         put?: never;
         /**
          * Change password; revokes every other session and client token.
-         * @description `current_password` is required when the account has a password.
+         * @description `current_password` is required when the account has a password (401 `reauth_failed` when wrong).
          */
         post: operations["changeMyPassword"];
         delete?: never;
@@ -317,8 +399,9 @@ export interface paths {
         put?: never;
         /**
          * Begin linking an identity of provider {slug}.
-         * @description Returns the IdP URL to navigate to. After the IdP the browser is redirected to
-         *     `next` (default `/my/security`) with `?linked=<slug>` or `?link_error=<code>`.
+         * @description Returns the IdP URL to navigate to (same hand-off as `/auth/oidc/{slug}/start`).
+         *     The browser ends on `next` (default `/my/profile`) with `?linked=<slug>` or
+         *     `?link_error=<code>`.
          */
         post: operations["linkMyIdentity"];
         delete?: never;
@@ -356,14 +439,14 @@ export interface paths {
         };
         /** One identity provider (admin). */
         get: operations["getIdentityProvider"];
-        /** Replace an identity provider (admin). Omit `client_secret` to keep it. */
-        put: operations["updateIdentityProvider"];
+        put?: never;
         post?: never;
         /** Delete an identity provider and its linked identities (admin). */
         delete: operations["deleteIdentityProvider"];
         options?: never;
         head?: never;
-        patch?: never;
+        /** Update an identity provider (admin); omitted fields keep their value, omitted/null `client_secret` keeps the secret. */
+        patch: operations["updateIdentityProvider"];
         trace?: never;
     };
     "/identity-providers/{id}/test": {
@@ -377,23 +460,6 @@ export interface paths {
         put?: never;
         /** Run OIDC discovery for the provider and report the endpoints (admin). */
         post: operations["testIdentityProvider"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/auth/me": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** The currently authenticated user. */
-        get: operations["getMe"];
-        put?: never;
-        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -1427,7 +1493,7 @@ export interface components {
             totp_code?: string;
         };
         LoginResponse: {
-            /** @description True when the password was accepted and POST /auth/mfa must follow. */
+            /** @description True when the password was accepted and `POST /auth/mfa` must follow (a 5 min pending session was issued). */
             mfa_required: boolean;
             me?: components["schemas"]["Me"];
         };
@@ -1444,6 +1510,16 @@ export interface components {
             current_password?: string;
             new_password: string;
         };
+        ProfileUpdate: {
+            display_name?: string;
+            /**
+             * Format: email
+             * @description "" or null clears it.
+             */
+            email?: string | null;
+        };
+        /** @enum {string} */
+        ProviderKind: "github" | "google" | "oidc";
         LoginProvider: {
             slug: string;
             display_name: string;
@@ -1477,27 +1553,6 @@ export interface components {
             /** @description Shown once; only hashes are stored. */
             recovery_codes: string[];
         };
-        LinkedIdentity: {
-            /** Format: int64 */
-            id: number;
-            /** Format: int64 */
-            provider_id: number;
-            provider_slug: string;
-            provider_display_name: string;
-            provider_kind: string;
-            subject: string;
-            email?: string | null;
-            email_verified: boolean;
-            username: string;
-            display_name: string;
-            avatar_url: string;
-            /** Format: date-time */
-            last_login_at?: string | null;
-            /** Format: date-time */
-            created_at: string;
-        };
-        /** @enum {string} */
-        ProviderKind: "github" | "google" | "oidc";
         IdentityProvider: {
             /** Format: int64 */
             id: number;
@@ -1510,7 +1565,7 @@ export interface components {
             /** @description The secret itself is write-only. */
             has_client_secret: boolean;
             /** @description OIDC only; Google is fixed to https://accounts.google.com. */
-            issuer?: string | null;
+            issuer: string | null;
             /** @description Empty = defaults (openid profile email; GitHub read:user user:email). */
             scopes: string[];
             pkce_enabled: boolean;
@@ -1521,7 +1576,7 @@ export interface components {
             link_by_verified_email: boolean;
             enabled: boolean;
             sort_order: number;
-            /** @description Redirect URI to register at the IdP ("" without public URL). */
+            /** @description Redirect URI to register at the IdP ("" without a public URL). */
             callback_url: string;
             /** Format: date-time */
             created_at: string;
@@ -1536,7 +1591,7 @@ export interface components {
             /** @description Omitted/null keeps the stored secret; empty string clears it. */
             client_secret?: string | null;
             /** @description Required for kind=oidc. */
-            issuer?: string;
+            issuer?: string | null;
             scopes?: string[];
             /** @default true */
             pkce_enabled: boolean;
@@ -1553,6 +1608,24 @@ export interface components {
             enabled: boolean;
             /** @default 0 */
             sort_order: number;
+        };
+        /** @description Same fields as IdentityProviderInput, all optional. */
+        IdentityProviderPatch: {
+            slug?: string;
+            kind?: components["schemas"]["ProviderKind"];
+            display_name?: string;
+            client_id?: string;
+            /** @description Omitted/null keeps the stored secret; empty string clears it. */
+            client_secret?: string | null;
+            issuer?: string | null;
+            scopes?: string[];
+            pkce_enabled?: boolean;
+            /** @enum {string} */
+            pkce_method?: "S256" | "plain";
+            auto_register?: boolean;
+            link_by_verified_email?: boolean;
+            enabled?: boolean;
+            sort_order?: number;
         };
         IdentityProviderTestResult: {
             ok: boolean;
@@ -1873,13 +1946,16 @@ export interface components {
             provider_slug: string;
             /** @enum {string} */
             provider_kind: "github" | "google" | "oidc" | "linuxdo";
+            /** @description Provider display name (slug when unnamed). */
             provider_name: string;
             subject: string;
-            email?: string | null;
-            email_verified?: boolean;
-            username?: string | null;
+            email: string | null;
+            email_verified: boolean;
+            username: string | null;
+            display_name: string;
+            avatar_url: string;
             /** Format: date-time */
-            last_login_at?: string | null;
+            last_login_at: string | null;
             /** Format: date-time */
             created_at: string;
         };
@@ -2348,22 +2424,26 @@ export interface components {
             items: components["schemas"]["ConsoleHistoryItem"][];
         };
         PanelSettings: {
-            /** @description e.g. https://desk.example.com; used for OIDC callbacks and links. */
+            /** @description Read-only (RDPANEL_PUBLIC_URL): client API base URL; OIDC redirect URI host. */
             public_url: string;
+            /** @description Read-only (RDPANEL_ADMIN_URL, default public_url): panel base URL. */
+            admin_url: string;
             branding: {
                 title: string;
                 welcome_markdown: string;
                 has_logo: boolean;
-                web_client_url?: string | null;
+                web_client_url: string | null;
             };
+            /** @description Enforced at runtime (lifetimes apply to new sessions/tokens). */
             auth: {
+                /** @description False refuses password sign-in for the user role (panel and client); admins keep it. */
                 password_login_enabled: boolean;
                 require_admin_2fa: boolean;
                 session_idle_hours: number;
                 session_absolute_days: number;
                 client_token_lifetime_hours: number;
             };
-            /** @description Days to keep each audit category; 0 = forever. */
+            /** @description Days to keep each audit category (the janitor uses these values); 0 = forever. */
             retention: {
                 login_events_days: number;
                 connection_audits_days: number;
@@ -2372,16 +2452,26 @@ export interface components {
                 admin_audit_days: number;
                 punch_requests_days: number;
             };
+            /** @description Read-only effective limits (server configuration). */
             rate_limits: {
-                login_per_ip_per_minute: number;
-                login_per_user_per_minute: number;
-                client_api_per_ip_per_minute: number;
+                /** @description Failed logins per IP / username before backoff starts. */
+                login_free_attempts: number;
+                /** @description First backoff delay; doubles per further failure. */
+                login_base_delay_seconds: number;
+                login_max_delay_seconds: number;
+                /** @description Unauthenticated device endpoints */
+                device_requests_per_second: number;
+                device_burst: number;
             };
-            /** @description IPs/CIDRs whose X-Forwarded-For is trusted (default loopback only). */
+            /** @description Read-only (RDPANEL_TRUSTED_PROXIES); IPs/CIDRs whose forwarding headers are trusted. */
             trusted_proxies: string[];
         };
+        /**
+         * @description Partial update. `public_url`, `admin_url`, `trusted_proxies` and `rate_limits`
+         *     are configuration values: sending them is a 400 `validation_failed` naming the
+         *     environment variable.
+         */
         PanelSettingsPatch: {
-            public_url?: string;
             branding?: {
                 title?: string;
                 welcome_markdown?: string;
@@ -2402,12 +2492,6 @@ export interface components {
                 admin_audit_days?: number;
                 punch_requests_days?: number;
             };
-            rate_limits?: {
-                login_per_ip_per_minute?: number;
-                login_per_user_per_minute?: number;
-                client_api_per_ip_per_minute?: number;
-            };
-            trusted_proxies?: string[];
         };
     };
     responses: {
@@ -2584,7 +2668,29 @@ export interface operations {
                 };
                 content?: never;
             };
+            401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
+        };
+    };
+    getMe: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Current user. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Me"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
         };
     };
     completeMfa: {
@@ -2603,7 +2709,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Logged in. */
+            /** @description Logged in (`mfa_required` is false, `me` is set). */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -2626,13 +2732,15 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Providers (empty when OIDC is unavailable). */
+            /** @description Providers (empty when OIDC is unavailable, e.g. no public URL). */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["LoginProvider"][];
+                    "application/json": {
+                        items: components["schemas"]["LoginProvider"][];
+                    };
                 };
             };
         };
@@ -2667,6 +2775,63 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
+            /** @description Identity provider unavailable (`provider_unavailable`). */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    completeOidc: {
+        parameters: {
+            query: {
+                ticket: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Redirect into the SPA. */
+            302: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    updateMyProfile: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Must equal the rdpanel_csrf cookie. */
+                "X-CSRF-Token": components["parameters"]["CsrfHeader"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProfileUpdate"];
+            };
+        };
+        responses: {
+            /** @description Updated user. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["User"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
         };
     };
     getMySecurity: {
@@ -2817,7 +2982,33 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Session"][];
+                    "application/json": {
+                        items: components["schemas"]["Session"][];
+                    };
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+        };
+    };
+    revokeMyOtherSessions: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Must equal the rdpanel_csrf cookie. */
+                "X-CSRF-Token": components["parameters"]["CsrfHeader"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Number of revoked sessions/tokens. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RevokeResult"];
                 };
             };
             401: components["responses"]["Unauthorized"];
@@ -2891,7 +3082,9 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["LinkedIdentity"][];
+                    "application/json": {
+                        items: components["schemas"]["UserIdentity"][];
+                    };
                 };
             };
             401: components["responses"]["Unauthorized"];
@@ -2952,6 +3145,7 @@ export interface operations {
             };
             401: components["responses"]["Unauthorized"];
             404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
         };
     };
     listIdentityProviders: {
@@ -2969,7 +3163,9 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["IdentityProvider"][];
+                    "application/json": {
+                        items: components["schemas"]["IdentityProvider"][];
+                    };
                 };
             };
             401: components["responses"]["Unauthorized"];
@@ -3032,40 +3228,6 @@ export interface operations {
             404: components["responses"]["NotFound"];
         };
     };
-    updateIdentityProvider: {
-        parameters: {
-            query?: never;
-            header: {
-                /** @description Must equal the rdpanel_csrf cookie. */
-                "X-CSRF-Token": components["parameters"]["CsrfHeader"];
-            };
-            path: {
-                id: number;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["IdentityProviderInput"];
-            };
-        };
-        responses: {
-            /** @description Updated. */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["IdentityProvider"];
-                };
-            };
-            400: components["responses"]["ValidationFailed"];
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
-            404: components["responses"]["NotFound"];
-            409: components["responses"]["Conflict"];
-        };
-    };
     deleteIdentityProvider: {
         parameters: {
             query?: never;
@@ -3092,6 +3254,40 @@ export interface operations {
             404: components["responses"]["NotFound"];
         };
     };
+    updateIdentityProvider: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Must equal the rdpanel_csrf cookie. */
+                "X-CSRF-Token": components["parameters"]["CsrfHeader"];
+            };
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IdentityProviderPatch"];
+            };
+        };
+        responses: {
+            /** @description Updated. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IdentityProvider"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
     testIdentityProvider: {
         parameters: {
             query?: never;
@@ -3106,7 +3302,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Result (ok=false with error on failure). */
+            /** @description Result (`ok=false` with `error` on failure). */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -3118,27 +3314,7 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
-        };
-    };
-    getMe: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Current user. */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Me"];
-                };
-            };
-            401: components["responses"]["Unauthorized"];
+            409: components["responses"]["Conflict"];
         };
     };
     getBranding: {

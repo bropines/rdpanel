@@ -12,6 +12,7 @@ import {
   identityProviders,
   type IdentityProvider,
   type IdentityProviderInput,
+  type IdentityProviderPatch,
   type IdentityProviderTestResult,
   type IdpKind,
 } from "@/api/identityProviders";
@@ -81,9 +82,14 @@ function toValues(p: IdentityProvider | null): IdpValues {
   };
 }
 
-/** Form → API body; the secret is only sent when typed (write-only). Exported for tests. */
-export function toInput(v: IdpValues, editing: boolean): IdentityProviderInput {
-  const body: IdentityProviderInput = {
+/**
+ * Form → API body; the secret is only sent when typed (write-only, omitted =
+ * keep). Editing sends a PATCH body without slug/kind. Exported for tests.
+ */
+export function toInput(v: IdpValues, editing: true): IdentityProviderPatch;
+export function toInput(v: IdpValues, editing: false): IdentityProviderInput;
+export function toInput(v: IdpValues, editing: boolean): IdentityProviderInput | IdentityProviderPatch {
+  const body: IdentityProviderPatch = {
     display_name: v.display_name.trim(),
     client_id: v.client_id.trim(),
     issuer: v.kind === "oidc" ? v.issuer.trim() : null,
@@ -95,12 +101,9 @@ export function toInput(v: IdpValues, editing: boolean): IdentityProviderInput {
     enabled: v.enabled,
     sort_order: Number(v.sort_order),
   };
-  if (!editing) {
-    body.kind = v.kind;
-    body.slug = v.slug.trim();
-  }
   if (v.client_secret) body.client_secret = v.client_secret;
-  return body;
+  if (editing) return body;
+  return { ...body, client_id: v.client_id.trim(), kind: v.kind, slug: v.slug.trim() };
 }
 
 function ProviderDialog({ provider, open, onOpenChange }: { provider: IdentityProvider | null; open: boolean; onOpenChange: (o: boolean) => void }) {
@@ -311,14 +314,20 @@ function ProviderCard({ p, onEdit, onDelete }: { p: IdentityProvider; onEdit: ()
         </div>
         <div className="flex items-center gap-1 rounded-md bg-muted/50 px-2 py-1.5 text-xs">
           <span className="shrink-0 text-muted-foreground">{t("idp.callbackUrl")}:</span>
-          <Mono className="truncate text-xs">{p.callback_url}</Mono>
-          <CopyButton value={p.callback_url} className="ml-auto" />
+          {p.callback_url ? (
+            <>
+              <Mono className="truncate text-xs">{p.callback_url}</Mono>
+              <CopyButton value={p.callback_url} className="ml-auto" />
+            </>
+          ) : (
+            <span className="text-amber-700 dark:text-amber-300">{t("idp.noPublicUrl")}</span>
+          )}
         </div>
         {result && (
           <div className={`flex items-start gap-2 rounded-md border px-3 py-2 text-sm ${result.ok ? "border-emerald-500/30 bg-emerald-500/10" : "border-destructive/30 bg-destructive/10"}`} role="status">
             {result.ok ? <CheckCircle2 className="mt-0.5 h-4 w-4 text-emerald-600" /> : <XCircle className="mt-0.5 h-4 w-4 text-destructive" />}
             <div className="min-w-0">
-              <div>{result.message}</div>
+              <div>{result.ok ? t("idp.testOk") : result.error || t("idp.testFailed")}</div>
               {result.authorization_endpoint && <Mono className="block truncate text-xs text-muted-foreground">{result.authorization_endpoint}</Mono>}
             </div>
           </div>

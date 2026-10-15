@@ -9,6 +9,7 @@ import userEvent from "@testing-library/user-event";
 import { setupServer } from "msw/node";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { navigateExternal } from "@/api/auth";
 import { setUnauthorizedHandler } from "@/api/client";
 import { initI18n } from "@/i18n";
 import { loginRedirect } from "@/lib/guards";
@@ -16,6 +17,11 @@ import { createQueryClient } from "@/lib/query";
 import { ThemeProvider } from "@/lib/theme-provider";
 import { handlers } from "@/mocks/handlers";
 import { createAppRouter } from "@/router";
+
+vi.mock("@/api/auth", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/api/auth")>()),
+  navigateExternal: vi.fn(),
+}));
 
 const server = setupServer(...handlers);
 
@@ -69,11 +75,11 @@ describe("auth guard", () => {
     expect(await screen.findByRole("button", { name: "Sign in" })).toBeInTheDocument();
     expect(router.state.location.pathname).toBe("/login");
     expect(router.state.location.search).toEqual({ next: "/devices?online=true" });
-    // Identity providers from /auth/providers are offered.
-    expect(await screen.findByRole("link", { name: /Continue with GitHub/ })).toHaveAttribute(
-      "href",
-      expect.stringContaining("/auth/oidc/github/start?next=%2Fdevices%3Fonline%3Dtrue"),
-    );
+    // Identity providers from /auth/providers are offered; the button starts the
+    // flow (POST /auth/oidc/{slug}/start) and leaves for the returned IdP URL.
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole("button", { name: /Continue with GitHub/ }));
+    await waitFor(() => expect(navigateExternal).toHaveBeenCalledWith(expect.stringContaining("/auth/oidc/complete")));
   });
 
   it("signs in with password + TOTP and returns to next", async () => {

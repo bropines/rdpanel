@@ -41,9 +41,11 @@ const rootRoute = createRootRouteWithContext<RouterContext>()({
 const loginRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/login",
-  validateSearch: (s: Record<string, unknown>): { next?: string; error?: string } => ({
+  validateSearch: (s: Record<string, unknown>): { next?: string; error?: string; mfa?: boolean } => ({
     next: typeof s.next === "string" ? s.next : undefined,
     error: typeof s.error === "string" ? s.error : undefined,
+    // OIDC login of a user with TOTP lands on /login?mfa=1 with a pending session.
+    mfa: s.mfa === 1 || s.mfa === "1" || s.mfa === true ? true : undefined,
   }),
   beforeLoad: async ({ context, search }) => {
     // Already signed in → go straight to the target.
