@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"html"
 	"log/slog"
 	"net/http"
 	"net/url"
@@ -56,17 +55,17 @@ func (s *Service) HandleCallback(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	state := q.Get("state")
 	if state == "" || len(state) > 256 {
-		s.page(w, http.StatusBadRequest, errExpired.Msg)
+		s.page(w, r, http.StatusBadRequest, errExpired.Msg)
 		return
 	}
 	st, err := s.st.OAuthStates.GetActive(ctx, crypto.HashToken(state))
 	if errors.Is(err, store.ErrNotFound) {
-		s.page(w, http.StatusBadRequest, errExpired.Msg)
+		s.page(w, r, http.StatusBadRequest, errExpired.Msg)
 		return
 	}
 	if err != nil {
 		s.log.ErrorContext(ctx, "oidc callback: load state", slog.Any("err", err))
-		s.page(w, http.StatusInternalServerError, errFailed.Msg)
+		s.page(w, r, http.StatusInternalServerError, errFailed.Msg)
 		return
 	}
 
@@ -75,7 +74,7 @@ func (s *Service) HandleCallback(w http.ResponseWriter, r *http.Request) {
 			s.webFail(w, r, s.adminURL, st, errExpired)
 			return
 		}
-		s.page(w, http.StatusBadRequest, errExpired.Msg)
+		s.page(w, r, http.StatusBadRequest, errExpired.Msg)
 		return
 	}
 
@@ -100,7 +99,7 @@ func (s *Service) HandleCallback(w http.ResponseWriter, r *http.Request) {
 	if cerr := s.st.OAuthStates.Complete(ctx, st.ID, nil, fe.Msg); cerr != nil {
 		s.log.WarnContext(ctx, "oidc callback: complete state", slog.Any("err", cerr))
 	}
-	s.page(w, http.StatusOK, fe.Msg)
+	s.page(w, r, http.StatusOK, fe.Msg)
 }
 
 // failed logs and records a failed flow and returns its flowError.
@@ -422,11 +421,11 @@ func (s *Service) finishLogin(w http.ResponseWriter, r *http.Request, st *store.
 		return
 	}
 	if err := s.st.OAuthStates.Complete(ctx, st.ID, &user.ID, ""); err != nil {
-		s.page(w, http.StatusBadRequest, errExpired.Msg)
+		s.page(w, r, http.StatusBadRequest, errExpired.Msg)
 		return
 	}
 	s.log.InfoContext(ctx, "oidc client login approved", slog.String("provider", prov.Slug), slog.Int64("user_id", user.ID))
-	s.page(w, http.StatusOK, "")
+	s.page(w, r, http.StatusOK, "")
 }
 
 // LoginErrorPath is the SPA route panel OIDC failures redirect to.
@@ -459,19 +458,4 @@ func (s *Service) recordEvent(ctx context.Context, st *store.OAuthState, userID,
 	if err := s.events.Record(ctx, ev); err != nil {
 		s.log.WarnContext(ctx, "oidc: record login event", slog.Any("err", err))
 	}
-}
-
-// page renders the minimal HTML result page shown in the browser.
-func (s *Service) page(w http.ResponseWriter, status int, errMsg string) {
-	title, body := "Login successful", "You are signed in. You can close this window and return to RustDesk."
-	if errMsg != "" {
-		title, body = "Login failed", errMsg
-	}
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	w.Header().Set("Cache-Control", "no-store")
-	w.Header().Set("Referrer-Policy", "no-referrer")
-	w.WriteHeader(status)
-	_, _ = fmt.Fprintf(w, `<!doctype html><html><head><meta charset="utf-8">`+
-		`<meta name="viewport" content="width=device-width,initial-scale=1"><title>%s</title></head>`+
-		`<body><h1>%s</h1><p>%s</p></body></html>`, html.EscapeString(title), html.EscapeString(title), html.EscapeString(body))
 }
