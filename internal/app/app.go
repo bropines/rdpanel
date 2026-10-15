@@ -15,6 +15,7 @@ import (
 	"github.com/bropines/rustdesk-panel/internal/config"
 	"github.com/bropines/rustdesk-panel/internal/crypto"
 	"github.com/bropines/rustdesk-panel/internal/db"
+	"github.com/bropines/rustdesk-panel/internal/events"
 	"github.com/bropines/rustdesk-panel/internal/httpx"
 	"github.com/bropines/rustdesk-panel/internal/store"
 	"github.com/bropines/rustdesk-panel/internal/web"
@@ -37,6 +38,13 @@ type App struct {
 	Limiter  *auth.Backoff
 	Registry *prometheus.Registry
 	SPA      *web.SPA
+	// Events is the in-process pub/sub behind /api/v1/events.
+	Events *events.Bus
+	// EventsAuth authenticates SSE streams (panel sessions, set by the admin
+	// API wiring). nil denies every stream.
+	EventsAuth events.Authenticator
+	// HBBS is the hbbs/hbbr integration (presence, admin channel, reconciler).
+	HBBS HBBS
 
 	httpMetrics *httpx.Metrics
 }
@@ -61,6 +69,11 @@ func New(ctx context.Context, cfg *config.Config, log *slog.Logger) (*App, error
 		collectors.NewProcessCollector(collectors.ProcessCollectorOpts{}),
 	)
 	a.httpMetrics = httpx.NewMetrics(a.Registry)
+	a.initEvents()
+	if err := a.initHBBS(); err != nil {
+		_ = a.DB.Close()
+		return nil, err
+	}
 	a.SPA = web.NewSPA(webdist.Dist())
 	if !a.SPA.Built() {
 		log.Warn("web UI not embedded; serving placeholder page (run `make web build`)")

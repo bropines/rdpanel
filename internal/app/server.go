@@ -60,7 +60,9 @@ func (a *App) Handler() http.Handler {
 		})
 		api.Route("/v1/events", func(r chi.Router) {
 			r.NotFound(httpx.NotFound)
-			events.Register(r, events.Deps{Log: a.Log.With("component", "events"), Store: a.Store})
+			events.Register(r, events.Deps{
+				Log: a.Log.With("component", "events"), Store: a.Store, Bus: a.Events, Auth: a.EventsAuth,
+			})
 		})
 		clientapi.Register(api, clientapi.Deps{
 			Log: a.Log.With("component", "clientapi"), Config: cfg, Store: a.Store, AEAD: a.AEAD,
