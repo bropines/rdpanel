@@ -39,6 +39,9 @@ func (a *App) startWorkers(ctx context.Context, wg *sync.WaitGroup) {
 	if r := a.HBBS.Reconciler; r != nil {
 		run("hbbs-reconcile", r.Run)
 	}
+	if c := a.HBBS.Control; c != nil {
+		run("hbbs-punch-requests", func(ctx context.Context) { a.runPunchCollector(ctx, c) })
+	}
 }
 
 func (a *App) runJanitor(ctx context.Context) {
@@ -54,10 +57,11 @@ func (a *App) runJanitor(ctx context.Context) {
 	}
 }
 
-// janitorPass deletes stale tokens and OAuth states. Audit retention is left to
-// stream B (it depends on the audit.retention_days setting).
+// janitorPass deletes stale tokens and OAuth states, and audit rows past the
+// audit.retention_days setting (see purgeRetention).
 func (a *App) janitorPass(ctx context.Context) {
 	now := time.Now()
+	a.purgeRetention(ctx, now)
 	if n, err := a.Store.AuthTokens.PurgeInactive(ctx, now.Add(-tokenGrace)); err != nil {
 		if ctx.Err() == nil {
 			a.Log.Warn("janitor: purge tokens", slog.Any("err", err))

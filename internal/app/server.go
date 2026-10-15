@@ -57,6 +57,7 @@ func (a *App) Handler() http.Handler {
 			JWT: a.JWT, Hasher: a.Hasher, Limiter: a.Limiter, Metrics: a.Registry, TOTP: a.TOTP,
 		}
 		a.wireAdminDeps(&adminDeps)
+		a.b2bDeps(&adminDeps)
 		oidcSvc := oidc.NewService(oidc.Options{
 			Store: a.Store, AEAD: a.AEAD, JWT: a.JWT, Log: a.Log.With("component", "oidc"),
 			PublicURL: cfg.PublicURL, TokenLifetime: cfg.Auth.TokenLifetime, JWTLifetime: cfg.Auth.JWTLifetime,

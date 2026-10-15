@@ -58,6 +58,18 @@ type Deps struct {
 	Kicks DeviceKicker
 	// Events publishes live events such as device.updated (nil: none).
 	Events EventPublisher
+	// ---- stream B2b: address books, audit, server (hbbs/hbbr) ----
+	// PresenceSrc is the live device presence (nil: devices report offline and
+	// /server/health reports the heartbeat fallback).
+	PresenceSrc PresenceSource
+	// Control is the hbbs/hbbr admin channel (nil: hbbs-backed /server/*
+	// endpoints answer 503 server_unavailable).
+	Control ServerControl
+	// Reconciler owns the desired hbbs/hbbr settings (nil: /server/settings 503).
+	Reconciler SettingsReconciler
+	// ConsoleLimit caps raw console commands per admin per minute (default 30).
+	ConsoleLimit int
+	// ---- end stream B2b ----
 }
 
 // Register mounts the admin API on r (already scoped to /api/v1/admin).
@@ -72,4 +84,5 @@ func Register(r chi.Router, d Deps) {
 	c.registerSecurity(r)
 	c.registerProviders(r)
 	registerResources(r, c)
+	registerB2b(r, d)
 }

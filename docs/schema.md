@@ -12,6 +12,7 @@ automatically on start (`rdpanel serve`, `rdpanel user ...`).
 | `00003_audit_settings.sql` | login_events, connection_audits, file_transfer_audits, alarm_audits, audit_nonces, admin_audit, server_commands, server_settings, settings, migration_runs |
 | `00004_device_public_key.sql` | devices.pk |
 | `00005_b2a_panel.sql` | panel_assets (branding logo), presence_samples (dashboard online series) |
+| `00006_b2b_punch_requests.sql` | punch_requests |
 
 Later streams add new numbered files; never edit an applied migration.
 
@@ -235,6 +236,19 @@ Client audit retry de-duplication: `nonce` primary key, kept 15 minutes (janitor
 Every admin mutation (panel or CLI): `actor_user_id` (SET NULL) + `actor_name` snapshot
 (`cli` for command-line actions), `actor_ip`, `action` (dotted verb, e.g. `user.create`),
 `target_type`, `target_id`, `details` JSON (never secrets), `created_at`.
+hbbs/hbbr admin-channel calls are recorded as `server.command` (mutating typed calls) and
+`server.console` (raw console lines, with an `output_excerpt`; read by `/server/console/history`).
+
+### `punch_requests`
+hbbs `pr` entries collected every minute by the panel (then cleared in hbbs with `pr -`):
+`at`, `from_ip`, `to_rustdesk_id`, `to_ip`, `created_at`.
+
+### Retention
+The janitor purges audit rows older than the `audit.retention_days` setting: either one
+number for every category, or an object `{"<category>_days": n}` with the categories
+`login_events`, `connection_audits`, `file_transfer_audits`, `alarm_audits`, `admin_audit`,
+`punch_requests` (the `PanelSettings.retention` shape). Default 180 days; 0 keeps forever.
+Open connections are kept for twice the retention.
 
 ## Server control and settings
 
