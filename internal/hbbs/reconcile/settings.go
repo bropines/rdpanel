@@ -30,6 +30,8 @@ type Settings struct {
 	RelayServers   []string `json:"relay_servers"`
 	AlwaysUseRelay *bool    `json:"always_use_relay"`
 	MustLogin      *bool    `json:"must_login"`
+	// TCPKeepalive needs bropines/rustdesk-server >= 393f872 (tcp-keepalive).
+	TCPKeepalive *bool `json:"tcp_keepalive"`
 	// hbbr
 	Blacklist           []string `json:"blacklist"`
 	Blocklist           []string `json:"blocklist"`
@@ -46,6 +48,7 @@ const (
 	KeyRelayServers        = "relay_servers"
 	KeyAlwaysUseRelay      = "always_use_relay"
 	KeyMustLogin           = "must_login"
+	KeyTCPKeepalive        = "tcp_keepalive"
 	KeyBlacklist           = "blacklist"
 	KeyBlocklist           = "blocklist"
 	KeyLimitSpeed          = "limit_speed"
@@ -77,6 +80,8 @@ func fields() []field {
 			func(s *Settings, r json.RawMessage) error { return json.Unmarshal(r, &s.AlwaysUseRelay) }},
 		{control.HBBS, KeyMustLogin, func(s *Settings) any { return ptr(s.MustLogin) },
 			func(s *Settings, r json.RawMessage) error { return json.Unmarshal(r, &s.MustLogin) }},
+		{control.HBBS, KeyTCPKeepalive, func(s *Settings) any { return ptr(s.TCPKeepalive) },
+			func(s *Settings, r json.RawMessage) error { return json.Unmarshal(r, &s.TCPKeepalive) }},
 		{control.HBBR, KeyBlacklist, func(s *Settings) any { return nilIfNil(s.Blacklist) },
 			func(s *Settings, r json.RawMessage) error { return json.Unmarshal(r, &s.Blacklist) }},
 		{control.HBBR, KeyBlocklist, func(s *Settings) any { return nilIfNil(s.Blocklist) },

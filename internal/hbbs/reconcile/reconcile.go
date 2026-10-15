@@ -327,6 +327,9 @@ func (r *Reconciler) applyHBBS(ctx context.Context, s Settings, force bool) []ke
 	if s.MustLogin != nil {
 		out = append(out, applyFlag(ctx, KeyMustLogin, *s.MustLogin, force, ctl.MustLogin, ctl.SetMustLogin))
 	}
+	if s.TCPKeepalive != nil {
+		out = append(out, applyFlag(ctx, KeyTCPKeepalive, *s.TCPKeepalive, force, ctl.TCPKeepalive, ctl.SetTCPKeepalive))
+	}
 	relaysResent := false
 	if s.AlwaysUseRelay != nil {
 		res := keyResult{key: KeyAlwaysUseRelay}
@@ -550,6 +553,16 @@ func (r *Reconciler) Current(ctx context.Context) (Observed, error) {
 			return err
 		}
 		s.RelayServers, s.AlwaysUseRelay, s.MustLogin = rs, &aur, &ml
+		// hbbs builds without tcp-keepalive (upstream, or the fork before
+		// 393f872) answer with nothing: report the key as unknown (nil)
+		// instead of failing the whole hbbs read-back.
+		tk, err := ctl.TCPKeepalive(ctx)
+		switch {
+		case err == nil:
+			s.TCPKeepalive = &tk
+		case !errors.Is(err, control.ErrBadResponse):
+			return err
+		}
 		return nil
 	}(); err != nil {
 		obs.Errors[control.HBBS] = err.Error()

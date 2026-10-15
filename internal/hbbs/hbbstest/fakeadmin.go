@@ -28,6 +28,7 @@ type FakeAdmin struct {
 	relays         []string
 	alwaysUseRelay bool
 	mustLogin      bool
+	tcpKeepalive   bool
 	// LegacyAURBug reproduces the upstream bug where "aur Y|N" re-parses the
 	// relay list from "Y"/"N" (which fails DNS and empties it).
 	LegacyAURBug bool
@@ -95,12 +96,19 @@ func (f *FakeAdmin) State() (relays []string, aur, ml bool, black, block []strin
 	return append([]string(nil), f.relays...), f.alwaysUseRelay, f.mustLogin, setKeys(f.black), setKeys(f.block), r, f.dt, f.t
 }
 
+// TCPKeepalive reports the fake's TCP_KEEPALIVE flag.
+func (f *FakeAdmin) TCPKeepalive() bool {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.tcpKeepalive
+}
+
 // Restart simulates a process restart (state back to "CLI defaults").
 func (f *FakeAdmin) Restart() {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.relays = []string{"relay.example.com"}
-	f.alwaysUseRelay, f.mustLogin = false, false
+	f.alwaysUseRelay, f.mustLogin, f.tcpKeepalive = false, false, false
 	f.black, f.block = map[string]bool{}, map[string]bool{}
 	f.rates = map[string]float64{"limit-speed": 32, "total-bandwidth": 1024, "single-bandwidth": 128}
 	f.dt, f.t = 0.66, 1800
@@ -217,6 +225,12 @@ func (f *FakeAdmin) check(cmd string) string {
 			return ""
 		}
 		fmt.Fprintf(&b, "MUST_LOGIN: %v\n", f.mustLogin)
+	case "tcp-keepalive", "tk":
+		if a, ok := arg(1); ok {
+			f.tcpKeepalive = strings.ToUpper(a) == "Y"
+			return ""
+		}
+		fmt.Fprintf(&b, "TCP_KEEPALIVE: %v\n", f.tcpKeepalive)
 	case "ip-blocker", "ib":
 		b.WriteString("2\n")
 		a, ok := arg(1)

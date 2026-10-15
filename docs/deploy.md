@@ -117,6 +117,7 @@ DB) succeeds.
 | `ENCRYPTED_ONLY` | hbbs, hbbr | `0` | `1` adds `-k _` (only clients with the public key). hbbs requires the key by default anyway; this mainly makes hbbr check it |
 | `ALWAYS_USE_RELAY` | hbbs | `N` | `Y` disables P2P |
 | `MUST_LOGIN` | hbbs | `N` | `Y` requires a panel login token for connections |
+| `TCP_KEEPALIVE` | hbbs | `N` | `Y` keeps TCP/WebSocket-mode clients online (see [WebSocket and TCP-mode clients](#websocket-and-tcp-mode-clients)) |
 | `RUSTDESK_API_JWT_KEY` | panel, hbbs | generated `jwt.key` | HS256 key of client tokens (raw string) |
 | `KEY_PRIV`, `KEY_PUB` | key-secret | — | initial key pair (also docker secrets `key_priv`/`key_pub`) |
 | `LIMIT_SPEED`, `SINGLE_BANDWIDTH`, `TOTAL_BANDWIDTH`, `DOWNGRADE_THRESHOLD`, `DOWNGRADE_START_CHECK` | hbbr | hbbr defaults | relay bandwidth limits |
@@ -267,6 +268,41 @@ local; blocking it on the public vhost (as above) is still recommended.
   `127.0.0.1:21115` or `127.0.0.1:21117`: the hbbs/hbbr admin channel has no
   authentication besides "connection comes from loopback". With
   `network_mode: host`, every process on the host can use it.
+
+### WebSocket and TCP-mode clients
+
+RustDesk clients normally register with hbbs over UDP every few seconds. Some
+use a long-lived TCP or WebSocket rendezvous connection instead: the "Use
+WebSocket" option (RustDesk 1.4+), the web client, clients behind a proxy or
+with UDP blocked. Such a client registers once and afterwards only echoes the
+empty frames the server sends. Upstream hbbs never sends any, so the client
+times out about every 90 s, reconnects and re-registers, and hbbs (and the
+panel) show it online for only 30 s after each registration: in practice the
+device flickers online about a third of the time.
+
+The hbbs in this image (bropines/rustdesk-server) has an opt-in fix:
+`TCP_KEEPALIVE=Y` (or `--tcp-keepalive=Y`, or the admin command
+`tcp-keepalive Y|N`) makes hbbs send an empty frame every 12 s on every
+registered TCP/WebSocket rendezvous connection. The client echoes it, which
+also refreshes its registration, so it stays online continuously. The
+**Keepalive for TCP/WebSocket clients** toggle on the panel's Server page sets
+the same flag at runtime and re-applies it after an hbbs restart (it then
+overrides the env value).
+
+- **When to enable:** you have (or expect) clients with "Use WebSocket"
+  enabled, behind HTTP proxies, or on networks that block UDP, and they show
+  up as offline or flapping. Leave it `N` if all your clients use UDP: nothing
+  changes for them either way.
+- **Cost:** one empty frame per connection every 12 s (a few bytes; the timer
+  runs only for registered TCP/WebSocket connections).
+- **Trade-off of WebSocket mode itself** (not of the keepalive): WebSocket-mode
+  clients always connect through the relay (hbbr, port 21119 or your `/ws/relay`
+  proxy); there is no P2P hole punching, so all their traffic goes through
+  your server. Size `TOTAL_BANDWIDTH`/`SINGLE_BANDWIDTH` accordingly.
+- A reverse proxy in front of 21118 must not time out idle WebSocket
+  connections faster than ~30 s (`proxy_read_timeout 1h` above is fine).
+- Upstream hbbs does not know the option; with an upstream binary the panel
+  shows the setting as unknown and reports an apply error if it is managed.
 
 ## Upgrading from the lejianwen s6 image (`lejianwen/rustdesk-server-s6` + `rustdesk-api`)
 

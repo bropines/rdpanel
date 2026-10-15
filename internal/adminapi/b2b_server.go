@@ -199,6 +199,7 @@ type serverSettingsValuesDTO struct {
 	RelayServers         []string `json:"relay_servers"`
 	AlwaysUseRelay       *bool    `json:"always_use_relay"`
 	MustLogin            *bool    `json:"must_login"`
+	TCPKeepalive         *bool    `json:"tcp_keepalive"`
 	Blacklist            []string `json:"blacklist"`
 	Blocklist            []string `json:"blocklist"`
 	LimitSpeedMbps       *float64 `json:"limit_speed_mbps"`
@@ -210,7 +211,7 @@ type serverSettingsValuesDTO struct {
 
 func newSettingsValuesDTO(s reconcile.Settings) serverSettingsValuesDTO {
 	return serverSettingsValuesDTO{RelayServers: s.RelayServers, AlwaysUseRelay: s.AlwaysUseRelay,
-		MustLogin: s.MustLogin, Blacklist: s.Blacklist, Blocklist: s.Blocklist, LimitSpeedMbps: s.LimitSpeedMbps,
+		MustLogin: s.MustLogin, TCPKeepalive: s.TCPKeepalive, Blacklist: s.Blacklist, Blocklist: s.Blocklist, LimitSpeedMbps: s.LimitSpeedMbps,
 		TotalBandwidthMbps: s.TotalBandwidthMbps, SingleBandwidthMbps: s.SingleBandwidthMbps,
 		DowngradeThreshold: s.DowngradeThreshold, DowngradeStartCheckS: s.DowngradeStartCheckSecs}
 }
@@ -246,6 +247,7 @@ var settingKeys = []settingKey{
 	{"relay_servers", control.HBBS, reconcile.KeyRelayServers},
 	{"always_use_relay", control.HBBS, reconcile.KeyAlwaysUseRelay},
 	{"must_login", control.HBBS, reconcile.KeyMustLogin},
+	{"tcp_keepalive", control.HBBS, reconcile.KeyTCPKeepalive},
 	{"blacklist", control.HBBR, reconcile.KeyBlacklist},
 	{"blocklist", control.HBBR, reconcile.KeyBlocklist},
 	{"limit_speed_mbps", control.HBBR, reconcile.KeyLimitSpeed},
@@ -345,6 +347,11 @@ func applySettingsPatch(s *reconcile.Settings, patch map[string]json.RawMessage)
 			s.MustLogin = nil
 			if !null {
 				err = json.Unmarshal(raw, &s.MustLogin)
+			}
+		case "tcp_keepalive":
+			s.TCPKeepalive = nil
+			if !null {
+				err = json.Unmarshal(raw, &s.TCPKeepalive)
 			}
 		case "blacklist", "blocklist":
 			dst := &s.Blacklist
@@ -651,6 +658,7 @@ var consoleCommands = map[string]consoleMeta{
 	"hbbs/always-use-relay":      {"Show or set ALWAYS_USE_RELAY (Y/N). Prefer the server settings page.", 1, ynArg, true},
 	"hbbs/test-geo":              {"Relay hbbs would pick for one or two IPs (advances its rotation).", 2, ipArg, false},
 	"hbbs/must-login":            {"Show or set MUST_LOGIN (Y/N). Prefer the server settings page.", 1, ynArg, true},
+	"hbbs/tcp-keepalive":         {"Show or set TCP_KEEPALIVE (Y/N): keepalives for TCP/WebSocket clients. Prefer the server settings page.", 1, ynArg, true},
 	"hbbr/h":                     {"Show the hbbr help text.", 0, noArgPat, false},
 	"hbbr/blacklist-add":         {"Throttle IPs to limit-speed (ip|ip|...).", 1, ipsArg, true},
 	"hbbr/blacklist-remove":      {"Remove throttled IPs (ip|ip|... or all).", 1, `^([0-9A-Fa-f:.|]+|all)$`, true},

@@ -636,13 +636,14 @@
       "console": "Console"
     },
     "rendezvous": "ID server (hbbs)",
-    "rendezvousHint": "Relay selection and login policy.",
+    "rendezvousHint": "Relay selection, login policy and client keepalive.",
     "relay": "Relay (hbbr)",
     "relayHint": "Bandwidth limits and IP lists. Speeds are in Mbit/s.",
     "keys": {
       "relay_servers": "Relay servers",
       "always_use_relay": "Always use relay",
       "must_login": "Require login",
+      "tcp_keepalive": "Keepalive for TCP/WebSocket clients",
       "blacklist": "Blacklist (throttled)",
       "blocklist": "Blocklist (refused)",
       "limit_speed_mbps": "Throttled speed",
@@ -655,6 +656,7 @@
       "relay_servers": "One host[:port] per line.",
       "always_use_relay": "Force every connection through the relay.",
       "must_login": "Only signed-in clients may connect (needs the same JWT key as the panel).",
+      "tcp_keepalive": "Keeps clients with \"Use WebSocket\" or in TCP mode (UDP blocked, proxy) shown online: hbbs pings them every 12 s. Off = upstream behaviour (such clients look online only ~30 s of every 90 s).",
       "blacklist": "One IP or CIDR per line; relays from these IPs are slowed down.",
       "blocklist": "One IP or CIDR per line; connections from these IPs are refused.",
       "limit_speed_mbps": "Speed for blacklisted or downgraded relays.",

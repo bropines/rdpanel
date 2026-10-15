@@ -25,6 +25,8 @@ func KeyInSync(target control.Target, key string, desired, observed Settings) (m
 			return true, *observed.AlwaysUseRelay == *desired.AlwaysUseRelay
 		case KeyMustLogin:
 			return true, *observed.MustLogin == *desired.MustLogin
+		case KeyTCPKeepalive:
+			return true, *observed.TCPKeepalive == *desired.TCPKeepalive
 		case KeyBlacklist:
 			return true, sameSet(observed.Blacklist, desired.Blacklist)
 		case KeyBlocklist:
