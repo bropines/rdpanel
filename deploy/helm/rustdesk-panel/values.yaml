@@ -66,6 +66,10 @@ panel:
   # -- RDPANEL_PUBLIC_URL. External base URL clients use as "API server", e.g.
   # https://rustdesk.example.com. Required for OIDC; https enables HSTS + Secure cookies.
   publicURL: ""
+  # -- RDPANEL_ADMIN_URL. Panel (SPA + /api/v1) base URL when the panel is served
+  # from another (e.g. internal-only) host than publicURL; OIDC panel logins hand
+  # off there. Empty = publicURL. See docs/deploy.md "Split hosts".
+  adminURL: ""
   # -- RDPANEL_DATA_DIR. Panel data dir inside the data volume (container contract: /data/panel).
   dataDir: /data/panel
   # -- RDPANEL_HBBS_PUBLIC_KEY_FILE. hbbs writes its key pair into /data.

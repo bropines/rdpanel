@@ -23,6 +23,9 @@ data:
   {{- with $p.publicURL }}
   RDPANEL_PUBLIC_URL: {{ . | quote }}
   {{- end }}
+  {{- with $p.adminURL }}
+  RDPANEL_ADMIN_URL: {{ . | quote }}
+  {{- end }}
   RDPANEL_DATA_DIR: {{ $p.dataDir | quote }}
   RDPANEL_HBBS_PUBLIC_KEY_FILE: {{ $p.hbbsPublicKeyFile | quote }}
   RDPANEL_HBBS_ID_SERVER: {{ $p.hbbsIdServer | quote }}
