@@ -35,6 +35,10 @@ export RUSTDESK_API_JWT_KEY='...'   # the same value hbbs uses for MUST_LOGIN
 
 Without `make web` the binary still builds and serves a placeholder page instead of the UI.
 For UI development run `rdpanel serve` and `cd web && npm run dev` (Vite proxies `/api`).
+Without a backend, `npm run dev:mock` serves the whole admin API from an in-memory dataset
+(Mock Service Worker; sign in as `admin`/`admin`, TOTP `123456`). `npm run build:mock` writes
+a mock build to `web/dist-mock` (never embedded); `npm run e2e` and `npm run screenshots`
+drive it with Playwright (`docs/screenshots/`).
 
 ### Commands
 
