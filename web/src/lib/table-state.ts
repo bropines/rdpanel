@@ -64,6 +64,18 @@ export function tableStateToQuery(state: TableState): Record<string, string | nu
   return out;
 }
 
+/**
+ * Select widgets hand back strings; store booleans and ids as real JSON values so the
+ * router writes `?online=false&owner=2` instead of quoted strings (`online=%22false%22`).
+ */
+export function typedFilterValue(v: FilterValue | undefined): FilterValue | undefined {
+  if (v === "" || v === undefined) return undefined;
+  if (v === "true") return true;
+  if (v === "false") return false;
+  if (typeof v === "string" && /^(0|[1-9]\d{0,15})$/.test(v)) return Number(v);
+  return v;
+}
+
 /** Search patch for a state change: filter/search/sort changes reset to page 1. */
 export function searchPatch(
   change: Partial<Omit<TableState, "filters">> & { filters?: Record<string, FilterValue | undefined> },
@@ -80,7 +92,7 @@ export function searchPatch(
     resetPage = true;
   }
   if (change.filters) {
-    for (const [k, v] of Object.entries(change.filters)) patch[k] = v === "" ? undefined : v;
+    for (const [k, v] of Object.entries(change.filters)) patch[k] = typedFilterValue(v);
     resetPage = true;
   }
   if (change.pageSize !== undefined) {

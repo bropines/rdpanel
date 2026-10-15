@@ -20,8 +20,10 @@ const int = (min: number, max = Number.MAX_SAFE_INTEGER) =>
   z
     .string()
     .trim()
-    .regex(/^\d+$/, "validation.integer")
-    .refine((v) => Number(v) >= min && Number(v) <= max, { message: "validation.range" });
+    .superRefine((v, ctx) => {
+      if (!/^\d+$/.test(v)) ctx.addIssue({ code: "custom", message: "validation.integer" });
+      else if (Number(v) < min || Number(v) > max) ctx.addIssue({ code: "custom", message: "validation.range" });
+    });
 
 const httpUrl = z
   .string()
@@ -216,7 +218,7 @@ export function SettingsPage() {
   const errors = form.formState.errors as Record<string, { message?: string } | undefined>;
   const err = (k: keyof SettingsValues) => (errors[k]?.message ? t(errors[k]!.message!) : undefined);
   const num = (k: keyof SettingsValues, label: string, hint?: string) => (
-    <Field label={label} htmlFor={`s-${k}`} error={err(k)} hint={hint}>
+    <Field key={k} label={label} htmlFor={`s-${k}`} error={err(k)} hint={hint}>
       <Input id={`s-${k}`} inputMode="numeric" className="max-w-[10rem]" {...form.register(k)} />
     </Field>
   );

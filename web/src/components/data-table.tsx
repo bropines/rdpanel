@@ -26,7 +26,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { formatNumber } from "@/lib/format";
 import { useLocalState, useSlashFocus } from "@/lib/hooks";
-import { pageCount, PAGE_SIZES, sortingToSortParam, sortParamToSorting } from "@/lib/table-state";
+import { pageCount, PAGE_SIZES, sortParamToSorting } from "@/lib/table-state";
 import { cn } from "@/lib/utils";
 
 export interface ColumnMeta {
@@ -125,17 +125,12 @@ export function DataTable<T>(props: DataTableProps<T>) {
     manualPagination: true,
     manualSorting: true,
     pageCount: pageCount(total, pageSize),
-    enableMultiSort: false,
-    enableSortingRemoval: true,
+    // Sorting state is display-only (the server sorts); header clicks call onSortChange.
     state: {
       sorting: sortParamToSorting(props.sort),
       columnVisibility: visibility,
       rowSelection,
       pagination: { pageIndex: page - 1, pageSize },
-    },
-    onSortingChange: (updater) => {
-      const next = typeof updater === "function" ? updater(sortParamToSorting(props.sort)) : updater;
-      props.onSortChange?.(sortingToSortParam(next));
     },
     onColumnVisibilityChange: (updater) => setVisibility(typeof updater === "function" ? updater(visibility) : updater),
     onRowSelectionChange: (updater) =>
@@ -170,7 +165,10 @@ export function DataTable<T>(props: DataTableProps<T>) {
               {hg.headers.map((h) => {
                 const meta = h.column.columnDef.meta as ColumnMeta | undefined;
                 const sorted = h.column.getIsSorted();
-                const canSort = h.column.getCanSort() && !!props.onSortChange;
+                // Columns are display columns (cell renderers, no accessor), so sortability is
+                // explicit: every column sorts server-side unless `enableSorting: false`.
+                const canSort = h.column.columnDef.enableSorting !== false && h.column.id !== "_select" && !!props.onSortChange;
+                const toggleSort = () => props.onSortChange?.(sorted === "asc" ? `-${h.column.id}` : h.column.id);
                 return (
                   <TableHead
                     key={h.id}
@@ -181,7 +179,7 @@ export function DataTable<T>(props: DataTableProps<T>) {
                       <button
                         type="button"
                         className="-ml-1 inline-flex items-center gap-1 rounded px-1 py-0.5 hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-                        onClick={h.column.getToggleSortingHandler()}
+                        onClick={toggleSort}
                       >
                         {flexRender(h.column.columnDef.header, h.getContext())}
                         {sorted === "asc" ? (

@@ -166,8 +166,10 @@ export function DeviceDrawer({
     onSuccess: () => {
       toast.success(t("devices.deleted"));
       setConfirm(null);
-      void qc.invalidateQueries({ queryKey: deviceKeys.all });
       onClose();
+      qc.removeQueries({ queryKey: deviceKeys.detail(deviceId!) });
+      void qc.invalidateQueries({ queryKey: ["devices", "list"] });
+      void qc.invalidateQueries({ queryKey: deviceKeys.facets });
     },
     onError: toastError,
   });
