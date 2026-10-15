@@ -64,7 +64,7 @@ func (a *App) Handler() http.Handler {
 		})
 		clientapi.Register(api, clientapi.Deps{
 			Log: a.Log.With("component", "clientapi"), Config: cfg, Store: a.Store, AEAD: a.AEAD,
-			JWT: a.JWT, Hasher: a.Hasher, Limiter: a.Limiter, Metrics: a.Registry,
+			JWT: a.JWT, Hasher: a.Hasher, Limiter: a.Limiter, Metrics: a.Registry, Kicks: a.Kicks,
 		})
 	})
 
