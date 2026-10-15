@@ -6,25 +6,43 @@ import (
 	"time"
 )
 
-func TestRetentionDaysParsing(t *testing.T) {
+func TestRetentionDays(t *testing.T) {
 	s, _ := newTestStore(t)
 	ctx := context.Background()
 	days, err := s.Settings.RetentionDays(ctx)
-	if err != nil || days[RetentionAdminAudit] != DefaultRetentionDays || len(days) != 6 {
+	if err != nil || days[RetentionAdminAudit] != RetentionDefaults[RetentionAdminAudit] || len(days) != 6 {
 		t.Fatalf("default: %v %v", days, err)
 	}
-	if err := s.Settings.Set(ctx, SettingRetentionDays, 30, nil); err != nil {
+	if err := s.Settings.Set(ctx, SettingRetentionLoginEvents, 7, nil); err != nil {
 		t.Fatal(err)
 	}
-	if days, _ = s.Settings.RetentionDays(ctx); days[RetentionLoginEvents] != 30 || days[RetentionPunchRequests] != 30 {
-		t.Fatalf("number: %v", days)
-	}
-	if err := s.Settings.Set(ctx, SettingRetentionDays, map[string]int{"login_events_days": 7, "admin_audit_days": 0}, nil); err != nil {
+	if err := s.Settings.Set(ctx, SettingRetentionAdminAudit, 0, nil); err != nil {
 		t.Fatal(err)
 	}
 	days, _ = s.Settings.RetentionDays(ctx)
-	if days[RetentionLoginEvents] != 7 || days[RetentionAdminAudit] != 0 || days[RetentionAlarmAudits] != DefaultRetentionDays {
-		t.Fatalf("object: %v", days)
+	if days[RetentionLoginEvents] != 7 || days[RetentionAdminAudit] != 0 ||
+		days[RetentionAlarmAudits] != RetentionDefaults[RetentionAlarmAudits] {
+		t.Fatalf("settings: %v", days)
+	}
+	for _, c := range RetentionCategories() {
+		if RetentionSettingKey(c) == "" || RetentionDefaults[c] == 0 {
+			t.Fatalf("category %s", c)
+		}
+	}
+}
+
+func TestClientTokenLifetimes(t *testing.T) {
+	s, _ := newTestStore(t)
+	ctx := context.Background()
+	if tok, jwt := s.Settings.ClientTokenLifetimes(ctx, 10*time.Hour, 10*time.Hour); tok != 10*time.Hour || jwt != 10*time.Hour {
+		t.Fatalf("default: %v %v", tok, jwt)
+	}
+	_ = s.Settings.Set(ctx, SettingClientTokenLifetimeH, 2, nil)
+	if tok, jwt := s.Settings.ClientTokenLifetimes(ctx, 10*time.Hour, 10*time.Hour); tok != 2*time.Hour || jwt != 2*time.Hour {
+		t.Fatalf("setting: %v %v", tok, jwt)
+	}
+	if tok, jwt := s.Settings.ClientTokenLifetimes(ctx, 10*time.Hour, 5*time.Hour); tok != 2*time.Hour || jwt != 5*time.Hour {
+		t.Fatalf("explicit jwt lifetime: %v %v", tok, jwt)
 	}
 }
 
@@ -40,8 +58,10 @@ func TestPurgeRetention(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	must(s.Settings.Set(ctx, SettingRetentionDays, map[string]int{"login_events_days": 30, "connection_audits_days": 30,
-		"file_transfer_audits_days": 30, "alarm_audits_days": 30, "admin_audit_days": 0, "punch_requests_days": 30}, nil))
+	for c, d := range map[string]int{RetentionLoginEvents: 30, RetentionConnectionAudits: 30, RetentionFileTransferAudits: 30,
+		RetentionAlarmAudits: 30, RetentionAdminAudit: 0, RetentionPunchRequests: 30} {
+		must(s.Settings.Set(ctx, RetentionSettingKey(c), d, nil))
+	}
 	must(s.LoginEvents.Record(ctx, &LoginEvent{Method: LoginMethodPassword, CreatedAt: old}))
 	must(s.LoginEvents.Record(ctx, &LoginEvent{Method: LoginMethodPassword}))
 	must(s.ConnectionAudits.Create(ctx, &ConnectionAudit{DeviceID: "1", StartedAt: old, EndedAt: &ended}))

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"sync"
 	"time"
 
 	"github.com/bropines/rustdesk-panel/internal/auth"
@@ -96,7 +97,7 @@ func (h *handler) authenticate(r *http.Request, touch bool) (*session, error) {
 
 func (h *handler) touchToken(ctx context.Context, tok *store.AuthToken) {
 	now := h.Now()
-	life := h.tokens.tokenLife
+	life := h.tokens.tokenLifetime(ctx)
 	var newExp *time.Time
 	if tok.ExpiresAt.Sub(now) < life/3 {
 		e := now.Add(life)
@@ -120,6 +121,28 @@ type TokenIssuer struct {
 	now       func() time.Time
 	tokenLife time.Duration
 	jwtLife   time.Duration
+
+	mu       sync.Mutex
+	cachedAt time.Time
+	cLife    time.Duration
+}
+
+// lifetimes returns the effective token and JWT lifetimes (the
+// auth.client_token_lifetime_hours setting overrides the configuration).
+func (ti *TokenIssuer) lifetimes(ctx context.Context) (token, jwt time.Duration) {
+	return ti.st.Settings.ClientTokenLifetimes(ctx, ti.tokenLife, ti.jwtLife)
+}
+
+// tokenLifetime is the sliding token lifetime, cached briefly (it is read on
+// every authenticated client request).
+func (ti *TokenIssuer) tokenLifetime(ctx context.Context) time.Duration {
+	ti.mu.Lock()
+	defer ti.mu.Unlock()
+	if ti.cLife == 0 || time.Since(ti.cachedAt) > 10*time.Second {
+		ti.cLife, _ = ti.lifetimes(ctx)
+		ti.cachedAt = time.Now()
+	}
+	return ti.cLife
 }
 
 // NewTokenIssuer builds a TokenIssuer from d (Store, JWT, Config, Log, Now).
@@ -163,12 +186,13 @@ func (ti *TokenIssuer) Issue(ctx context.Context, u *store.User, lc LoginContext
 		return "", fmt.Errorf("clientapi: user id %d does not fit u32", u.ID)
 	}
 	now := ti.now()
-	jwtExp := now.Add(ti.jwtLife).Truncate(time.Second)
+	tokenLife, jwtLife := ti.lifetimes(ctx)
+	jwtExp := now.Add(jwtLife).Truncate(time.Second)
 	// The JWT is {user_id, exp} only (hbbs compatibility), so two logins of
 	// one user within the same second would mint the same token: on a
 	// token_sha256 conflict move exp one second later and retry.
 	for attempt := 0; ; attempt++ {
-		raw, err := ti.issue(ctx, u, lc, now, jwtExp)
+		raw, err := ti.issue(ctx, u, lc, now, jwtExp, tokenLife)
 		if errors.Is(err, store.ErrConflict) && attempt < 30 {
 			jwtExp = jwtExp.Add(time.Second)
 			continue
@@ -177,7 +201,7 @@ func (ti *TokenIssuer) Issue(ctx context.Context, u *store.User, lc LoginContext
 	}
 }
 
-func (ti *TokenIssuer) issue(ctx context.Context, u *store.User, lc LoginContext, now, jwtExp time.Time) (string, error) {
+func (ti *TokenIssuer) issue(ctx context.Context, u *store.User, lc LoginContext, now, jwtExp time.Time, tokenLife time.Duration) (string, error) {
 	raw, err := ti.jwt.Mint(uint32(u.ID), jwtExp)
 	if err != nil {
 		return "", err
@@ -185,7 +209,7 @@ func (ti *TokenIssuer) issue(ctx context.Context, u *store.User, lc LoginContext
 	err = ti.st.Tx(ctx, func(tx *store.Store) error {
 		tok := &store.AuthToken{
 			UserID: u.ID, Kind: store.TokenClient, TokenSHA256: crypto.HashToken(raw), JWTExpiresAt: &jwtExp,
-			ExpiresAt: now.Add(ti.tokenLife), DeviceRustdeskID: clip(lc.DeviceID, maxIDLen),
+			ExpiresAt: now.Add(tokenLife), DeviceRustdeskID: clip(lc.DeviceID, maxIDLen),
 			DeviceUUID: clip(lc.DeviceUUID, 256), ClientPlatform: clip(lc.Platform, 64), UserAgent: lc.UserAgent,
 			IP: lc.IP, CreatedAt: now, LastUsedAt: &now,
 		}

@@ -244,11 +244,21 @@ hbbs `pr` entries collected every minute by the panel (then cleared in hbbs with
 `at`, `from_ip`, `to_rustdesk_id`, `to_ip`, `created_at`.
 
 ### Retention
-The janitor purges audit rows older than the `audit.retention_days` setting: either one
-number for every category, or an object `{"<category>_days": n}` with the categories
-`login_events`, `connection_audits`, `file_transfer_audits`, `alarm_audits`, `admin_audit`,
-`punch_requests` (the `PanelSettings.retention` shape). Default 180 days; 0 keeps forever.
+The janitor purges audit rows older than the per-category settings
+`retention.<category>_days` (written by `PATCH /settings` → `retention`; the same values
+`GET /settings` shows), with the categories `login_events`, `connection_audits`,
+`file_transfer_audits`, `alarm_audits`, `admin_audit`, `punch_requests`. Defaults
+(`store.RetentionDefaults`): 180 days, admin audit 365, punch requests 30; 0 keeps forever.
 Open connections are kept for twice the retention.
+
+### Runtime auth settings
+`auth.password_login_enabled` (false refuses password sign-in for the `user` role on the
+panel and the client API; admins keep it as break-glass access), `auth.session_idle_hours` /
+`auth.session_absolute_days` (new panel sessions; the idle timeout also slides existing
+ones) and `auth.client_token_lifetime_hours` (new client tokens and their sliding renewal;
+the JWT lifetime follows unless `RDPANEL_JWT_LIFETIME` sets another) are read at runtime.
+`public_url`, `admin_url`, trusted proxies and rate limits come from the configuration
+(environment) and are shown read-only.
 
 ## Server control and settings
 

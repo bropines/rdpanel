@@ -255,14 +255,15 @@ func (s *Service) Poll(ctx context.Context, code, id, uuid string, r *http.Reque
 // bound to the device that started the flow.
 func (s *Service) issueClientToken(ctx context.Context, user *store.User, st *store.OAuthState, r *http.Request) (string, int64, error) {
 	now := s.now()
-	jwtExp := now.Add(s.jwtLifetime)
+	tokenLife, jwtLife := s.st.Settings.ClientTokenLifetimes(ctx, s.tokenLifetime, s.jwtLifetime)
+	jwtExp := now.Add(jwtLife)
 	tok, err := s.jwt.Mint(uint32(user.ID), jwtExp) //nolint:gosec // users.id is CHECKed to fit u32
 	if err != nil {
 		return "", 0, err
 	}
 	jwtExp = jwtExp.Truncate(1e9)
 	row := &store.AuthToken{UserID: user.ID, Kind: store.TokenClient, TokenSHA256: crypto.HashToken(tok),
-		JWTExpiresAt: &jwtExp, ExpiresAt: now.Add(s.tokenLifetime), DeviceRustdeskID: st.DeviceRustdeskID,
+		JWTExpiresAt: &jwtExp, ExpiresAt: now.Add(tokenLife), DeviceRustdeskID: st.DeviceRustdeskID,
 		DeviceUUID: st.DeviceUUID, ClientPlatform: st.DeviceOS}
 	if r != nil {
 		row.IP, row.UserAgent = httpx.ClientIPString(r), clip(r.UserAgent(), 512)

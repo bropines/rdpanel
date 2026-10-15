@@ -14,7 +14,6 @@ import (
 const (
 	SettingBrandingTitle   = "branding.title"
 	SettingBrandingWelcome = "branding.welcome_markdown"
-	SettingRetentionDays   = "audit.retention_days"
 	SettingRequireAdmin2FA = "auth.require_admin_2fa"
 )
 
@@ -79,6 +78,34 @@ func (r *Settings) All(ctx context.Context) (map[string]json.RawMessage, error) 
 		out[k] = json.RawMessage(v)
 	}
 	return out, mapErr(rows.Err())
+}
+
+// ClientTokenLifetimes returns the sliding lifetime of client tokens and the
+// fixed JWT lifetime. The auth.client_token_lifetime_hours setting overrides
+// cfgToken; the JWT lifetime follows it unless the configuration sets a
+// different one (cfgJWT != cfgToken).
+func (r *Settings) ClientTokenLifetimes(ctx context.Context, cfgToken, cfgJWT time.Duration) (token, jwt time.Duration) {
+	token, jwt = cfgToken, cfgJWT
+	if h, err := GetOr(ctx, r, SettingClientTokenLifetimeH, 0); err == nil && h > 0 {
+		token = time.Duration(h) * time.Hour
+		if cfgJWT == cfgToken || cfgJWT <= 0 {
+			jwt = token
+		}
+	}
+	if jwt <= 0 {
+		jwt = token
+	}
+	return token, jwt
+}
+
+// PasswordLoginAllowed reports whether u may sign in with a password: the
+// auth.password_login_enabled setting (default true) applies to the user
+// role; admins can always use their password (break-glass access).
+func (r *Settings) PasswordLoginAllowed(ctx context.Context, u *User) (bool, error) {
+	if u.IsAdmin() {
+		return true, nil
+	}
+	return GetOr(ctx, r, SettingPasswordLoginEnabled, true)
 }
 
 // GetOr is Get with a default for unset keys.

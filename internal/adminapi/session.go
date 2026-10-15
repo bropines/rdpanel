@@ -5,6 +5,7 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
+	"sync"
 	"time"
 
 	"github.com/bropines/rustdesk-panel/internal/auth"
@@ -104,11 +105,47 @@ func SessionMiddleware(d Deps) func(http.Handler) http.Handler {
 
 // sessions creates, loads and revokes panel sessions (auth_tokens kind=web).
 type sessions struct {
-	d        Deps
-	totp     *TOTPService
+	d    Deps
+	totp *TOTPService
+	// idle/absolute are the configured defaults; the auth.session_idle_hours
+	// and auth.session_absolute_days settings override them (lifetimes).
 	idle     time.Duration
 	absolute time.Duration
 	secure   bool
+
+	mu       sync.Mutex
+	cachedAt time.Time
+	cIdle    time.Duration
+}
+
+// lifetimeCacheTTL bounds how long lookup uses a cached idle timeout.
+const lifetimeCacheTTL = 10 * time.Second
+
+// lifetimes reads the effective session lifetimes from the settings.
+func (m *sessions) lifetimes(ctx context.Context) (idle, absolute time.Duration) {
+	idle, absolute = m.idle, m.absolute
+	st := m.d.Store.Settings
+	if h, err := store.GetOr(ctx, st, store.SettingSessionIdleHours, 0); err == nil && h > 0 {
+		idle = time.Duration(h) * time.Hour
+	}
+	if d, err := store.GetOr(ctx, st, store.SettingSessionAbsoluteDays, 0); err == nil && d > 0 {
+		absolute = time.Duration(d) * 24 * time.Hour
+	}
+	if idle > absolute {
+		idle = absolute
+	}
+	return idle, absolute
+}
+
+// idleTimeout is lifetimes' idle value, cached briefly (read per request).
+func (m *sessions) idleTimeout(ctx context.Context) time.Duration {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.cIdle == 0 || time.Since(m.cachedAt) > lifetimeCacheTTL {
+		m.cIdle, _ = m.lifetimes(ctx)
+		m.cachedAt = time.Now()
+	}
+	return m.cIdle
 }
 
 func newSessions(d Deps, totp *TOTPService) *sessions {
@@ -137,7 +174,7 @@ func (m *sessions) create(ctx context.Context, w http.ResponseWriter, r *http.Re
 		return nil, "", err
 	}
 	now := m.now()
-	idle, abs := m.idle, m.absolute
+	idle, abs := m.lifetimes(ctx)
 	if mfaPending {
 		idle, abs = mfaPendingTTL, mfaPendingTTL
 	}
@@ -231,7 +268,7 @@ func (m *sessions) lookup(ctx context.Context, plain string) (*SessionInfo, erro
 	info := &SessionInfo{Token: t, User: user, MFAPending: t.MFAPending}
 	if !t.MFAPending {
 		now := m.now()
-		if want := now.Add(m.idle); want.Sub(t.ExpiresAt) > touchSlack {
+		if want := now.Add(m.idleTimeout(ctx)); want.Sub(t.ExpiresAt) > touchSlack {
 			if err := m.d.Store.AuthTokens.Touch(ctx, t.ID, &want); err != nil {
 				return nil, err
 			}

@@ -4,7 +4,6 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
-	"errors"
 	"strings"
 	"time"
 
@@ -512,8 +511,16 @@ const (
 	RetentionPunchRequests      = "punch_requests"
 )
 
-// DefaultRetentionDays applies to categories without a configured value.
-const DefaultRetentionDays = 180
+// RetentionDefaults are the retention days of categories without a stored
+// setting (retention.<category>_days); 0 keeps rows forever.
+var RetentionDefaults = map[string]int{
+	RetentionLoginEvents: 180, RetentionConnectionAudits: 180, RetentionFileTransferAudits: 180,
+	RetentionAlarmAudits: 180, RetentionAdminAudit: 365, RetentionPunchRequests: 30,
+}
+
+// RetentionSettingKey is the settings key of a retention category
+// (PanelSettings.retention.<category>_days).
+func RetentionSettingKey(category string) string { return "retention." + category + "_days" }
 
 var retentionQueries = map[string]string{
 	RetentionLoginEvents:        `DELETE FROM login_events WHERE created_at < ?`,
@@ -530,37 +537,18 @@ func RetentionCategories() []string {
 		RetentionAlarmAudits, RetentionAdminAudit, RetentionPunchRequests}
 }
 
-// RetentionDays reads the audit.retention_days setting: either one number
-// for every category or an object {"<category>_days": n, ...} (the
-// PanelSettings.retention shape). Missing values default to
-// DefaultRetentionDays; 0 keeps rows forever.
+// RetentionDays returns the retention of every category: the
+// retention.<category>_days settings written by PATCH /settings, else
+// RetentionDefaults. 0 keeps rows forever. This is the single source of truth
+// for the settings API and the janitor.
 func (r *Settings) RetentionDays(ctx context.Context) (map[string]int, error) {
 	out := map[string]int{}
 	for _, c := range RetentionCategories() {
-		out[c] = DefaultRetentionDays
-	}
-	raw, err := r.GetRaw(ctx, SettingRetentionDays)
-	if err != nil {
-		if errors.Is(err, ErrNotFound) {
-			return out, nil
+		v, err := GetOr(ctx, r, RetentionSettingKey(c), RetentionDefaults[c])
+		if err != nil {
+			return out, err
 		}
-		return out, err
-	}
-	var n int
-	if json.Unmarshal(raw, &n) == nil {
-		for c := range out {
-			out[c] = max(n, 0)
-		}
-		return out, nil
-	}
-	var m map[string]int
-	if err := json.Unmarshal(raw, &m); err != nil {
-		return out, err
-	}
-	for c := range out {
-		if v, ok := m[c+"_days"]; ok {
-			out[c] = max(v, 0)
-		}
+		out[c] = max(v, 0)
 	}
 	return out, nil
 }

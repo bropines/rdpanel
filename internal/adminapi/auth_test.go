@@ -775,3 +775,66 @@ func TestLinkAndUnlinkIdentity(t *testing.T) {
 		t.Fatalf("last method: %d %v", code, m)
 	}
 }
+
+func TestRuntimeAuthSettingsEnforced(t *testing.T) {
+	e := newTEnv(t)
+	ctx := context.Background()
+	alice := e.user("alice", "correct horse", store.RoleUser)
+	e.user("root", "correct horse", store.RoleAdmin)
+
+	// Session lifetimes from the settings apply to new sessions.
+	_ = e.st.Settings.Set(ctx, store.SettingSessionAbsoluteDays, 2, nil)
+	_ = e.st.Settings.Set(ctx, store.SettingSessionIdleHours, 3, nil)
+	if code, _ := e.client().login("alice", "correct horse"); code != 200 {
+		t.Fatalf("login: %d", code)
+	}
+	toks, _ := e.st.AuthTokens.ListActiveForUser(ctx, alice.ID, store.TokenWeb)
+	if len(toks) != 1 || toks[0].AbsoluteExpiresAt == nil ||
+		!toks[0].AbsoluteExpiresAt.Equal(e.clk.now().Add(48*time.Hour)) || !toks[0].ExpiresAt.Equal(e.clk.now().Add(3*time.Hour)) {
+		t.Fatalf("lifetimes: %+v", toks)
+	}
+
+	// Password login disabled: users are refused (after the password check),
+	// admins keep break-glass access.
+	_ = e.st.Settings.Set(ctx, store.SettingPasswordLoginEnabled, false, nil)
+	if code, m := e.client().login("alice", "wrong"); code != 401 {
+		t.Fatalf("wrong password must stay generic: %d %v", code, m)
+	}
+	if code, m := e.client().login("alice", "correct horse"); code != 403 || errCode(m) != "password_login_disabled" {
+		t.Fatalf("disabled: %d %v", code, m)
+	}
+	if code, _ := e.client().login("root", "correct horse"); code != 200 {
+		t.Fatalf("admin break-glass: %d", code)
+	}
+}
+
+func TestProfileAndRevokeOthers(t *testing.T) {
+	e := newTEnv(t)
+	e.user("alice", "correct horse", store.RoleUser)
+	a, b := e.client(), e.client()
+	a.login("alice", "correct horse")
+	b.login("alice", "correct horse")
+	code, m, _ := a.do(http.MethodPatch, "/me", map[string]any{"display_name": " Alice A ", "email": "a@example.test"})
+	if code != 200 || m["display_name"] != "Alice A" || m["email"] != "a@example.test" {
+		t.Fatalf("profile: %d %v", code, m)
+	}
+	if code, m, _ := a.do(http.MethodPatch, "/me", map[string]any{"email": "not an email"}); code != 400 {
+		t.Fatalf("bad email: %d %v", code, m)
+	}
+	if code, m, _ := a.do(http.MethodPatch, "/me", map[string]any{"role": "admin"}); code != 400 {
+		t.Fatalf("role must not be settable: %d %v", code, m)
+	}
+	if code, m, _ := a.do(http.MethodPatch, "/me", map[string]any{"email": nil}); code != 200 || m["email"] != nil {
+		t.Fatalf("clear email: %d %v", code, m)
+	}
+	code, m, _ = a.do(http.MethodPost, "/me/security/sessions/revoke-others", nil)
+	if code != 200 || m["revoked"] != float64(1) {
+		t.Fatalf("revoke-others: %d %v", code, m)
+	}
+	if code, _, _ := b.do(http.MethodGet, "/auth/me", nil); code != 401 {
+		t.Fatalf("other session must be revoked: %d", code)
+	}
+	if code, _, _ := a.do(http.MethodGet, "/auth/me", nil); code != 200 {
+		t.Fatalf("current session must survive: %d", code)
+	}
+}

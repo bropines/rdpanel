@@ -55,6 +55,7 @@ func (a *App) Handler() http.Handler {
 		adminDeps := adminapi.Deps{
 			Log: a.Log.With("component", "adminapi"), Config: cfg, Store: a.Store, AEAD: a.AEAD,
 			JWT: a.JWT, Hasher: a.Hasher, Limiter: a.Limiter, Metrics: a.Registry, TOTP: a.TOTP,
+			DeviceRate: adminapi.DeviceRateInfo{Rate: clientapi.DefaultDeviceRate.Rate, Burst: clientapi.DefaultDeviceRate.Burst},
 		}
 		a.wireAdminDeps(&adminDeps)
 		a.b2bDeps(&adminDeps)

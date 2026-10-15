@@ -949,22 +949,28 @@ func TestSettingsAndBranding(t *testing.T) {
 	}
 
 	welcome := "# Hi {{username}}\n<script>alert(1)</script>"
+	if rl := m["rate_limits"].(map[string]any); num(rl["login_free_attempts"]) < 1 || m["admin_url"] != "http://panel.test" {
+		t.Fatalf("effective read-only values: %v", m)
+	}
+	if r := m["retention"].(map[string]any); num(r["punch_requests_days"]) != int64(store.RetentionDefaults[store.RetentionPunchRequests]) {
+		t.Fatalf("retention defaults: %v", r)
+	}
 	code, m, _ = e.admin.do("PATCH", "/settings", map[string]any{
-		"public_url":      "https://desk.example.com/",
-		"branding":        map[string]any{"title": "Acme Desk", "welcome_markdown": welcome, "web_client_url": "https://web.example.com"},
-		"auth":            map[string]any{"require_admin_2fa": false, "session_idle_hours": 24},
-		"retention":       map[string]any{"login_events_days": 90},
-		"rate_limits":     map[string]any{"login_per_ip_per_minute": 20},
-		"trusted_proxies": []string{"10.0.0.0/8", "192.168.1.1"},
+		"branding":  map[string]any{"title": "Acme Desk", "welcome_markdown": welcome, "web_client_url": "https://web.example.com"},
+		"auth":      map[string]any{"require_admin_2fa": false, "session_idle_hours": 24},
+		"retention": map[string]any{"login_events_days": 90},
 	})
-	if code != 200 || m["public_url"] != "https://desk.example.com" {
+	if code != 200 || m["public_url"] != "http://panel.test" {
 		t.Fatalf("patch: %d %v", code, m)
+	}
+	// The janitor reads the same retention values.
+	if days, _ := e.st.Settings.RetentionDays(context.Background()); days[store.RetentionLoginEvents] != 90 {
+		t.Fatalf("janitor retention: %v", days)
 	}
 	if b := m["branding"].(map[string]any); b["title"] != "Acme Desk" || b["welcome_markdown"] != welcome || b["web_client_url"] != "https://web.example.com" {
 		t.Fatalf("branding patched: %v", b)
 	}
-	if num(m["auth"].(map[string]any)["session_idle_hours"]) != 24 || num(m["retention"].(map[string]any)["login_events_days"]) != 90 ||
-		num(m["rate_limits"].(map[string]any)["login_per_ip_per_minute"]) != 20 || len(m["trusted_proxies"].([]any)) != 2 {
+	if num(m["auth"].(map[string]any)["session_idle_hours"]) != 24 || num(m["retention"].(map[string]any)["login_events_days"]) != 90 {
 		t.Fatalf("patched values: %v", m)
 	}
 	// Partial: other keys untouched; null clears the web client URL.
@@ -977,8 +983,12 @@ func TestSettingsAndBranding(t *testing.T) {
 		"auth": map[string]any{"session_idle_hours": 0}, "retention": map[string]any{"admin_audit_days": -1},
 		"trusted_proxies": []string{"not-an-ip"}})
 	f, _ := m["error"].(map[string]any)["fields"].(map[string]any)
-	if code != 400 || len(f) != 5 || f["auth.session_idle_hours"] == nil {
+	if code != 400 || len(f) != 5 || f["auth.session_idle_hours"] == nil || f["public_url"] == nil || f["trusted_proxies"] == nil {
 		t.Fatalf("validation: %d %v", code, m)
+	}
+	code, m, _ = e.admin.do("PATCH", "/settings", map[string]any{"auth": map[string]any{"session_idle_hours": 200, "session_absolute_days": 2}})
+	if f, _ := m["error"].(map[string]any)["fields"].(map[string]any); code != 400 || f["auth.session_idle_hours"] == nil {
+		t.Fatalf("idle > absolute: %d %v", code, m)
 	}
 	if code, _, _ := e.admin.do("PATCH", "/settings", map[string]any{"auth": map[string]any{"unknown": 1}}); code != 400 {
 		t.Fatalf("unknown nested field: %d", code)

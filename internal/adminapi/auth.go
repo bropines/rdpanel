@@ -201,6 +201,17 @@ func (c *authCore) handleLogin(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteError(w, http.StatusUnauthorized, "invalid_credentials", msgBadCredentials)
 		return
 	}
+	// Checked after the password so the answer reveals nothing to guessers.
+	if allowed, err := c.d.Store.Settings.PasswordLoginAllowed(ctx, user); err != nil {
+		internalError(w)
+		return
+	} else if !allowed {
+		c.record(ctx, r, loginlog.Event{UserID: &user.ID, Method: loginlog.MethodPassword,
+			UsernameAttempted: req.Username, FailureReason: "password_login_disabled"})
+		httpx.WriteError(w, http.StatusForbidden, "password_login_disabled",
+			"password sign-in is disabled; use an identity provider")
+		return
+	}
 	if c.d.Hasher.NeedsRehash(user.PasswordHash) {
 		if h, algo, err := c.d.Hasher.Hash(req.Password); err == nil {
 			if err := c.d.Store.Users.RehashPassword(ctx, user.ID, h, string(algo)); err != nil {
