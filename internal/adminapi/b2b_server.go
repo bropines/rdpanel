@@ -126,6 +126,7 @@ func timePtr(t time.Time) *time.Time {
 	if t.IsZero() {
 		return nil
 	}
+	t = t.UTC() // API timestamps are UTC (worker clocks use time.Now)
 	return &t
 }
 

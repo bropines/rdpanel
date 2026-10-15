@@ -49,7 +49,7 @@ func channelHealth(c ChannelStatus, addr string, now time.Time) componentHealthD
 	if c.Reachable {
 		h.Status, h.LatencyMS = "up", ms(c.RTT)
 		if !c.Since.IsZero() {
-			since := c.Since
+			since := c.Since.UTC()
 			h.UpSince = &since
 		}
 		return h
@@ -90,7 +90,7 @@ func (a *resources) serverHealth(ctx context.Context, devicesOnline int) ServerH
 			out.Presence.Source = "hbbs"
 		}
 		if !ph.LastOK.IsZero() {
-			last := ph.LastOK
+			last := ph.LastOK.UTC()
 			out.Presence.LastPollAt = &last
 		}
 		if ph.Polls > 0 {

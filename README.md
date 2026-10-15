@@ -38,7 +38,13 @@ For UI development run `rdpanel serve` and `cd web && npm run dev` (Vite proxies
 Without a backend, `npm run dev:mock` serves the whole admin API from an in-memory dataset
 (Mock Service Worker; sign in as `admin`/`admin`, TOTP `123456`). `npm run build:mock` writes
 a mock build to `web/dist-mock` (never embedded); `npm run e2e` and `npm run screenshots`
-drive it with Playwright (`docs/screenshots/`).
+drive it with Playwright.
+
+End-to-end against the real backend: `make web build && scripts/e2e-server.sh` starts
+`bin/rdpanel` on `:31114` with a fresh database, an admin and demo data seeded through the
+client API (`scripts/seed-demo`; add `HBB_BIN=<dir with hbbs, hbbr>` for live hbbs/hbbr),
+then `cd web && npm run e2e:real` (set `E2E_HBBS=1` with hbbs) runs `web/e2e/real`, and
+`npm run screenshots:real` refreshes `docs/screenshots/`.
 
 ### Commands
 
