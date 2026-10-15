@@ -3,8 +3,6 @@
 // TOTP, OIDC panel login and CRUD for users, groups, devices, address books,
 // audit, identity providers, server control and settings. The contract is
 // api/openapi.yaml; errors use httpx.WriteError ({"error":{"code","message"}}).
-//
-// TODO(stream B): implement handlers and complete api/openapi.yaml.
 package adminapi
 
 import (
@@ -16,6 +14,8 @@ import (
 	"github.com/bropines/rustdesk-panel/internal/auth"
 	"github.com/bropines/rustdesk-panel/internal/config"
 	"github.com/bropines/rustdesk-panel/internal/crypto"
+	"github.com/bropines/rustdesk-panel/internal/loginlog"
+	"github.com/bropines/rustdesk-panel/internal/oidc"
 	"github.com/bropines/rustdesk-panel/internal/store"
 )
 
@@ -41,10 +41,24 @@ type Deps struct {
 	Hasher  *auth.Hasher
 	Limiter auth.Limiter
 	Metrics prometheus.Registerer
+
+	// OIDC runs provider flows (nil disables OIDC login/linking).
+	OIDC *oidc.Service
+	// TOTP verifies second factors (default: NewTOTPService(Store, AEAD)).
+	TOTP *TOTPService
+	// LoginEvents records login attempts (default: loginlog.DB on Store).
+	LoginEvents loginlog.Recorder
 }
 
 // Register mounts the admin API on r (already scoped to /api/v1/admin).
+//
+// Every route gets the CSRF double-submit check (unsafe methods) and the
+// session loader. Resource routes of other streams must be wrapped in
+// RequireUser or RequireAdmin (see session.go).
 func Register(r chi.Router, d Deps) {
-	_ = r
-	_ = d
+	c := newAuthCore(d)
+	r.Use(csrfProtect, c.sess.load)
+	c.registerAuth(r)
+	c.registerSecurity(r)
+	c.registerProviders(r)
 }

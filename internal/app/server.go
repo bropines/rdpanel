@@ -18,6 +18,7 @@ import (
 	"github.com/bropines/rustdesk-panel/internal/clientapi"
 	"github.com/bropines/rustdesk-panel/internal/events"
 	"github.com/bropines/rustdesk-panel/internal/httpx"
+	"github.com/bropines/rustdesk-panel/internal/oidc"
 	"github.com/bropines/rustdesk-panel/internal/web"
 )
 
@@ -51,22 +52,37 @@ func (a *App) Handler() http.Handler {
 	r.Route("/api", func(api chi.Router) {
 		api.NotFound(httpx.NotFound)
 		api.MethodNotAllowed(httpx.MethodNotAllowed)
+		adminDeps := adminapi.Deps{
+			Log: a.Log.With("component", "adminapi"), Config: cfg, Store: a.Store, AEAD: a.AEAD,
+			JWT: a.JWT, Hasher: a.Hasher, Limiter: a.Limiter, Metrics: a.Registry, TOTP: a.TOTP,
+		}
+		oidcSvc := oidc.NewService(oidc.Options{
+			Store: a.Store, AEAD: a.AEAD, JWT: a.JWT, Log: a.Log.With("component", "oidc"),
+			PublicURL: cfg.PublicURL, TokenLifetime: cfg.Auth.TokenLifetime, JWTLifetime: cfg.Auth.JWTLifetime,
+			SecureCookies: cfg.HTTPS(), WebLogin: adminapi.OIDCWebLogin(adminDeps),
+		})
+		adminDeps.OIDC = oidcSvc
 		api.Route("/v1/admin", func(r chi.Router) {
 			r.NotFound(httpx.NotFound)
-			adminapi.Register(r, adminapi.Deps{
-				Log: a.Log.With("component", "adminapi"), Config: cfg, Store: a.Store, AEAD: a.AEAD,
-				JWT: a.JWT, Hasher: a.Hasher, Limiter: a.Limiter, Metrics: a.Registry,
-			})
+			adminapi.Register(r, adminDeps)
 		})
+		eventsAuth := a.EventsAuth
+		if eventsAuth == nil {
+			eventsAuth = panelSessionAuth(adminDeps)
+		}
 		api.Route("/v1/events", func(r chi.Router) {
 			r.NotFound(httpx.NotFound)
 			events.Register(r, events.Deps{
-				Log: a.Log.With("component", "events"), Store: a.Store, Bus: a.Events, Auth: a.EventsAuth,
+				Log: a.Log.With("component", "events"), Store: a.Store, Bus: a.Events, Auth: eventsAuth,
 			})
 		})
+		// Client OIDC endpoints (/api/login-options, /api/oidc/*) are owned by
+		// internal/oidc; clientapi must not register these paths.
+		oidc.Register(api, oidc.RouteDeps{Service: oidcSvc, Log: a.Log.With("component", "oidc")})
 		clientapi.Register(api, clientapi.Deps{
 			Log: a.Log.With("component", "clientapi"), Config: cfg, Store: a.Store, AEAD: a.AEAD,
 			JWT: a.JWT, Hasher: a.Hasher, Limiter: a.Limiter, Metrics: a.Registry, Kicks: a.Kicks,
+			TOTP: clientTOTP{a.TOTP},
 		})
 	})
 

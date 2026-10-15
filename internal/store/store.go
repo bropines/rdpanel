@@ -41,6 +41,12 @@ type Store struct {
 	AlarmAudits        *AlarmAudits
 	AuditNonces        *AuditNonces
 	LoginEvents        *LoginEvents
+	// Identity / OIDC / 2FA (stream B1).
+	IdentityProviders *IdentityProviders
+	UserIdentities    *UserIdentities
+	OAuthStates       *OAuthStates
+	TOTPSecrets       *TOTPSecrets
+	RecoveryCodes     *RecoveryCodes
 }
 
 // Option configures a Store.
@@ -93,6 +99,11 @@ func build(d *db.DB, q db.Querier, o options) *Store {
 	s.AlarmAudits = &AlarmAudits{q: q, now: now}
 	s.AuditNonces = &AuditNonces{q: q, now: now}
 	s.LoginEvents = &LoginEvents{q: q, now: now}
+	s.IdentityProviders = &IdentityProviders{q: q, now: now}
+	s.UserIdentities = &UserIdentities{q: q, now: now}
+	s.OAuthStates = &OAuthStates{q: q, now: now}
+	s.TOTPSecrets = &TOTPSecrets{q: q, now: now}
+	s.RecoveryCodes = &RecoveryCodes{q: q, now: now}
 	return s
 }
 
