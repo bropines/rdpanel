@@ -80,9 +80,22 @@ start-up by `key-secret`).
 shutdown, SIGKILL after 7 s) and hbbs/hbbr (SIGKILL after 5 s) and exits within
 about 8 s; the compose example sets `stop_grace_period: 20s`.
 
-`docker exec <container> rdpanel ...` runs a wrapper that drops to `PUID:PGID`
-before calling `/usr/bin/rdpanel`, so the CLI never leaves root-owned files in
-the data dir.
+`docker exec <container> rdpanel ...` (and `kubectl exec`, or the Helm
+migration Job, which runs `rdpanel` without s6) uses the wrapper
+`/usr/local/bin/rdpanel`: as root it first creates/chowns the data dirs to
+`PUID:PGID`, then drops to that user before calling `/usr/bin/rdpanel`, so the
+CLI never leaves root-owned files in the data dir. Files the CLI only reads
+(e.g. the legacy `rustdeskapi.db`) must be readable by `PUID` (mode 0644 or
+owned by it).
+
+Required privileges: the container starts as root (s6) but only needs the
+capabilities `CHOWN, DAC_OVERRIDE, FOWNER, SETGID, SETUID, KILL`; it works with
+all others dropped and `no-new-privileges` / `allowPrivilegeEscalation: false`
+(this is the Helm chart's default securityContext; verified with
+`docker run --cap-drop ALL --cap-add ... --security-opt no-new-privileges`).
+All ports are above 1024 and no binary has file capabilities. Shutdown
+completes in ~3 s (worst case ~10 s with kill timeouts), well inside
+Kubernetes' default `terminationGracePeriodSeconds: 30`.
 
 ### Health check
 
