@@ -60,8 +60,8 @@ func (a *App) Handler() http.Handler {
 		a.b2bDeps(&adminDeps)
 		oidcSvc := oidc.NewService(oidc.Options{
 			Store: a.Store, AEAD: a.AEAD, JWT: a.JWT, Log: a.Log.With("component", "oidc"),
-			PublicURL: cfg.PublicURL, TokenLifetime: cfg.Auth.TokenLifetime, JWTLifetime: cfg.Auth.JWTLifetime,
-			SecureCookies: cfg.HTTPS(), WebLogin: adminapi.OIDCWebLogin(adminDeps),
+			PublicURL: cfg.PublicURL, AdminURL: cfg.AdminURL, TokenLifetime: cfg.Auth.TokenLifetime, JWTLifetime: cfg.Auth.JWTLifetime,
+			SecureCookies: cfg.AdminHTTPS(), WebLogin: adminapi.OIDCWebLogin(adminDeps),
 		})
 		adminDeps.OIDC = oidcSvc
 		api.Route("/v1/admin", func(r chi.Router) {
@@ -134,7 +134,7 @@ func (a *App) ServeListener(ctx context.Context, ln net.Listener) error {
 	errCh := make(chan error, 1)
 	go func() { errCh <- srv.Serve(ln) }()
 	a.Log.Info("http server listening", slog.String("addr", ln.Addr().String()),
-		slog.String("public_url", a.Config.PublicURL))
+		slog.String("public_url", a.Config.PublicURL), slog.String("admin_url", a.Config.AdminURL))
 
 	select {
 	case err := <-errCh:

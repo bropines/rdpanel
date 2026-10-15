@@ -120,7 +120,7 @@ func newSessions(d Deps, totp *TOTPService) *sessions {
 		if d.Config.Auth.SessionAbsolute > 0 {
 			m.absolute = d.Config.Auth.SessionAbsolute
 		}
-		m.secure = d.Config.HTTPS()
+		m.secure = d.Config.AdminHTTPS()
 	}
 	return m
 }

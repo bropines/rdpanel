@@ -25,7 +25,7 @@ func (c *authCore) registerProviders(r chi.Router) {
 		r.Get("/identity-providers", c.handleListProviders)
 		r.Post("/identity-providers", c.handleCreateProvider)
 		r.Get("/identity-providers/{id}", c.handleGetProvider)
-		r.Put("/identity-providers/{id}", c.handleUpdateProvider)
+		r.Patch("/identity-providers/{id}", c.handleUpdateProvider)
 		r.Delete("/identity-providers/{id}", c.handleDeleteProvider)
 		r.Post("/identity-providers/{id}/test", c.handleTestProvider)
 	})
@@ -84,6 +84,14 @@ type providerInput struct {
 	LinkByVerifiedEmail bool     `json:"link_by_verified_email"`
 	Enabled             *bool    `json:"enabled"`
 	SortOrder           int      `json:"sort_order"`
+}
+
+// inputOf returns the input that reproduces p (secret untouched).
+func inputOf(p *store.IdentityProvider) providerInput {
+	pkce, enabled := p.PKCEEnabled, p.Enabled
+	return providerInput{Slug: p.Slug, Kind: string(p.Kind), DisplayName: p.DisplayName, ClientID: p.ClientID,
+		Issuer: p.Issuer, Scopes: append([]string(nil), p.Scopes...), PKCEEnabled: &pkce, PKCEMethod: p.PKCEMethod,
+		AutoRegister: p.AutoRegister, LinkByVerifiedEmail: p.LinkByVerifiedEmail, Enabled: &enabled, SortOrder: p.SortOrder}
 }
 
 var (
@@ -180,7 +188,7 @@ func (c *authCore) handleListProviders(w http.ResponseWriter, r *http.Request) {
 	for _, p := range provs {
 		out = append(out, c.providerDTO(p))
 	}
-	httpx.WriteJSON(w, http.StatusOK, out)
+	httpx.WriteJSON(w, http.StatusOK, itemsDTO[ProviderDTO]{Items: out})
 }
 
 func (c *authCore) loadProvider(w http.ResponseWriter, r *http.Request) *store.IdentityProvider {
@@ -253,7 +261,9 @@ func (c *authCore) handleUpdateProvider(w http.ResponseWriter, r *http.Request) 
 	if p == nil {
 		return
 	}
-	var in providerInput
+	// PATCH: the body is decoded over the current values, so omitted fields
+	// are kept (client_secret omitted/null keeps the stored secret).
+	in := inputOf(p)
 	if !decodeJSON(w, r, &in) {
 		return
 	}

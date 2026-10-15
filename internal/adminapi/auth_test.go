@@ -534,9 +534,10 @@ func TestListAndRevokeSessions(t *testing.T) {
 	bob.login("bob", "correct horse")
 	req, _ := http.NewRequest(http.MethodGet, e.srv.URL+"/api/v1/admin/me/security/sessions", nil)
 	resp, _ := a.hc.Do(req)
-	var list []map[string]any
-	_ = json.NewDecoder(resp.Body).Decode(&list)
+	var env struct{ Items []map[string]any }
+	_ = json.NewDecoder(resp.Body).Decode(&env)
 	resp.Body.Close()
+	list := env.Items
 	if len(list) != 2 {
 		t.Fatalf("sessions: %v", list)
 	}
@@ -600,7 +601,7 @@ func TestIdentityProvidersCRUD(t *testing.T) {
 	// Update without client_secret keeps it.
 	delete(body, "client_secret")
 	body["display_name"] = "Renamed"
-	code, m, _ = adm.do(http.MethodPut, "/identity-providers/"+id, body)
+	code, m, _ = adm.do(http.MethodPatch, "/identity-providers/"+id, map[string]any{"display_name": "Renamed"})
 	if code != 200 || m["display_name"] != "Renamed" || m["has_client_secret"] != true {
 		t.Fatalf("update: %d %v", code, m)
 	}
@@ -616,9 +617,10 @@ func TestIdentityProvidersCRUD(t *testing.T) {
 	}
 	// Public provider list for the login page.
 	resp, _ := anon.hc.Get(e.srv.URL + "/api/v1/admin/auth/providers")
-	var opts []map[string]any
-	_ = json.NewDecoder(resp.Body).Decode(&opts)
+	var optEnv struct{ Items []map[string]any }
+	_ = json.NewDecoder(resp.Body).Decode(&optEnv)
 	resp.Body.Close()
+	opts := optEnv.Items
 	if len(opts) != 1 || opts[0]["slug"] != "authentik" {
 		t.Fatalf("providers: %v", opts)
 	}
@@ -660,6 +662,22 @@ func (c *client) oidcLogin(next string, id oidctest.Identity) *http.Response {
 		c.e.t.Fatal(err)
 	}
 	resp, err := c.hc.Get(c.e.srv.URL + "/api/oidc/callback?" + q.Encode())
+	if err != nil {
+		c.e.t.Fatal(err)
+	}
+	resp.Body.Close()
+	return c.followHandoff(resp)
+}
+
+// followHandoff follows the callback's redirect to the admin-host completion
+// endpoint (the test server serves both hosts).
+func (c *client) followHandoff(resp *http.Response) *http.Response {
+	c.e.t.Helper()
+	loc, err := url.Parse(resp.Header.Get("Location"))
+	if err != nil || loc.Path != "/api/v1/admin/auth/oidc/complete" {
+		return resp
+	}
+	resp, err = c.hc.Get(c.e.srv.URL + loc.RequestURI())
 	if err != nil {
 		c.e.t.Fatal(err)
 	}
@@ -727,15 +745,18 @@ func TestLinkAndUnlinkIdentity(t *testing.T) {
 	q, _ := e.idp.Authorize(m["url"].(string), oidctest.Identity{Subject: "alice-sub", Email: "a@example.test", EmailVerified: true})
 	resp, _ := c.hc.Get(e.srv.URL + "/api/oidc/callback?" + q.Encode())
 	resp.Body.Close()
-	if resp.Header.Get("Location") != "/my/security?linked=authentik" {
+	resp = c.followHandoff(resp)
+	if resp.Header.Get("Location") != "/my/profile?linked=authentik" {
 		t.Fatalf("link: %s", resp.Header.Get("Location"))
 	}
 	req, _ := http.NewRequest(http.MethodGet, e.srv.URL+"/api/v1/admin/me/security/identities", nil)
 	resp, _ = c.hc.Do(req)
-	var ids []map[string]any
-	_ = json.NewDecoder(resp.Body).Decode(&ids)
+	var idEnv struct{ Items []map[string]any }
+	_ = json.NewDecoder(resp.Body).Decode(&idEnv)
 	resp.Body.Close()
-	if len(ids) != 1 || ids[0]["provider_slug"] != "authentik" || ids[0]["subject"] != "alice-sub" {
+	ids := idEnv.Items
+	if len(ids) != 1 || ids[0]["provider_slug"] != "authentik" || ids[0]["subject"] != "alice-sub" ||
+		ids[0]["provider_name"] == nil {
 		t.Fatalf("identities: %v", ids)
 	}
 	if code, _, _ := c.do(http.MethodDelete, "/me/security/identities/"+jsonNum(ids[0]["id"].(float64)), nil); code != 204 {

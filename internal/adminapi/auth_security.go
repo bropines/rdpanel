@@ -4,7 +4,9 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"net/mail"
 	"strconv"
+	"strings"
 	"time"
 	"unicode/utf8"
 
@@ -32,12 +34,100 @@ func (c *authCore) registerSecurity(r chi.Router) {
 		r.Post("/me/security/totp/disable", c.handleTOTPDisable)
 		r.Post("/me/security/recovery-codes", c.handleRecoveryCodes)
 		r.Get("/me/security/sessions", c.handleListSessions)
+		r.Post("/me/security/sessions/revoke-others", c.handleRevokeOtherSessions)
 		r.Delete("/me/security/sessions/{id}", c.handleRevokeSession)
 		r.Post("/me/security/password", c.handleChangePassword)
 		r.Get("/me/security/identities", c.handleListIdentities)
 		r.Delete("/me/security/identities/{id}", c.handleUnlinkIdentity)
 		r.Post("/me/security/identities/link/{slug}", c.handleLinkIdentity)
 	})
+	r.With(RequireUser).Patch("/me", c.handleUpdateProfile)
+}
+
+type profileRequest struct {
+	DisplayName *string     `json:"display_name"`
+	Email       opt[string] `json:"email"`
+}
+
+// handleUpdateProfile lets a user edit their own display name and email.
+func (c *authCore) handleUpdateProfile(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	s := CurrentSession(ctx)
+	var req profileRequest
+	if !decodeJSON(w, r, &req) {
+		return
+	}
+	f := map[string]string{}
+	u := *s.User
+	if req.DisplayName != nil {
+		u.DisplayName = strings.TrimSpace(*req.DisplayName)
+		if utf8.RuneCountInString(u.DisplayName) > 128 {
+			f["display_name"] = "must be at most 128 characters"
+		}
+	}
+	if req.Email.Set {
+		u.Email = ""
+		if !req.Email.Null {
+			u.Email = strings.TrimSpace(req.Email.V)
+		}
+		if e := u.Email; e != "" {
+			if addr, err := mail.ParseAddress(e); err != nil || addr.Address != e || len(e) > 254 {
+				f["email"] = "must be a valid email address"
+			}
+		}
+	}
+	if len(f) > 0 {
+		validationFailed(w, "invalid profile", f)
+		return
+	}
+	if err := c.d.Store.Users.Update(ctx, &u); err != nil {
+		internalError(w)
+		return
+	}
+	ch := diff{}
+	ch.val("display_name", s.User.DisplayName, u.DisplayName)
+	ch.val("email", s.User.Email, u.Email)
+	if len(ch) > 0 {
+		c.audit(ctx, r, "user.profile_update", "user", strconv.FormatInt(u.ID, 10), map[string]any{"changes": ch})
+	}
+	fresh, err := c.d.Store.Users.GetByID(ctx, u.ID)
+	if err != nil {
+		internalError(w)
+		return
+	}
+	httpx.WriteJSON(w, http.StatusOK, NewUserDTO(fresh, s.TOTPEnabled))
+}
+
+// handleRevokeOtherSessions revokes every session and client token of the
+// user except the current session.
+func (c *authCore) handleRevokeOtherSessions(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	s := CurrentSession(ctx)
+	var revoked int64
+	err := c.d.Store.Tx(ctx, func(tx *store.Store) error {
+		toks, err := tx.AuthTokens.ListActiveForUser(ctx, s.User.ID, "")
+		if err != nil {
+			return err
+		}
+		for _, t := range toks {
+			if t.ID == s.Token.ID {
+				continue
+			}
+			if err := tx.AuthTokens.Revoke(ctx, t.ID, "revoked by user"); err != nil {
+				return err
+			}
+			revoked++
+		}
+		return nil
+	})
+	if err != nil {
+		internalError(w)
+		return
+	}
+	if revoked > 0 {
+		c.audit(ctx, r, "session.revoke_others", "user", strconv.FormatInt(s.User.ID, 10), map[string]any{"revoked": revoked})
+	}
+	httpx.WriteJSON(w, http.StatusOK, revokeResultDTO{Revoked: revoked})
 }
 
 type securityDTO struct {
@@ -236,7 +326,7 @@ func (c *authCore) handleListSessions(w http.ResponseWriter, r *http.Request) {
 		}
 		out = append(out, newSessionDTO(t, s.Token.ID))
 	}
-	httpx.WriteJSON(w, http.StatusOK, out)
+	httpx.WriteJSON(w, http.StatusOK, itemsDTO[sessionDTO]{Items: out})
 }
 
 func (c *authCore) handleRevokeSession(w http.ResponseWriter, r *http.Request) {
@@ -331,20 +421,22 @@ func (c *authCore) handleChangePassword(w http.ResponseWriter, r *http.Request) 
 	w.WriteHeader(http.StatusNoContent)
 }
 
+// IdentityDTO is components.schemas.UserIdentity (a linked IdP identity),
+// used by /me/security/identities and the admin user detail.
 type IdentityDTO struct {
-	ID                  int64      `json:"id"`
-	ProviderID          int64      `json:"provider_id"`
-	ProviderSlug        string     `json:"provider_slug"`
-	ProviderDisplayName string     `json:"provider_display_name"`
-	ProviderKind        string     `json:"provider_kind"`
-	Subject             string     `json:"subject"`
-	Email               *string    `json:"email"`
-	EmailVerified       bool       `json:"email_verified"`
-	Username            string     `json:"username"`
-	DisplayName         string     `json:"display_name"`
-	AvatarURL           string     `json:"avatar_url"`
-	LastLoginAt         *time.Time `json:"last_login_at"`
-	CreatedAt           time.Time  `json:"created_at"`
+	ID            int64      `json:"id"`
+	ProviderID    int64      `json:"provider_id"`
+	ProviderSlug  string     `json:"provider_slug"`
+	ProviderKind  string     `json:"provider_kind"`
+	ProviderName  string     `json:"provider_name"`
+	Subject       string     `json:"subject"`
+	Email         *string    `json:"email"`
+	EmailVerified bool       `json:"email_verified"`
+	Username      *string    `json:"username"`
+	DisplayName   string     `json:"display_name"`
+	AvatarURL     string     `json:"avatar_url"`
+	LastLoginAt   *time.Time `json:"last_login_at"`
+	CreatedAt     time.Time  `json:"created_at"`
 }
 
 // IdentitiesOf lists a user's linked identities as API objects (also for
@@ -365,10 +457,13 @@ func IdentitiesOf(ctx context.Context, st *store.Store, userID int64) ([]Identit
 	out := make([]IdentityDTO, 0, len(ids))
 	for _, i := range ids {
 		d := IdentityDTO{ID: i.ID, ProviderID: i.ProviderID, Subject: i.Subject, Email: strPtr(i.Email),
-			EmailVerified: i.EmailVerified, Username: i.Username, DisplayName: i.DisplayName, AvatarURL: i.AvatarURL,
-			LastLoginAt: i.LastLoginAt, CreatedAt: i.CreatedAt}
+			EmailVerified: i.EmailVerified, Username: strPtr(i.Username), DisplayName: i.DisplayName,
+			AvatarURL: i.AvatarURL, LastLoginAt: i.LastLoginAt, CreatedAt: i.CreatedAt}
 		if p := byID[i.ProviderID]; p != nil {
-			d.ProviderSlug, d.ProviderDisplayName, d.ProviderKind = p.Slug, p.DisplayName, string(p.Kind)
+			d.ProviderSlug, d.ProviderName, d.ProviderKind = p.Slug, p.DisplayName, string(p.Kind)
+			if d.ProviderName == "" {
+				d.ProviderName = p.Slug
+			}
 		}
 		out = append(out, d)
 	}
@@ -381,7 +476,7 @@ func (c *authCore) handleListIdentities(w http.ResponseWriter, r *http.Request) 
 		internalError(w)
 		return
 	}
-	httpx.WriteJSON(w, http.StatusOK, out)
+	httpx.WriteJSON(w, http.StatusOK, itemsDTO[IdentityDTO]{Items: out})
 }
 
 func (c *authCore) handleUnlinkIdentity(w http.ResponseWriter, r *http.Request) {
