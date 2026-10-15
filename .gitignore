@@ -1,0 +1,36 @@
+# Build output
+/bin/
+/dist/
+*.exe
+*.test
+*.out
+coverage.*
+
+# Embedded SPA build (keep the placeholder so go:embed always compiles)
+/web/dist/*
+!/web/dist/.gitkeep
+
+# Node
+node_modules/
+*.tsbuildinfo
+web/.vite/
+
+# Local data / secrets
+/data/
+*.db
+*.db-shm
+*.db-wal
+*.sqlite3
+secret.key
+jwt.key
+.env
+.env.*
+!.env.example
+
+# Editors / OS
+.idea/
+.vscode/*
+!.vscode/extensions.json
+*.swp
+.DS_Store
+Thumbs.db

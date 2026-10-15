@@ -1,0 +1,25 @@
+rustdesk-panel
+Copyright (c) 2026 bropines and contributors
+Licensed under the MIT License (see LICENSE).
+
+Acknowledgements
+----------------
+
+lejianwen/rustdesk-api and lejianwen/rustdesk-api-web
+  https://github.com/lejianwen/rustdesk-api
+  https://github.com/lejianwen/rustdesk-api-web
+  MIT License, Copyright (c) 2024-present Lejianwen and contributors.
+
+  rustdesk-panel is a clean-room reimplementation. The lejianwen projects were
+  used as the reference for the RustDesk client API shape (endpoint paths,
+  JSON field names, token semantics) and for the legacy database layout that
+  `rdpanel migrate-legacy` imports. No source code was copied.
+
+RustDesk
+  https://github.com/rustdesk/rustdesk
+  RustDesk is a trademark of its respective owners. rustdesk-panel is an
+  independent project and is not affiliated with or endorsed by RustDesk.
+  The RustDesk Flutter web client (AGPL-3.0) is NOT bundled.
+
+Third-party Go modules and npm packages are distributed under their own
+licenses; see go.mod / web/package.json and their respective LICENSE files.
