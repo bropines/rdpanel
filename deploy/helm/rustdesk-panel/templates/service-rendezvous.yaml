@@ -1,0 +1,88 @@
+{{- /*
+Rendezvous / relay Service(s): raw RustDesk ports.
+split=false: one Service "<fullname>-rendezvous" with TCP+UDP (mixed protocol, GA in k8s 1.26).
+split=true:  "<fullname>-rendezvous-tcp" and "<fullname>-rendezvous-udp".
+*/}}
+{{- if .Values.rendezvous.service.enabled }}
+{{- $root := . }}
+{{- $s := .Values.rendezvous.service }}
+{{- $p := $s.ports }}
+{{- $all := list
+  (dict "key" "natTest"       "name" "nat-test" "proto" "TCP" "target" "nat-test")
+  (dict "key" "rendezvousTcp" "name" "hbbs-tcp" "proto" "TCP" "target" "hbbs-tcp")
+  (dict "key" "rendezvousUdp" "name" "hbbs-udp" "proto" "UDP" "target" "hbbs-udp")
+  (dict "key" "relay"         "name" "hbbr"     "proto" "TCP" "target" "hbbr")
+  (dict "key" "rendezvousWs"  "name" "hbbs-ws"  "proto" "TCP" "target" "hbbs-ws")
+  (dict "key" "relayWs"       "name" "hbbr-ws"  "proto" "TCP" "target" "hbbr-ws")
+}}
+{{- $groups := list }}
+{{- if $s.split }}
+{{- $groups = list (dict "suffix" "-rendezvous-tcp" "protos" (list "TCP") "ann" $s.tcpAnnotations) (dict "suffix" "-rendezvous-udp" "protos" (list "UDP") "ann" $s.udpAnnotations) }}
+{{- else }}
+{{- $groups = list (dict "suffix" "-rendezvous" "protos" (list "TCP" "UDP") "ann" dict) }}
+{{- end }}
+{{- range $g := $groups }}
+{{- $ports := list }}
+{{- range $all }}
+{{- $cfg := index $p .key }}
+{{- if and $cfg.enabled (has .proto $g.protos) }}
+{{- $ports = append $ports (merge (dict "port" $cfg.port "nodePort" $cfg.nodePort) .) }}
+{{- end }}
+{{- end }}
+{{- if $ports }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "rustdesk-panel.fullname" $root }}{{ $g.suffix }}
+  namespace: {{ $root.Release.Namespace }}
+  labels:
+    {{- include "rustdesk-panel.labels" $root | nindent 4 }}
+    app.kubernetes.io/component: rendezvous
+    {{- with $s.labels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+  {{- with include "rustdesk-panel.annotations" (dict "root" $root "extra" (merge (dict) ($g.ann | default dict) ($s.annotations | default dict))) }}{{ . | nindent 2 }}{{ end }}
+spec:
+  type: {{ $s.type }}
+  {{- if ne $s.type "ClusterIP" }}
+  # Local = keep the client source IP (hbbs needs it for NAT detection / punching / IP blocker).
+  externalTrafficPolicy: {{ $s.externalTrafficPolicy }}
+  {{- end }}
+  {{- if eq $s.type "LoadBalancer" }}
+  {{- with $s.loadBalancerIP }}
+  loadBalancerIP: {{ . }}
+  {{- end }}
+  {{- with $s.loadBalancerClass }}
+  loadBalancerClass: {{ . }}
+  {{- end }}
+  {{- with $s.loadBalancerSourceRanges }}
+  loadBalancerSourceRanges:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  {{- if and $s.healthCheckNodePort (eq $s.externalTrafficPolicy "Local") }}
+  healthCheckNodePort: {{ $s.healthCheckNodePort }}
+  {{- end }}
+  {{- end }}
+  {{- with $s.ipFamilyPolicy }}
+  ipFamilyPolicy: {{ . }}
+  {{- end }}
+  {{- with $s.ipFamilies }}
+  ipFamilies:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  selector:
+    {{- include "rustdesk-panel.selectorLabels" $root | nindent 4 }}
+  ports:
+    {{- range $ports }}
+    - name: {{ .name }}
+      port: {{ .port }}
+      targetPort: {{ .target }}
+      protocol: {{ .proto }}
+      {{- if and (ne $s.type "ClusterIP") .nodePort }}
+      nodePort: {{ .nodePort }}
+      {{- end }}
+    {{- end }}
+{{- end }}
+{{- end }}
+{{- end }}

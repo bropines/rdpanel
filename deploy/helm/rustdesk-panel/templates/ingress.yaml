@@ -1,0 +1,91 @@
+{{- $fullname := include "rustdesk-panel.fullname" . }}
+{{- if .Values.ingress.enabled }}
+{{- if not .Values.service.enabled }}
+{{- fail "ingress.enabled requires service.enabled" }}
+{{- end }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ $fullname }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "rustdesk-panel.labels" . | nindent 4 }}
+    app.kubernetes.io/component: panel
+    {{- with .Values.ingress.labels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+  {{- with include "rustdesk-panel.annotations" (dict "root" . "extra" .Values.ingress.annotations) }}{{ . | nindent 2 }}{{ end }}
+spec:
+  {{- with .Values.ingress.className }}
+  ingressClassName: {{ . }}
+  {{- end }}
+  {{- with .Values.ingress.tls }}
+  tls:
+    {{- tpl (toYaml .) $ | nindent 4 }}
+  {{- end }}
+  rules:
+    {{- range .Values.ingress.hosts }}
+    - {{- with .host }}
+      host: {{ tpl . $ | quote }}
+      {{- end }}
+      http:
+        paths:
+          {{- range .paths }}
+          - path: {{ .path }}
+            pathType: {{ .pathType | default "Prefix" }}
+            backend:
+              service:
+                name: {{ $fullname }}
+                port:
+                  name: http
+          {{- end }}
+    {{- end }}
+{{- end }}
+{{- if .Values.websocket.ingress.enabled }}
+{{- $w := .Values.websocket.ingress }}
+---
+# WebSocket endpoints. The controller MUST overwrite X-Real-IP / X-Forwarded-For:
+# hbbs/hbbr trust these headers unconditionally on 21118/21119.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ $fullname }}-ws
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "rustdesk-panel.labels" . | nindent 4 }}
+    app.kubernetes.io/component: websocket
+    {{- with $w.labels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+  {{- with include "rustdesk-panel.annotations" (dict "root" . "extra" $w.annotations) }}{{ . | nindent 2 }}{{ end }}
+spec:
+  {{- with $w.className }}
+  ingressClassName: {{ . }}
+  {{- end }}
+  {{- with $w.tls }}
+  tls:
+    {{- tpl (toYaml .) $ | nindent 4 }}
+  {{- end }}
+  rules:
+    {{- range $w.hosts }}
+    - {{- with .host }}
+      host: {{ tpl . $ | quote }}
+      {{- end }}
+      http:
+        paths:
+          - path: {{ $w.idPath }}
+            pathType: {{ $w.pathType }}
+            backend:
+              service:
+                name: {{ $fullname }}-ws
+                port:
+                  name: hbbs-ws
+          - path: {{ $w.relayPath }}
+            pathType: {{ $w.pathType }}
+            backend:
+              service:
+                name: {{ $fullname }}-ws
+                port:
+                  name: hbbr-ws
+    {{- end }}
+{{- end }}

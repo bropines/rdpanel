@@ -1,0 +1,41 @@
+# Production-like: pod in the node network namespace, pinned to one node, panel
+# bound to loopback behind a node-local reverse proxy (like the docker setup on msk00).
+hostNetwork: true
+
+nodeSelector:
+  kubernetes.io/hostname: rustdesk-node-1
+
+server:
+  relay: rustdesk.example.com:21117
+  mustLogin: true
+
+panel:
+  listen: 127.0.0.1:31114
+  publicURL: https://rustdesk.example.com
+  trustedProxies: [127.0.0.1/32]
+  realIPHeader: X-Real-IP
+
+# The kubelet cannot reach a loopback bind: probe from inside the container.
+probes:
+  type: exec
+
+# No Services needed: clients reach the node address directly.
+service:
+  enabled: false
+rendezvous:
+  service:
+    enabled: false
+
+persistence:
+  size: 2Gi
+  retentionPolicy:
+    whenDeleted: Retain
+    whenScaled: Retain
+
+priorityClassName: system-cluster-critical
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    memory: 512Mi

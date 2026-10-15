@@ -1,0 +1,78 @@
+# Panel via ingress-nginx + cert-manager, WebSocket endpoints via a second
+# Ingress, rendezvous ports on NodePort, plus an HTTPRoute and a disabled
+# migration job example.
+panel:
+  publicURL: https://rustdesk.example.com
+  trustedProxies: [127.0.0.0/8, 10.244.0.0/16]
+  realIPHeader: X-Forwarded-For
+  tokenLifetime: 4380h
+  sessionIdle: 12h
+  log:
+    level: debug
+    format: text
+
+server:
+  relay: rustdesk.example.com:31117
+
+secrets:
+  jwtKey: "legacy-jwt-key-from-rustdesk-api"
+  secretKey: "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8="
+
+ingress:
+  enabled: true
+  className: nginx
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt
+    nginx.ingress.kubernetes.io/proxy-body-size: 16m
+  hosts:
+    - host: rustdesk.example.com
+      paths:
+        - path: /
+          pathType: Prefix
+  tls:
+    - secretName: rustdesk-panel-tls
+      hosts: [rustdesk.example.com]
+
+websocket:
+  ingress:
+    enabled: true
+    className: nginx
+    annotations:
+      nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+      nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+    hosts:
+      - host: rustdesk.example.com
+    tls:
+      - secretName: rustdesk-panel-tls
+        hosts: [rustdesk.example.com]
+
+httpRoute:
+  enabled: true
+  parentRefs:
+    - name: public-gateway
+      namespace: gateway-system
+  hostnames: [rustdesk.example.com]
+  websocketRules: true
+
+rendezvous:
+  service:
+    type: NodePort
+    ports:
+      natTest: {enabled: true, port: 21115, nodePort: 31115}
+      rendezvousTcp: {enabled: true, port: 21116, nodePort: 31116}
+      rendezvousUdp: {enabled: true, port: 21116, nodePort: 31116}
+      relay: {enabled: true, port: 21117, nodePort: 31117}
+
+networkPolicy:
+  enabled: true
+
+extraEnv:
+  - name: TZ
+    value: Europe/Moscow
+
+extraVolumes:
+  - name: tmp
+    emptyDir: {}
+extraVolumeMounts:
+  - name: tmp
+    mountPath: /tmp

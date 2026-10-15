@@ -1,0 +1,51 @@
+{{- if .Values.httpRoute.enabled }}
+{{- $fullname := include "rustdesk-panel.fullname" . }}
+{{- $r := .Values.httpRoute }}
+{{- if not .Values.service.enabled }}
+{{- fail "httpRoute.enabled requires service.enabled" }}
+{{- end }}
+{{- if not $r.parentRefs }}
+{{- fail "httpRoute.enabled requires httpRoute.parentRefs" }}
+{{- end }}
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: {{ $fullname }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "rustdesk-panel.labels" . | nindent 4 }}
+    {{- with $r.labels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+  {{- with include "rustdesk-panel.annotations" (dict "root" . "extra" $r.annotations) }}{{ . | nindent 2 }}{{ end }}
+spec:
+  parentRefs:
+    {{- tpl (toYaml $r.parentRefs) $ | nindent 4 }}
+  {{- with $r.hostnames }}
+  hostnames:
+    {{- tpl (toYaml .) $ | nindent 4 }}
+  {{- end }}
+  rules:
+    {{- if $r.websocketRules }}
+    # WebSocket rules first (more specific). The Gateway must overwrite X-Real-IP/X-Forwarded-For.
+    - matches:
+        - path:
+            type: PathPrefix
+            value: {{ .Values.websocket.ingress.idPath }}
+      backendRefs:
+        - name: {{ $fullname }}-ws
+          port: {{ .Values.ports.rendezvousWs }}
+    - matches:
+        - path:
+            type: PathPrefix
+            value: {{ .Values.websocket.ingress.relayPath }}
+      backendRefs:
+        - name: {{ $fullname }}-ws
+          port: {{ .Values.ports.relayWs }}
+    {{- end }}
+    - matches:
+        {{- toYaml $r.matches | nindent 8 }}
+      backendRefs:
+        - name: {{ $fullname }}
+          port: {{ .Values.service.port }}
+{{- end }}

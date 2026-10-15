@@ -1,0 +1,49 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "rustdesk-panel.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "rustdesk-panel.labels" . | nindent 4 }}
+  {{- with include "rustdesk-panel.annotations" (dict "root" .) }}{{ . | nindent 2 }}{{ end }}
+data:
+  # --- hbbs / hbbr ---
+  {{- with .Values.server.relay }}
+  RELAY: {{ . | quote }}
+  {{- end }}
+  ENCRYPTED_ONLY: {{ ternary "1" "0" .Values.server.encryptedOnly | quote }}
+  ALWAYS_USE_RELAY: {{ ternary "Y" "N" .Values.server.alwaysUseRelay | quote }}
+  MUST_LOGIN: {{ ternary "Y" "N" .Values.server.mustLogin | quote }}
+  {{- range $k, $v := .Values.server.env }}
+  {{ $k }}: {{ tpl (toString $v) $ | quote }}
+  {{- end }}
+  # --- rdpanel ---
+  {{- $p := .Values.panel }}
+  RDPANEL_LISTEN: {{ $p.listen | quote }}
+  {{- with $p.publicURL }}
+  RDPANEL_PUBLIC_URL: {{ . | quote }}
+  {{- end }}
+  RDPANEL_DATA_DIR: {{ $p.dataDir | quote }}
+  RDPANEL_HBBS_PUBLIC_KEY_FILE: {{ $p.hbbsPublicKeyFile | quote }}
+  RDPANEL_HBBS_ID_SERVER: {{ $p.hbbsIdServer | quote }}
+  RDPANEL_HBBS_RELAY_SERVER: {{ $p.hbbsRelayServer | quote }}
+  RDPANEL_TRUSTED_PROXIES: {{ join "," $p.trustedProxies | quote }}
+  RDPANEL_REAL_IP_HEADER: {{ $p.realIPHeader | quote }}
+  RDPANEL_METRICS_ALLOW: {{ join "," $p.metricsAllow | quote }}
+  {{- with $p.tokenLifetime }}
+  RDPANEL_TOKEN_LIFETIME: {{ . | quote }}
+  {{- end }}
+  {{- with $p.jwtLifetime }}
+  RDPANEL_JWT_LIFETIME: {{ . | quote }}
+  {{- end }}
+  {{- with $p.sessionIdle }}
+  RDPANEL_SESSION_IDLE: {{ . | quote }}
+  {{- end }}
+  {{- with $p.sessionAbsolute }}
+  RDPANEL_SESSION_ABSOLUTE: {{ . | quote }}
+  {{- end }}
+  RDPANEL_LOG_LEVEL: {{ $p.log.level | quote }}
+  RDPANEL_LOG_FORMAT: {{ $p.log.format | quote }}
+  {{- range $k, $v := $p.env }}
+  {{ $k }}: {{ tpl (toString $v) $ | quote }}
+  {{- end }}
