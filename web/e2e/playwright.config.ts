@@ -10,6 +10,7 @@ const port = 4174;
 export default defineConfig({
   testDir: ".",
   testMatch: /.*\.spec\.ts$/,
+  testIgnore: ["real/**"],
   timeout: 60_000,
   fullyParallel: false,
   workers: 1,

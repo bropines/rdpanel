@@ -20,7 +20,9 @@
     "build:mock": "tsc -b && vite build --mode mock",
     "preview:mock": "vite preview --mode mock --outDir dist-mock --port 4174 --strictPort",
     "screenshots": "playwright test --config e2e/playwright.config.ts screenshots",
-    "e2e": "playwright test --config e2e/playwright.config.ts smoke"
+    "e2e": "playwright test --config e2e/playwright.config.ts smoke",
+    "e2e:real": "playwright test --config e2e/real/playwright.config.ts --grep-invert @screenshots",
+    "screenshots:real": "playwright test --config e2e/real/playwright.config.ts --grep @screenshots"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.2.2",
