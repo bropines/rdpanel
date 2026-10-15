@@ -49,6 +49,33 @@ describe("createClient", () => {
     expect(JSON.parse(init.body)).toEqual({ username: "a", password: "b" });
   });
 
+  it("refreshes a stale CSRF cookie once and retries the request", async () => {
+    const fetch = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse(403, { error: { code: "csrf_failed", message: "bad token" } }))
+      .mockResolvedValueOnce(jsonResponse(200, { csrf_token: "fresh" }))
+      .mockResolvedValueOnce(jsonResponse(200, { ok: true }));
+    const client = createClient({ fetch, getCookie: () => "stale", base: "" });
+    await expect(client.request("/auth/login", { method: "POST", body: { username: "a" } })).resolves.toEqual({
+      ok: true,
+    });
+    expect(fetch).toHaveBeenCalledTimes(3);
+    expect(fetch.mock.calls[0]![1].headers[CSRF_HEADER]).toBe("stale");
+    expect(fetch.mock.calls[1]![0]).toBe("/auth/csrf");
+    expect(fetch.mock.calls[2]![1].headers[CSRF_HEADER]).toBe("fresh");
+  });
+
+  it("does not retry a CSRF failure twice", async () => {
+    const fetch = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse(403, { error: { code: "csrf_failed", message: "bad" } }))
+      .mockResolvedValueOnce(jsonResponse(200, { csrf_token: "fresh" }))
+      .mockResolvedValueOnce(jsonResponse(403, { error: { code: "csrf_failed", message: "still bad" } }));
+    const client = createClient({ fetch, getCookie: () => "stale", base: "" });
+    await expect(client.request("/x", { method: "POST" })).rejects.toMatchObject({ code: "csrf_failed" });
+    expect(fetch).toHaveBeenCalledTimes(3);
+  });
+
   it("maps the error envelope to ApiError", async () => {
     const fetch = vi
       .fn()

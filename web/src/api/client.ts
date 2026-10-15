@@ -99,8 +99,9 @@ export function createClient(deps: Partial<ClientDeps> = {}) {
   const getCookie = deps.getCookie ?? ((name: string) => readCookie(name));
   const base = deps.base ?? API_BASE;
 
-  async function csrfToken(): Promise<string> {
-    const fromCookie = getCookie(CSRF_COOKIE);
+  /** Returns the CSRF token; `refresh` ignores the cookie and asks the server for a new one. */
+  async function csrfToken(refresh = false): Promise<string> {
+    const fromCookie = refresh ? undefined : getCookie(CSRF_COOKIE);
     if (fromCookie) return fromCookie;
     const res = await request<Schemas["CsrfToken"]>("/auth/csrf");
     return res.csrf_token;
@@ -113,7 +114,12 @@ export function createClient(deps: Partial<ClientDeps> = {}) {
     return u;
   }
 
-  async function send(path: string, opts: RequestOptions, accept: string): Promise<Response> {
+  async function send(
+    path: string,
+    opts: RequestOptions,
+    accept: string,
+    refreshCsrf = false,
+  ): Promise<Response> {
     const method = opts.method ?? "GET";
     const headers: Record<string, string> = { Accept: accept };
     let body: BodyInit | undefined;
@@ -125,7 +131,7 @@ export function createClient(deps: Partial<ClientDeps> = {}) {
       body = JSON.stringify(opts.body);
     }
     if (!SAFE_METHODS.has(method)) {
-      headers[CSRF_HEADER] = await csrfToken();
+      headers[CSRF_HEADER] = await csrfToken(refreshCsrf);
     }
     return doFetch(url(path, opts.query), {
       method,
@@ -142,8 +148,8 @@ export function createClient(deps: Partial<ClientDeps> = {}) {
     throw new ApiError(res.status, err?.code ?? `http_${res.status}`, err?.message ?? res.statusText, err?.fields);
   }
 
-  async function request<T>(path: string, opts: RequestOptions = {}): Promise<T> {
-    const res = await send(path, opts, "application/json");
+  async function request<T>(path: string, opts: RequestOptions = {}, csrfRetried = false): Promise<T> {
+    const res = await send(path, opts, "application/json", csrfRetried);
     if (res.status === 204 || res.status === 202) return undefined as T;
 
     const text = await res.text();
@@ -155,7 +161,16 @@ export function createClient(deps: Partial<ClientDeps> = {}) {
         if (res.ok) throw new ApiError(res.status, "invalid_response", "invalid JSON from server");
       }
     }
-    if (!res.ok) return fail(res, path, data);
+    if (!res.ok) {
+      // A stale CSRF cookie (key rotation, another deployment on the same host)
+      // is rejected once; fetch a fresh token and retry the request a single time.
+      const code = (data as Partial<ErrorBody> | undefined)?.error?.code;
+      const method = opts.method ?? "GET";
+      if (res.status === 403 && code === "csrf_failed" && !csrfRetried && !SAFE_METHODS.has(method)) {
+        return request<T>(path, opts, true);
+      }
+      return fail(res, path, data);
+    }
     return data as T;
   }
 
