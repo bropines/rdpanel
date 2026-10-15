@@ -48,6 +48,16 @@ type Deps struct {
 	TOTP *TOTPService
 	// LoginEvents records login attempts (default: loginlog.DB on Store).
 	LoginEvents loginlog.Recorder
+
+	// Presence reads live device presence (nil: hbbs integration disabled,
+	// presence falls back to "heartbeat within 45 s").
+	Presence PresenceReader
+	// Servers reports the hbbs/hbbr admin channels (nil: unknown).
+	Servers ServerStatusReader
+	// Kicks queues heartbeat "disconnect" requests (clientapi.KickQueue).
+	Kicks DeviceKicker
+	// Events publishes live events such as device.updated (nil: none).
+	Events EventPublisher
 }
 
 // Register mounts the admin API on r (already scoped to /api/v1/admin).
@@ -61,4 +71,5 @@ func Register(r chi.Router, d Deps) {
 	c.registerAuth(r)
 	c.registerSecurity(r)
 	c.registerProviders(r)
+	registerResources(r, c)
 }

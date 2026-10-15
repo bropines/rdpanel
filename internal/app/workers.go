@@ -34,6 +34,7 @@ func (a *App) startWorkers(ctx context.Context, wg *sync.WaitGroup) {
 	run("limiter-prune", func(ctx context.Context) { a.Limiter.RunPruner(ctx, time.Minute) })
 	if p := a.HBBS.Presence; p != nil {
 		run("hbbs-presence", p.Run)
+		run("presence-sampler", a.runPresenceSampler)
 	}
 	if r := a.HBBS.Reconciler; r != nil {
 		run("hbbs-reconcile", r.Run)
