@@ -71,7 +71,8 @@ func TestHBBSTyped(t *testing.T) {
 	if err := c.SetRelayServers(ctx, []string{" r1.example.com:21117", "r1.example.com:21117", "[2001:db8::1]:21117", "10.0.0.1", ""}); err != nil {
 		t.Fatal(err)
 	}
-	if got := hs.Commands(); got[len(got)-1] != "relay-servers r1.example.com:21117,[2001:db8::1]:21117,10.0.0.1" {
+	// Duplicates are kept (weighted rotation).
+	if got := hs.Commands(); got[len(got)-1] != "relay-servers r1.example.com:21117,r1.example.com:21117,[2001:db8::1]:21117,10.0.0.1" {
 		t.Fatalf("wire %q", got[len(got)-1])
 	}
 	r := au.last()

@@ -36,7 +36,8 @@ var wantTables = []string{
 	"user_groups", "user_identities", "users",
 	"panel_assets", "presence_samples", // 00005_b2a_panel
 	"webauthn_challenges", "webauthn_credentials", "webauthn_user_handles", // 00008_webauthn_passkeys
-	"email_codes", // 00009_email_codes
+	"email_codes",                              // 00009_email_codes
+	"relay_agents", "relay_settings", "relays", // 00010_relay_agents
 }
 
 func tables(t *testing.T, d *DB) []string {
@@ -89,6 +90,53 @@ func TestMigrationsDownUp(t *testing.T) {
 	}
 	if _, err := p.Up(ctx); err != nil {
 		t.Fatal(err)
+	}
+}
+
+// TestRelayDataMigration: the admin-typed relay list becomes static relays
+// (00010) and comes back on Down.
+func TestRelayDataMigration(t *testing.T) {
+	ctx := context.Background()
+	d, err := Open(ctx, filepath.Join(t.TempDir(), "panel.db"), Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { d.Close() })
+	p, err := goose.NewProvider(goose.DialectSQLite3, d.DB, Migrations())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := p.UpTo(ctx, 9); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := d.Exec(`INSERT INTO server_settings (target, key, value, updated_at)
+		VALUES ('hbbs', 'relay_servers', '["r1.example.com:21117","r2.example.com","r1.example.com:21117"]', 1)`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := p.UpTo(ctx, 10); err != nil {
+		t.Fatal(err)
+	}
+	var hosts string
+	if err := d.QueryRow(`SELECT group_concat(public_host || '/' || kind || '/' || health, ' ') FROM (SELECT * FROM relays ORDER BY id)`).Scan(&hosts); err != nil {
+		t.Fatal(err)
+	}
+	if hosts != "r1.example.com:21117/static/active r2.example.com/static/active" {
+		t.Fatalf("relays after up: %q", hosts)
+	}
+	var n int
+	_ = d.QueryRow(`SELECT count(*) FROM server_settings WHERE key = 'relay_servers'`).Scan(&n)
+	if n != 0 {
+		t.Fatal("relay_servers row kept")
+	}
+	if _, err := p.DownTo(ctx, 9); err != nil {
+		t.Fatal(err)
+	}
+	var v string
+	if err := d.QueryRow(`SELECT value FROM server_settings WHERE target = 'hbbs' AND key = 'relay_servers'`).Scan(&v); err != nil {
+		t.Fatal(err)
+	}
+	if v != `["r1.example.com:21117","r2.example.com"]` {
+		t.Fatalf("relay_servers after down: %s", v)
 	}
 }
 

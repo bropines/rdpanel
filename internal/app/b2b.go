@@ -25,6 +25,9 @@ func (a *App) b2bDeps(d *adminapi.Deps) {
 	if r := a.HBBS.Reconciler; r != nil {
 		d.Reconciler = r
 	}
+	if a.Relays != nil {
+		d.Relays = a.Relays
+	}
 }
 
 // purgeRetention deletes audit rows older than audit.retention_days.

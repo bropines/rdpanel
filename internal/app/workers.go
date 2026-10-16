@@ -39,6 +39,9 @@ func (a *App) startWorkers(ctx context.Context, wg *sync.WaitGroup) {
 	if r := a.HBBS.Reconciler; r != nil {
 		run("hbbs-reconcile", r.Run)
 	}
+	if a.Relays != nil {
+		run("relays", a.Relays.Run)
+	}
 	if rs := a.HBBS.RelayStats; rs != nil {
 		run("hbbr-relay-stats", rs.Run)
 	}

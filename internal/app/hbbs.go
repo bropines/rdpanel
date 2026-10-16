@@ -2,14 +2,18 @@ package app
 
 import (
 	"log/slog"
+	"os"
+	"strings"
 
 	"github.com/bropines/rdpanel/internal/adminapi"
+	"github.com/bropines/rdpanel/internal/buildinfo"
 
 	"github.com/bropines/rdpanel/internal/events"
 	"github.com/bropines/rdpanel/internal/hbbs/control"
 	"github.com/bropines/rdpanel/internal/hbbs/presence"
 	"github.com/bropines/rdpanel/internal/hbbs/reconcile"
 	"github.com/bropines/rdpanel/internal/hbbs/relaystats"
+	"github.com/bropines/rdpanel/internal/relays"
 )
 
 // HBBS groups the hbbs/hbbr integration. Fields are nil when the integration
@@ -63,14 +67,22 @@ func (a *App) initHBBS() error {
 	a.HBBS.Control = ctl
 	// Persist mutating and console admin-channel calls in admin_audit.
 	ctl.SetAudit(adminapi.NewCommandAudit(a.Store, log))
-	r, err := reconcile.New(reconcile.Config{
+	rcfg := reconcile.Config{
 		Control: ctl, Store: &reconcile.Store{DB: a.DB}, Bus: a.Events, Log: log,
 		Registerer: a.Registry, Interval: cfg.ReconcileInterval, ListDir: cfg.ListDir,
-	})
+	}
+	if a.Relays != nil {
+		rcfg.Relays = a.Relays // hbbs' relay list is computed from the relays table
+	}
+	r, err := reconcile.New(rcfg)
 	if err != nil {
 		return err
 	}
 	a.HBBS.Reconciler = r
+	if a.Relays != nil {
+		a.Relays.SetPusher(r, r)
+		a.Relays.SetLocal(ctl, func() bool { return r.Status().HBBR.Reachable })
+	}
 	rs, err := relaystats.New(relaystats.Config{
 		Source: ctl, Registerer: a.Registry, Log: log, Interval: cfg.ReconcileInterval,
 		Reachable: func() bool { return r.Status().HBBR.Reachable },
@@ -79,5 +91,32 @@ func (a *App) initHBBS() error {
 		return err
 	}
 	a.HBBS.RelayStats = rs
+	return nil
+}
+
+// initRelays builds the relay manager / agent hub. The reconciler (built in
+// initHBBS) uses it as its relay source and is installed as its pusher.
+func (a *App) initRelays() error {
+	cfg := a.Config
+	image := "ghcr.io/bropines/rdpanel:latest"
+	if v := buildinfo.Version; len(v) > 1 && v[0] == 'v' && strings.Count(v, ".") == 2 && !strings.ContainsAny(v, "-+") {
+		image = "ghcr.io/bropines/rdpanel:" + strings.TrimPrefix(v, "v")
+	}
+	s, err := relays.New(relays.Config{
+		Store: &relays.Store{DB: a.DB}, Panel: a.Store, Bus: a.Events, Log: a.Log.With("component", "relays"),
+		Registerer: a.Registry, Limiter: a.Limiter, LocalHost: cfg.HBBS.RelayPublicHost, PublicURL: cfg.PublicURL,
+		Image: image,
+		PublicKey: func() (string, error) {
+			raw, err := os.ReadFile(cfg.HBBS.PublicKeyFile)
+			if err != nil {
+				return "", err
+			}
+			return strings.TrimSpace(string(raw)), nil
+		},
+	})
+	if err != nil {
+		return err
+	}
+	a.Relays = s
 	return nil
 }

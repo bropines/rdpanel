@@ -43,9 +43,10 @@ func (c *Client) RelayServers(ctx context.Context) ([]string, error) {
 }
 
 // SetRelayServers replaces the relay list. hbbs applies it asynchronously and
-// silently drops entries that fail DNS resolution.
+// silently drops entries that fail DNS resolution. Repeated entries are kept:
+// hbbs round-robins over the list, so duplicates are weights.
 func (c *Client) SetRelayServers(ctx context.Context, servers []string) error {
-	norm, err := NormalizeRelayServers(servers)
+	norm, err := NormalizeWeightedRelayServers(servers)
 	if err != nil {
 		return err
 	}

@@ -78,6 +78,7 @@ tags:
   - name: address-books
   - name: audit
   - name: server
+  - name: relays
   - name: settings
   - name: lookup
   - name: events
@@ -88,13 +89,14 @@ x-sse-events:
     `retry: 3000`. Clients reconnect with exponential backoff (1 s → 30 s, jitter)
     and refetch lists after a reconnect because events are not replayed
     (`Last-Event-ID` is ignored in v1). `user`-role sessions receive only events
-    about their own devices and connections; `hbbs.health` goes to admins only.
+    about their own devices and connections; `hbbs.health` and `relay.health` go to admins only.
     Every event's `data:` is one JSON object.
   events:
     presence.changed: { $ref: "#/components/schemas/PresenceChangedEvent" }
     device.updated: { $ref: "#/components/schemas/Device" }
     audit.connection: { $ref: "#/components/schemas/ConnectionAudit" }
     hbbs.health: { $ref: "#/components/schemas/ServerHealth" }
+    relay.health: { $ref: "#/components/schemas/RelayHealthEvent" }
 paths:
   /auth/csrf:
     get:
@@ -2377,6 +2379,280 @@ paths:
         "401": { $ref: "#/components/responses/Unauthorized" }
         "403": { $ref: "#/components/responses/Forbidden" }
 
+  /relays:
+    get:
+      tags: [relays]
+      operationId: listRelays
+      summary: Relays (local, static, agents) with health, agent state and the computed hbbs relay list (admin).
+      description: |
+        hbbs' relay list (`relay_servers`) is computed from this table: relays that are enabled,
+        in rotation, weight > 0 and `active` or `degraded`, each repeated `weight` times
+        (hbbs picks relays round-robin and keeps duplicates). Failing relays leave the list
+        after 3 failed end-to-end probes. See docs/relay-agents.md.
+      responses:
+        "200":
+          description: Relays.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RelayList" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "503": { $ref: "#/components/responses/Unavailable" }
+    post:
+      tags: [relays]
+      operationId: createRelay
+      summary: Add a static relay or a relay agent. For an agent, the response carries the one-time enrollment token (shown once).
+      parameters:
+        - $ref: "#/components/parameters/CsrfHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/RelayCreate" }
+      responses:
+        "201":
+          description: Created.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RelayCreated" }
+        "400": { $ref: "#/components/responses/ValidationFailed" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409": { $ref: "#/components/responses/Conflict" }
+  /relays/rotation:
+    get:
+      tags: [relays]
+      operationId: getRelayRotation
+      summary: The computed hbbs relay list and what hbbs currently hands out (admin).
+      responses:
+        "200":
+          description: Rotation.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RelayRotation" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /relays/options:
+    get:
+      tags: [relays]
+      operationId: getRelayOptions
+      summary: Relay options (approval gate for new agents, private relay hosts).
+      responses:
+        "200":
+          description: Options.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RelayOptions" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+    put:
+      tags: [relays]
+      operationId: updateRelayOptions
+      summary: Replace the relay options.
+      parameters:
+        - $ref: "#/components/parameters/CsrfHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/RelayOptions" }
+      responses:
+        "200":
+          description: Options.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RelayOptions" }
+        "400": { $ref: "#/components/responses/ValidationFailed" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /relays/{id}:
+    parameters:
+      - $ref: "#/components/parameters/RelayId"
+    get:
+      tags: [relays]
+      operationId: getRelay
+      summary: One relay.
+      responses:
+        "200":
+          description: Relay.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Relay" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    patch:
+      tags: [relays]
+      operationId: updateRelay
+      summary: Change name, host, region, weight, rotation membership or admin state (enabled, draining, disabled).
+      description: |
+        `draining` takes the relay out of hbbs' list while running sessions continue;
+        `disabled` also tells an agent to stop hbbr.
+      parameters:
+        - $ref: "#/components/parameters/CsrfHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/RelayPatch" }
+      responses:
+        "200":
+          description: Relay.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Relay" }
+        "400": { $ref: "#/components/responses/ValidationFailed" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+    delete:
+      tags: [relays]
+      operationId: deleteRelay
+      summary: Delete a static or agent relay (the local relay cannot be deleted).
+      parameters:
+        - $ref: "#/components/parameters/CsrfHeader"
+      responses:
+        "204": { description: Deleted. }
+        "400": { $ref: "#/components/responses/ValidationFailed" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /relays/{id}/enroll-token:
+    parameters:
+      - $ref: "#/components/parameters/RelayId"
+    post:
+      tags: [relays]
+      operationId: resetRelayEnrollment
+      summary: Issue a new one-time enrollment token (1 h); the enrolled agent's key stops working.
+      parameters:
+        - $ref: "#/components/parameters/CsrfHeader"
+      responses:
+        "200":
+          description: Enrollment material (shown once).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RelayEnrollment" }
+        "400": { $ref: "#/components/responses/ValidationFailed" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /relays/{id}/approve:
+    parameters:
+      - $ref: "#/components/parameters/RelayId"
+    post:
+      tags: [relays]
+      operationId: approveRelay
+      summary: Approve an enrolled agent (it then gets a running config).
+      parameters:
+        - $ref: "#/components/parameters/CsrfHeader"
+      responses:
+        "200":
+          description: Relay.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Relay" }
+        "400": { $ref: "#/components/responses/ValidationFailed" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /relays/{id}/revoke:
+    parameters:
+      - $ref: "#/components/parameters/RelayId"
+    post:
+      tags: [relays]
+      operationId: revokeRelay
+      summary: Revoke an agent's key and disconnect it (re-enable with a new enrollment token).
+      parameters:
+        - $ref: "#/components/parameters/CsrfHeader"
+      responses:
+        "200":
+          description: Relay.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Relay" }
+        "400": { $ref: "#/components/responses/ValidationFailed" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /relays/{id}/probe:
+    parameters:
+      - $ref: "#/components/parameters/RelayId"
+    post:
+      tags: [relays]
+      operationId: probeRelay
+      summary: Run the end-to-end relay probe now (two RequestRelay legs with the hbbs key; bytes must pass).
+      parameters:
+        - $ref: "#/components/parameters/CsrfHeader"
+      responses:
+        "200":
+          description: Relay after the probe.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Relay" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /relays/{id}/settings:
+    parameters:
+      - $ref: "#/components/parameters/RelayId"
+    get:
+      tags: [relays]
+      operationId: getRelaySettings
+      summary: Per-relay overrides of the global relay profile (the hbbr part of /server/settings), and the effective values.
+      responses:
+        "200":
+          description: Settings.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RelaySettingsState" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    put:
+      tags: [relays]
+      operationId: updateRelaySettings
+      summary: Replace the overrides of an agent relay (null = inherit the global profile).
+      parameters:
+        - $ref: "#/components/parameters/CsrfHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/RelaySettingsValues" }
+      responses:
+        "200":
+          description: Settings.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RelaySettingsState" }
+        "400": { $ref: "#/components/responses/ValidationFailed" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /relays/{id}/usage:
+    parameters:
+      - $ref: "#/components/parameters/RelayId"
+    get:
+      tags: [relays]
+      operationId: getRelayUsageById
+      summary: Live hbbr `usage` of one relay (local admin channel, or a command over the agent session).
+      responses:
+        "200":
+          description: Active relays.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items, checked_at]
+                properties:
+                  checked_at: { type: string, format: date-time }
+                  items: { type: array, items: { $ref: "#/components/schemas/RelayUsage" } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "503": { $ref: "#/components/responses/Unavailable" }
+
   /settings:
     get:
       tags: [settings]
@@ -2543,6 +2819,11 @@ components:
       in: cookie
       name: rdpanel_session
   parameters:
+    RelayId:
+      name: id
+      in: path
+      required: true
+      schema: { type: integer, format: int64 }
     CsrfHeader:
       name: X-CSRF-Token
       in: header
@@ -3897,6 +4178,191 @@ components:
         highest_kbps: { type: number }
         avg_kbps: { type: number }
         current_kbps: { type: number }
+    RelayKind:
+      type: string
+      enum: [local, static, agent]
+    RelayHealthState:
+      type: string
+      enum: [pending, active, degraded, offline]
+      description: |
+        pending = never probed / agent not approved; active = probe OK (agent: connected and config acked);
+        degraded = probe OK but the agent session is down or its config lags > 5 min, or 1-2 failed probes
+        (still in rotation); offline = 3 failed probes in a row (out of rotation).
+    RelayAdminState:
+      type: string
+      enum: [enabled, draining, disabled]
+    RelayAgentStatus:
+      type: object
+      required: [hbbr_up, hbbr_restarts, admin_rtt_ms, config_version, relays_active, total_mb, current_kbps, rx_bps, tx_bps, load1, mem_used_pct]
+      properties:
+        reported_at: { type: [string, "null"], format: date-time }
+        hbbr_up: { type: boolean }
+        hbbr_restarts: { type: integer }
+        hbbr_error: { type: [string, "null"] }
+        key_fp: { type: [string, "null"], description: First 8 characters of the key hbbr runs with. }
+        key_matches: { type: [boolean, "null"], description: key_fp equals the hbbs public key's fingerprint. }
+        admin_rtt_ms: { type: number }
+        config_version: { type: integer, format: int64 }
+        apply_errors: { type: object, additionalProperties: { type: string } }
+        relays_active: { type: integer }
+        total_mb: { type: number }
+        current_kbps: { type: number }
+        rx_bps: { type: number, description: Host NIC receive rate in bit/s (all traffic). }
+        tx_bps: { type: number }
+        load1: { type: number }
+        mem_used_pct: { type: number }
+    RelayAgent:
+      type: object
+      required: [enrolled, token_pending, require_approval, approved, connected, desired_version, acked_version, ack_errors]
+      properties:
+        enrolled: { type: boolean }
+        token_pending: { type: boolean, description: An unused enrollment token exists. }
+        enroll_expires_at: { type: [string, "null"], format: date-time }
+        require_approval: { type: boolean }
+        approved: { type: boolean }
+        approved_at: { type: [string, "null"], format: date-time }
+        revoked_at: { type: [string, "null"], format: date-time }
+        enrolled_at: { type: [string, "null"], format: date-time }
+        enrolled_from_ip: { type: [string, "null"] }
+        hostname: { type: [string, "null"] }
+        agent_version: { type: [string, "null"] }
+        hbbr_version: { type: [string, "null"] }
+        arch: { type: [string, "null"] }
+        connected: { type: boolean }
+        connected_at: { type: [string, "null"], format: date-time }
+        remote_ip: { type: [string, "null"] }
+        last_seen_at: { type: [string, "null"], format: date-time }
+        desired_version: { type: integer, format: int64 }
+        acked_version: { type: integer, format: int64 }
+        acked_at: { type: [string, "null"], format: date-time }
+        ack_errors: { type: object, additionalProperties: { type: string } }
+        status:
+          oneOf:
+            - $ref: "#/components/schemas/RelayAgentStatus"
+            - type: "null"
+    Relay:
+      type: object
+      required: [id, name, kind, public_host, weight, in_rotation, admin_state, health, rotation_weight, created_at, updated_at]
+      properties:
+        id: { type: integer, format: int64 }
+        name: { type: string }
+        kind: { $ref: "#/components/schemas/RelayKind" }
+        public_host: { type: string, description: "host[:port] handed to clients (default port 21117)." }
+        region: { type: [string, "null"] }
+        weight: { type: integer, minimum: 0, maximum: 5 }
+        in_rotation: { type: boolean }
+        admin_state: { $ref: "#/components/schemas/RelayAdminState" }
+        health: { $ref: "#/components/schemas/RelayHealthState" }
+        health_since: { type: [string, "null"], format: date-time }
+        last_probe_at: { type: [string, "null"], format: date-time }
+        last_probe_ms: { type: [number, "null"] }
+        last_probe_error: { type: [string, "null"] }
+        rotation_weight: { type: integer, description: Entries in hbbs' computed list (0 = not in rotation). }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+        agent:
+          oneOf:
+            - $ref: "#/components/schemas/RelayAgent"
+            - type: "null"
+    RelayRotationMember:
+      type: object
+      required: [id, name, host, weight]
+      properties:
+        id: { type: integer, format: int64 }
+        name: { type: string }
+        host: { type: string }
+        weight: { type: integer }
+    RelayRotation:
+      type: object
+      required: [servers, members, fallback, shrunk]
+      properties:
+        servers: { type: array, items: { type: string }, description: The computed `relay-servers` list (with weight duplicates). }
+        members: { type: array, items: { $ref: "#/components/schemas/RelayRotationMember" } }
+        fallback: { type: boolean, description: Nothing is healthy; the local relay is used anyway (hbbs never gets an empty list). }
+        shrunk: { type: boolean, description: Weights were scaled down to fit hbbs' 1 KiB admin command. }
+        error: { type: [string, "null"] }
+        observed: { type: [array, "null"], items: { type: string }, description: What hbbs reports now (`rs`). }
+        observed_error: { type: [string, "null"] }
+    RelayList:
+      type: object
+      required: [items, rotation]
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/Relay" } }
+        rotation: { $ref: "#/components/schemas/RelayRotation" }
+    RelayCreate:
+      type: object
+      additionalProperties: false
+      required: [kind, name, public_host]
+      properties:
+        kind: { type: string, enum: [static, agent] }
+        name: { type: string, minLength: 1, maxLength: 64 }
+        public_host: { type: string, minLength: 1, maxLength: 255, pattern: "^[^\\s,]+$" }
+        region: { type: [string, "null"], maxLength: 32 }
+        weight: { type: integer, minimum: 0, maximum: 5, default: 1 }
+        in_rotation: { type: boolean, default: true }
+    RelayPatch:
+      type: object
+      additionalProperties: false
+      properties:
+        name: { type: string, minLength: 1, maxLength: 64 }
+        public_host: { type: string, minLength: 1, maxLength: 255, pattern: "^[^\\s,]+$" }
+        region: { type: [string, "null"], maxLength: 32 }
+        weight: { type: integer, minimum: 0, maximum: 5 }
+        in_rotation: { type: boolean }
+        admin_state: { $ref: "#/components/schemas/RelayAdminState" }
+    RelayEnrollment:
+      type: object
+      required: [token, expires_at, compose, panel_url]
+      properties:
+        token: { type: string, description: One-time enrollment token (only its sha256 is stored). }
+        expires_at: { type: string, format: date-time }
+        compose: { type: string, description: docker compose snippet for the relay host. }
+        panel_url: { type: string }
+    RelayCreated:
+      type: object
+      required: [relay, enrollment]
+      properties:
+        relay: { $ref: "#/components/schemas/Relay" }
+        enrollment:
+          oneOf:
+            - $ref: "#/components/schemas/RelayEnrollment"
+            - type: "null"
+    RelayOptions:
+      type: object
+      additionalProperties: false
+      required: [require_approval, allow_private_hosts]
+      properties:
+        require_approval: { type: boolean, description: New agents wait for an admin's approval after enrolling (default true). }
+        allow_private_hosts: { type: boolean, description: Allow static relays / probes to private, loopback and link-local addresses (SSRF guard; default false). }
+    RelaySettingsValues:
+      type: object
+      additionalProperties: false
+      description: hbbr settings (same keys as ServerSettingsValues). In overrides, null = inherit the global profile.
+      properties:
+        blacklist: { type: [array, "null"], maxItems: 10000, items: { type: string } }
+        blocklist: { type: [array, "null"], maxItems: 10000, items: { type: string } }
+        limit_speed_mbps: { type: [number, "null"] }
+        total_bandwidth_mbps: { type: [number, "null"] }
+        single_bandwidth_mbps: { type: [number, "null"] }
+        downgrade_threshold: { type: [number, "null"] }
+        downgrade_start_check_s: { type: [integer, "null"] }
+    RelaySettingsState:
+      type: object
+      required: [overrides, global, effective]
+      properties:
+        overrides: { $ref: "#/components/schemas/RelaySettingsValues" }
+        global: { $ref: "#/components/schemas/RelaySettingsValues" }
+        effective: { $ref: "#/components/schemas/RelaySettingsValues" }
+    RelayHealthEvent:
+      type: object
+      required: [id, name, health, connected]
+      properties:
+        id: { type: integer, format: int64 }
+        name: { type: string }
+        health: { $ref: "#/components/schemas/RelayHealthState" }
+        previous: { type: string }
+        connected: { type: boolean }
+        error: { type: string }
     ConsoleTarget:
       type: string
       enum: [hbbs, hbbr]

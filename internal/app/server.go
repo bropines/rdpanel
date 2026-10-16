@@ -31,6 +31,7 @@ const shutdownTimeout = 15 * time.Second
 //	/api/v1/admin/*  panel API (stream B)
 //	/api/v1/events   SSE (stream C)
 //	/api/*           RustDesk client API (stream A)
+//	/agent/v1/*      relay agent hub (enroll, WebSocket session)
 //	/*               embedded SPA
 func (a *App) Handler() http.Handler {
 	cfg := a.Config
@@ -94,6 +95,12 @@ func (a *App) Handler() http.Handler {
 			TOTP: clientTOTP{a.TOTP}, Email: a.Mail, Telemetry: a.Telemetry,
 		})
 	})
+
+	// Relay agents (`rdpanel agent`): enrollment and the WebSocket session.
+	// Served next to /api/* on the public client-API host (docs/relay-agents.md).
+	if a.Relays != nil {
+		r.Route("/agent/v1", a.Relays.Register)
+	}
 
 	r.Handle("/*", a.SPA)
 	return r

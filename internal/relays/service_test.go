@@ -1,0 +1,358 @@
+package relays
+
+import (
+	"context"
+	"crypto/ed25519"
+	"crypto/rand"
+	"errors"
+	"net/netip"
+	"path/filepath"
+	"strings"
+	"sync"
+	"testing"
+	"time"
+
+	"github.com/bropines/rdpanel/internal/db"
+	"github.com/bropines/rdpanel/internal/events"
+	"github.com/bropines/rdpanel/internal/hbbs/control"
+	"github.com/bropines/rdpanel/internal/hbbs/hbbstest"
+	"github.com/bropines/rdpanel/internal/hbbs/reconcile"
+	"github.com/bropines/rdpanel/internal/store"
+)
+
+type fakePusher struct {
+	mu     sync.Mutex
+	pushes int
+	global reconcile.Settings
+}
+
+func (f *fakePusher) ReconcileTarget(context.Context, control.Target) error {
+	f.mu.Lock()
+	f.pushes++
+	f.mu.Unlock()
+	return nil
+}
+
+func (f *fakePusher) Desired(context.Context) (reconcile.Settings, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.global, nil
+}
+
+func (f *fakePusher) count() int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.pushes
+}
+
+type clock struct {
+	mu sync.Mutex
+	t  time.Time
+}
+
+func (c *clock) now() time.Time { c.mu.Lock(); defer c.mu.Unlock(); return c.t }
+func (c *clock) add(d time.Duration) {
+	c.mu.Lock()
+	c.t = c.t.Add(d)
+	c.mu.Unlock()
+}
+
+type harness struct {
+	svc   *Service
+	st    *Store
+	panel *store.Store
+	push  *fakePusher
+	bus   *events.Bus
+	clk   *clock
+}
+
+func newHarness(t *testing.T, mut func(*Config)) *harness {
+	t.Helper()
+	ctx := context.Background()
+	d, err := db.Open(ctx, filepath.Join(t.TempDir(), "panel.db"), db.Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { d.Close() })
+	if _, err := d.Migrate(ctx); err != nil {
+		t.Fatal(err)
+	}
+	clk := &clock{t: time.Now()}
+	h := &harness{st: &Store{DB: d, Now: clk.now}, panel: store.New(d), push: &fakePusher{}, bus: events.NewBus(nil), clk: clk}
+	cfg := Config{Store: h.st, Panel: h.panel, Bus: h.bus, Pusher: h.push, Global: h.push, Now: clk.now,
+		PublicKey: func() (string, error) { return testKey, nil }, PublicURL: "https://desk-api.example.com",
+		Prober: &Prober{Timeout: time.Second}}
+	if mut != nil {
+		mut(&cfg)
+	}
+	if h.svc, err = New(cfg); err != nil {
+		t.Fatal(err)
+	}
+	// Tests probe 127.0.0.1 fakes.
+	if err := h.panel.Settings.Set(ctx, SettingAllowPrivateHosts, true, nil); err != nil {
+		t.Fatal(err)
+	}
+	return h
+}
+
+func TestStaticRelayLifecycle(t *testing.T) {
+	h := newHarness(t, nil)
+	ctx := context.Background()
+	fr := hbbstest.NewFakeRelay(t, testKey)
+	v, enr, err := h.svc.Create(ctx, CreateInput{Kind: KindStatic, Name: "partner", PublicHost: fr.Addr(), Weight: 2, InRotation: true})
+	if err != nil || enr != nil || v.Health != HealthPending {
+		t.Fatalf("create: %+v %v %v", v, enr, err)
+	}
+	if _, _, err := h.svc.Create(ctx, CreateInput{Kind: KindStatic, Name: "partner", PublicHost: "x.example.com", Weight: 1}); !errors.Is(err, store.ErrConflict) {
+		t.Fatalf("duplicate name: %v", err)
+	}
+	if _, _, err := h.svc.Create(ctx, CreateInput{Kind: KindStatic, Name: "bad", PublicHost: "a b", Weight: 1}); !errors.Is(err, store.ErrInvalid) {
+		t.Fatalf("bad host: %v", err)
+	}
+	h.svc.Pass(ctx, true)
+	v, _ = h.svc.Get(ctx, v.ID)
+	if v.Health != HealthActive || v.RotationWeight != 2 || v.LastProbeMs == nil {
+		t.Fatalf("after probe: %+v", v)
+	}
+	if got := h.svc.RelayServers(ctx); strings.Join(got, ",") != fr.Addr()+","+fr.Addr() {
+		t.Fatalf("rotation %v", got)
+	}
+	if h.push.count() != 1 {
+		t.Fatalf("pushes %d", h.push.count())
+	}
+	// Unchanged rotation: no second push.
+	h.svc.Pass(ctx, true)
+	if h.push.count() != 1 {
+		t.Fatalf("pushes after unchanged pass %d", h.push.count())
+	}
+
+	// The relay starts failing: degraded after 1-2 failures (still in rs),
+	// offline after 3 and dropped from the rotation.
+	fr.Close()
+	sub := h.bus.Subscribe(func(e events.Event) bool { return e.Type == events.RelayHealth }, 16)
+	defer sub.Close()
+	h.svc.Pass(ctx, true)
+	if v, _ = h.svc.Get(ctx, v.ID); v.Health != HealthDegraded || v.RotationWeight != 2 {
+		t.Fatalf("after 1 failure: %s weight %d", v.Health, v.RotationWeight)
+	}
+	h.svc.Pass(ctx, true)
+	h.svc.Pass(ctx, true)
+	if v, _ = h.svc.Get(ctx, v.ID); v.Health != HealthOffline || v.RotationWeight != 0 || v.LastProbeError == "" {
+		t.Fatalf("after 3 failures: %+v", v)
+	}
+	if got := h.svc.RelayServers(ctx); got != nil {
+		t.Fatalf("offline relay still in rotation: %v", got)
+	}
+	var seen []string
+	for {
+		cctx, cancel := context.WithTimeout(ctx, 50*time.Millisecond)
+		e, err := sub.Next(cctx)
+		cancel()
+		if err != nil {
+			break
+		}
+		seen = append(seen, e.Data.(events.RelayState).Health)
+	}
+	if strings.Join(seen, ",") != "degraded,offline" {
+		t.Fatalf("events %v", seen)
+	}
+
+	// Drain and delete.
+	st := StateDraining
+	if v, err = h.svc.Update(ctx, v.ID, Patch{AdminState: &st}); err != nil || v.AdminState != StateDraining {
+		t.Fatalf("drain: %+v %v", v, err)
+	}
+	if err := h.svc.Delete(ctx, v.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := h.svc.Get(ctx, v.ID); !errors.Is(err, store.ErrNotFound) {
+		t.Fatalf("deleted relay: %v", err)
+	}
+}
+
+func TestSSRFGuardOnCreate(t *testing.T) {
+	h := newHarness(t, nil)
+	ctx := context.Background()
+	if err := h.panel.Settings.Set(ctx, SettingAllowPrivateHosts, false, nil); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := h.svc.Create(ctx, CreateInput{Kind: KindStatic, Name: "lan", PublicHost: "10.0.0.5:21117", Weight: 1}); !errors.Is(err, store.ErrInvalid) {
+		t.Fatalf("private static relay accepted: %v", err)
+	}
+	// Names are allowed at creation; the prober refuses private answers.
+	if _, _, err := h.svc.Create(ctx, CreateInput{Kind: KindStatic, Name: "named", PublicHost: "relay.example.com", Weight: 1}); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestEnsureLocal(t *testing.T) {
+	ctx := context.Background()
+	up := true
+	h := newHarness(t, func(c *Config) {
+		c.LocalHost = "rd.example.com"
+		c.LocalUp = func() bool { return up }
+		c.Prober = &Prober{Timeout: time.Second, Lookup: func(context.Context, string, string) ([]netip.Addr, error) {
+			return nil, errors.New("no such host")
+		}}
+	})
+	// A static relay with the local host (from the 00010 data migration)
+	// becomes the local one.
+	if _, _, err := h.svc.Create(ctx, CreateInput{Kind: KindStatic, Name: "rd.example.com", PublicHost: "rd.example.com", Weight: 1, InRotation: true}); err != nil {
+		t.Fatal(err)
+	}
+	if err := h.svc.EnsureLocal(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if err := h.svc.EnsureLocal(ctx); err != nil { // idempotent
+		t.Fatal(err)
+	}
+	views, _, _ := h.svc.List(ctx)
+	if len(views) != 1 || views[0].Kind != KindLocal {
+		t.Fatalf("relays %+v", views)
+	}
+	if err := h.svc.Delete(ctx, views[0].ID); !errors.Is(err, store.ErrInvalid) {
+		t.Fatalf("local relay deleted: %v", err)
+	}
+	// A public name is probed; here it does not resolve, but the local relay
+	// stays in rotation (degraded) while its admin channel answers.
+	h.svc.Pass(ctx, true)
+	h.svc.Pass(ctx, true)
+	h.svc.Pass(ctx, true)
+	v, _ := h.svc.Get(ctx, views[0].ID)
+	if v.Health != HealthDegraded || v.RotationWeight != 1 {
+		t.Fatalf("local relay: %s weight %d (%s)", v.Health, v.RotationWeight, v.LastProbeError)
+	}
+	up = false
+	h.svc.Pass(ctx, true)
+	if v, _ = h.svc.Get(ctx, views[0].ID); v.Health != HealthOffline {
+		t.Fatalf("local relay with hbbr down: %s", v.Health)
+	}
+	// Never an empty list: the local relay is the fallback.
+	if got := h.svc.RelayServers(ctx); len(got) != 1 || got[0] != "rd.example.com" {
+		t.Fatalf("fallback %v", got)
+	}
+}
+
+func newAgentKey(t *testing.T) ed25519.PrivateKey {
+	_, k, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return k
+}
+
+func TestEnrollmentTokenLifecycle(t *testing.T) {
+	h := newHarness(t, nil)
+	ctx := context.Background()
+	v, enr, err := h.svc.Create(ctx, CreateInput{Kind: KindAgent, Name: "fra-1", PublicHost: "fra-1.example.com", Weight: 1, InRotation: true})
+	if err != nil || enr == nil || enr.Token == "" {
+		t.Fatalf("create agent: %v %+v", err, enr)
+	}
+	if !strings.Contains(enr.Compose, enr.Token) || !strings.Contains(enr.Compose, "RDPANEL_MODE: agent") ||
+		!strings.Contains(enr.Compose, "https://desk-api.example.com") {
+		t.Fatalf("compose:\n%s", enr.Compose)
+	}
+	if !v.Agent.TokenPending || !v.Agent.RequireApproval || v.Agent.Enrolled() {
+		t.Fatalf("agent row: %+v", v.Agent)
+	}
+	// Only the hash is stored.
+	var n int
+	_ = h.st.DB.QueryRow(`SELECT count(*) FROM relay_agents WHERE instr(CAST(enroll_token_hash AS TEXT), ?) > 0`, enr.Token).Scan(&n)
+	if n != 0 {
+		t.Fatal("token stored in clear")
+	}
+	key := newAgentKey(t)
+	pub := key.Public().(ed25519.PublicKey)
+	if _, err := h.st.Enroll(ctx, EnrollInput{TokenHash: TokenHash("wrong"), Pubkey: pub}); !errors.Is(err, ErrTokenInvalid) {
+		t.Fatalf("wrong token: %v", err)
+	}
+	r, err := h.st.Enroll(ctx, EnrollInput{TokenHash: TokenHash(enr.Token), Pubkey: pub, IP: "198.51.100.7", Hostname: "fra-1"})
+	if err != nil || !r.Agent.Enrolled() || r.Agent.Approved() || r.Agent.TokenPending || r.Agent.EnrolledFromIP != "198.51.100.7" {
+		t.Fatalf("enroll: %+v %v", r.Agent, err)
+	}
+	// Single use.
+	if _, err := h.st.Enroll(ctx, EnrollInput{TokenHash: TokenHash(enr.Token), Pubkey: newAgentKey(t).Public().(ed25519.PublicKey)}); !errors.Is(err, ErrTokenInvalid) {
+		t.Fatalf("token reuse: %v", err)
+	}
+	if _, err := h.svc.Approve(ctx, v.ID, nil); err != nil {
+		t.Fatal(err)
+	}
+	if r, _ = h.st.Get(ctx, v.ID); !r.Agent.Approved() {
+		t.Fatal("not approved")
+	}
+	// Reset: new token, old key forgotten, approval required again.
+	enr2, err := h.svc.ResetEnrollment(ctx, v.ID)
+	if err != nil || enr2.Token == enr.Token {
+		t.Fatalf("reset: %v", err)
+	}
+	if r, _ = h.st.Get(ctx, v.ID); r.Agent.Enrolled() || r.Agent.Approved() || !r.Agent.TokenPending {
+		t.Fatalf("after reset: %+v", r.Agent)
+	}
+	// Expiry (TTL 1 h).
+	h.clk.add(2 * time.Hour)
+	if _, err := h.st.Enroll(ctx, EnrollInput{TokenHash: TokenHash(enr2.Token), Pubkey: pub}); !errors.Is(err, ErrTokenInvalid) {
+		t.Fatalf("expired token: %v", err)
+	}
+	// Without the approval gate an enrolled agent is approved right away.
+	if err := h.svc.SetOptions(ctx, Options{RequireApproval: false, AllowPrivateHosts: true}, nil); err != nil {
+		t.Fatal(err)
+	}
+	enr3, _ := h.svc.ResetEnrollment(ctx, v.ID)
+	if r, err = h.st.Enroll(ctx, EnrollInput{TokenHash: TokenHash(enr3.Token), Pubkey: pub}); err != nil || !r.Agent.Approved() {
+		t.Fatalf("no approval gate: %+v %v", r.Agent, err)
+	}
+	if _, err := h.svc.Revoke(ctx, v.ID); err != nil {
+		t.Fatal(err)
+	}
+	if r, _ = h.st.Get(ctx, v.ID); r.Agent.Approved() || r.Agent.RevokedAt == nil {
+		t.Fatalf("revoked: %+v", r.Agent)
+	}
+}
+
+func TestOverridesAndConfigVersions(t *testing.T) {
+	h := newHarness(t, nil)
+	ctx := context.Background()
+	ten, five := 10.0, 5.0
+	h.push.global = reconcile.Settings{TotalBandwidthMbps: &ten, Blocklist: []string{"203.0.113.1"}, MustLogin: new(bool)}
+	v, enr, _ := h.svc.Create(ctx, CreateInput{Kind: KindAgent, Name: "a1", PublicHost: "a1.example.com", Weight: 1, InRotation: true})
+	r, err := h.st.Enroll(ctx, EnrollInput{TokenHash: TokenHash(enr.Token), Pubkey: newAgentKey(t).Public().(ed25519.PublicKey)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	c1, err := h.svc.configFor(ctx, r)
+	if err != nil || c1.Version != 1 || c1.Run || c1.HBBSPublicKey != testKey || *c1.Settings.TotalBandwidthMbps != 10 {
+		t.Fatalf("config 1: %+v %v", c1, err)
+	}
+	r, _ = h.st.Get(ctx, v.ID)
+	if c, _ := h.svc.configFor(ctx, r); c.Version != 1 {
+		t.Fatalf("unchanged config bumped to %d", c.Version)
+	}
+	if _, err := h.svc.Approve(ctx, v.ID, nil); err != nil {
+		t.Fatal(err)
+	}
+	r, _ = h.st.Get(ctx, v.ID)
+	c2, _ := h.svc.configFor(ctx, r)
+	if c2.Version != 2 || !c2.Run {
+		t.Fatalf("approved config: %+v", c2)
+	}
+	sv, err := h.svc.SaveSettings(ctx, v.ID, reconcile.Settings{TotalBandwidthMbps: &five, MustLogin: new(bool)}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if *sv.Effective.TotalBandwidthMbps != 5 || sv.Effective.Blocklist[0] != "203.0.113.1" || sv.Effective.MustLogin != nil {
+		t.Fatalf("effective %+v", sv.Effective)
+	}
+	r, _ = h.st.Get(ctx, v.ID)
+	if c3, _ := h.svc.configFor(ctx, r); c3.Version != 3 || *c3.Settings.TotalBandwidthMbps != 5 {
+		t.Fatalf("override config: %+v", c3)
+	}
+	if _, err := h.svc.SaveSettings(ctx, v.ID, reconcile.Settings{LimitSpeedMbps: new(float64)}, nil); !errors.Is(err, store.ErrInvalid) {
+		t.Fatalf("invalid override accepted: %v", err)
+	}
+	st := StateDisabled
+	_, _ = h.svc.Update(ctx, v.ID, Patch{AdminState: &st})
+	r, _ = h.st.Get(ctx, v.ID)
+	if c4, _ := h.svc.configFor(ctx, r); c4.Run || c4.Version != 4 {
+		t.Fatalf("disabled relay config: %+v", c4)
+	}
+}

@@ -74,6 +74,7 @@ func registerB2b(r chi.Router, d Deps) {
 	c.registerBooks(r)
 	c.registerAudit(r)
 	c.registerServer(r)
+	c.registerRelays(r)
 	c.registerAbout(r)
 }
 

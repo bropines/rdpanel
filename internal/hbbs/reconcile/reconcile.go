@@ -43,6 +43,9 @@ type Config struct {
 	// ListDir is hbbr's working directory (where blacklist.txt/blocklist.txt
 	// live, /data in the s6 image). Empty disables writing the files.
 	ListDir string
+	// Relays, when set, owns hbbs' relay list (computed from the relays
+	// table); the stored relay_servers row is then ignored. See relays.go.
+	Relays RelaySource
 }
 
 // TargetStatus is the reconciler's view of one admin channel.
@@ -159,7 +162,7 @@ func (r *Reconciler) Tick(ctx context.Context) {
 		if err != nil {
 			continue
 		}
-		desired, lerr := r.cfg.Store.Load(ctx)
+		desired, lerr := r.load(ctx)
 		if lerr != nil {
 			r.log.Warn("reconcile: load desired settings", slog.Any("err", lerr))
 			return
@@ -218,7 +221,7 @@ func (r *Reconciler) Status() Status {
 
 // Desired returns the stored desired settings.
 func (r *Reconciler) Desired(ctx context.Context) (Settings, error) {
-	return r.cfg.Store.Load(ctx)
+	return r.load(ctx)
 }
 
 // KeyStatus returns per-key bookkeeping (updated/applied/last error).
@@ -231,6 +234,9 @@ func (r *Reconciler) KeyStatus(ctx context.Context) ([]KeyStatus, error) {
 // even if a server is unreachable; the error then reports the push failure
 // and the reconciler retries when the server comes back.
 func (r *Reconciler) Apply(ctx context.Context, s Settings, updatedBy *int64) error {
+	if r.cfg.Relays != nil {
+		s.RelayServers = nil // computed, never stored
+	}
 	norm, err := Normalize(s)
 	if err != nil {
 		return err
@@ -238,6 +244,7 @@ func (r *Reconciler) Apply(ctx context.Context, s Settings, updatedBy *int64) er
 	if err := r.cfg.Store.Save(ctx, norm, updatedBy); err != nil {
 		return fmt.Errorf("reconcile: save: %w", err)
 	}
+	norm = r.overlay(ctx, norm)
 	var errs []error
 	if err := r.syncListFiles(ctx); err != nil {
 		errs = append(errs, fmt.Errorf("write list files: %w", err))
@@ -252,7 +259,7 @@ func (r *Reconciler) Apply(ctx context.Context, s Settings, updatedBy *int64) er
 
 // Reconcile pushes the stored desired state to both servers now.
 func (r *Reconciler) Reconcile(ctx context.Context) error {
-	desired, err := r.cfg.Store.Load(ctx)
+	desired, err := r.load(ctx)
 	if err != nil {
 		return err
 	}
