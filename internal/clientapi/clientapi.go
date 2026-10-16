@@ -23,6 +23,7 @@ import (
 	"github.com/bropines/rustdesk-panel/internal/auth"
 	"github.com/bropines/rustdesk-panel/internal/config"
 	"github.com/bropines/rustdesk-panel/internal/crypto"
+	"github.com/bropines/rustdesk-panel/internal/metrics"
 	"github.com/bropines/rustdesk-panel/internal/store"
 )
 
@@ -95,6 +96,8 @@ type Deps struct {
 	Hasher  *auth.Hasher
 	Limiter auth.Limiter
 	Metrics prometheus.Registerer
+	// Telemetry counts logins, issued tokens and audit records (nil: none).
+	Telemetry *metrics.Panel
 
 	// TOTP verifies the second factor (default NoTOTP).
 	TOTP TOTPVerifier

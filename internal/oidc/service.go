@@ -36,6 +36,7 @@ import (
 	"github.com/bropines/rustdesk-panel/internal/auth"
 	"github.com/bropines/rustdesk-panel/internal/crypto"
 	"github.com/bropines/rustdesk-panel/internal/loginlog"
+	"github.com/bropines/rustdesk-panel/internal/metrics"
 	"github.com/bropines/rustdesk-panel/internal/store"
 )
 
@@ -88,6 +89,8 @@ type Options struct {
 	OnClientLogin ClientLoginFunc
 	// LoginEvents records login attempts (default: loginlog.DB on the store).
 	LoginEvents loginlog.Recorder
+	// Telemetry counts OIDC logins and issued client tokens (nil: none).
+	Telemetry *metrics.Panel
 	// GitHub overrides the GitHub endpoints (tests); GoogleIssuer the Google issuer.
 	GitHub       *GitHubEndpoints
 	GoogleIssuer string
@@ -109,6 +112,7 @@ type Service struct {
 	webLogin      WebLoginFunc
 	onClientLogin ClientLoginFunc
 	events        loginlog.Recorder
+	telemetry     *metrics.Panel
 	github        GitHubEndpoints
 	googleIssuer  string
 	cache         *cache
@@ -122,7 +126,7 @@ func NewService(o Options) *Service {
 		adminURL:      strings.TrimRight(o.AdminURL, "/"),
 		tokenLifetime: o.TokenLifetime, jwtLifetime: o.JWTLifetime, stateTTL: o.StateTTL,
 		hc: o.HTTPClient, secure: o.SecureCookies, webLogin: o.WebLogin, onClientLogin: o.OnClientLogin,
-		events: o.LoginEvents, github: DefaultGitHub, googleIssuer: GoogleIssuer, cache: newCache(),
+		events: o.LoginEvents, telemetry: o.Telemetry, github: DefaultGitHub, googleIssuer: GoogleIssuer, cache: newCache(),
 	}
 	if s.log == nil {
 		s.log = slog.New(slog.NewTextHandler(io.Discard, nil))

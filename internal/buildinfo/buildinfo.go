@@ -10,8 +10,10 @@ package buildinfo
 
 import (
 	"fmt"
+	"os"
 	"runtime"
 	"runtime/debug"
+	"strings"
 )
 
 // Link-time variables.
@@ -24,6 +26,11 @@ var (
 	HBBRepo = ""
 	HBBRef  = ""
 )
+
+// HBBRefEnv names the environment variable used as a fallback for HBBRef when
+// it was not set at link time. The all-in-one image sets it from its HBB_REF
+// build argument.
+const HBBRefEnv = "RDPANEL_HBB_REF"
 
 // Info is the resolved build metadata.
 type Info struct {
@@ -39,6 +46,9 @@ type Info struct {
 // toolchain when ldflags were not set.
 func Get() Info {
 	info := Info{Version: Version, Commit: Commit, Date: Date, GoVersion: runtime.Version(), HBBRepo: HBBRepo, HBBRef: HBBRef}
+	if info.HBBRef == "" {
+		info.HBBRef = strings.TrimSpace(os.Getenv(HBBRefEnv))
+	}
 	if bi, ok := debug.ReadBuildInfo(); ok {
 		for _, s := range bi.Settings {
 			switch s.Key {

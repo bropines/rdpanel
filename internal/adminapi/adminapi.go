@@ -17,6 +17,7 @@ import (
 	"github.com/bropines/rustdesk-panel/internal/config"
 	"github.com/bropines/rustdesk-panel/internal/crypto"
 	"github.com/bropines/rustdesk-panel/internal/loginlog"
+	"github.com/bropines/rustdesk-panel/internal/metrics"
 	"github.com/bropines/rustdesk-panel/internal/oidc"
 	"github.com/bropines/rustdesk-panel/internal/store"
 	"github.com/bropines/rustdesk-panel/internal/updatecheck"
@@ -51,6 +52,8 @@ type Deps struct {
 	TOTP *TOTPService
 	// LoginEvents records login attempts (default: loginlog.DB on Store).
 	LoginEvents loginlog.Recorder
+	// Telemetry counts login attempts (nil: no metrics).
+	Telemetry *metrics.Panel
 
 	// Presence reads live device presence (nil: hbbs integration disabled,
 	// presence falls back to "heartbeat within 45 s").

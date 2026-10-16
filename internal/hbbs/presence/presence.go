@@ -502,6 +502,32 @@ func (p *Poller) Snapshot() []State {
 	return out
 }
 
+// deviceOnlineDesc is the per-device presence series (opt-in, see
+// DeviceCollector).
+var deviceOnlineDesc = prometheus.NewDesc("rdpanel_presence_device_online",
+	"1 if the device is online, 0 if offline (one series per tracked device; opt-in).",
+	[]string{"id"}, nil)
+
+// DeviceCollector returns a collector exporting one rdpanel_presence_device_online
+// series per tracked device, labelled only with the RustDesk id. Its
+// cardinality equals the fleet size, so the app registers it only when
+// RDPANEL_METRICS_PER_DEVICE is set.
+func (p *Poller) DeviceCollector() prometheus.Collector { return deviceCollector{p} }
+
+type deviceCollector struct{ p *Poller }
+
+func (c deviceCollector) Describe(ch chan<- *prometheus.Desc) { ch <- deviceOnlineDesc }
+
+func (c deviceCollector) Collect(ch chan<- prometheus.Metric) {
+	for _, s := range c.p.Snapshot() {
+		v := 0.0
+		if s.Online {
+			v = 1
+		}
+		ch <- prometheus.MustNewConstMetric(deviceOnlineDesc, prometheus.GaugeValue, v, s.ID)
+	}
+}
+
 // Health returns hbbs reachability as observed by the poller.
 func (p *Poller) Health() Health {
 	p.mu.RLock()

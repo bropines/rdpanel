@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/bropines/rustdesk-panel/internal/httpx"
+	"github.com/bropines/rustdesk-panel/internal/metrics"
 	"github.com/bropines/rustdesk-panel/internal/store"
 )
 
@@ -61,8 +62,14 @@ func (h *handler) login(w http.ResponseWriter, r *http.Request) {
 	ip := httpx.ClientIPString(r)
 	ipKey := "clientapi.login.ip:" + ip
 	userKey := "clientapi.login.user:" + strings.ToLower(strings.TrimSpace(req.Username))
+	// factor is the step this request performs (metrics label).
+	factor := metrics.MethodPassword
+	if req.Type == "email_code" || req.Type == "tfa_code" {
+		factor = metrics.MethodTOTP
+	}
 	for _, k := range []string{ipKey, userKey} {
 		if ok, wait := h.Limiter.Allow(k); !ok {
+			h.Telemetry.Login(metrics.SurfaceClient, factor, metrics.ResultRateLimited)
 			secs := int(math.Ceil(wait.Seconds()))
 			w.Header().Set("Retry-After", fmt.Sprint(secs))
 			writeError(w, http.StatusTooManyRequests, fmt.Sprintf("Too many failed attempts, try again in %d s", secs))
@@ -76,6 +83,7 @@ func (h *handler) login(w http.ResponseWriter, r *http.Request) {
 	fail := func(u *store.User, reason, msg string) {
 		h.Limiter.Failure(ipKey)
 		h.Limiter.Failure(userKey)
+		h.Telemetry.Login(metrics.SurfaceClient, factor, metrics.ResultFailure)
 		ev := &store.LoginEvent{UsernameAttempted: clip(req.Username, 128), Method: store.LoginMethodPassword,
 			Result: store.LoginFailure, FailureReason: reason, ClientKind: clip(lc.ClientKind, 64),
 			DeviceRustdeskID: clip(lc.DeviceID, maxIDLen), DeviceUUID: clip(lc.DeviceUUID, 256),
@@ -179,6 +187,7 @@ func (h *handler) login(w http.ResponseWriter, r *http.Request) {
 	}
 	h.Limiter.Success(ipKey)
 	h.Limiter.Success(userKey)
+	h.Telemetry.Login(metrics.SurfaceClient, factor, metrics.ResultSuccess)
 	p := NewUserPayload(u)
 	writeJSON(w, http.StatusOK, AuthBody{Type: "access_token", AccessToken: token, User: &p})
 }

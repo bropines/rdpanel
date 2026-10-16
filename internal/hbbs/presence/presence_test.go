@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net"
 	"path/filepath"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -484,5 +485,27 @@ func TestRunStopsOnCancel(t *testing.T) {
 	case <-done:
 	case <-time.After(3 * time.Second):
 		t.Fatal("Run did not stop")
+	}
+}
+
+func TestDeviceCollector(t *testing.T) {
+	hb := newFakeHBBS(t)
+	lister := &staticLister{refs: []DeviceRef{{ID: "111111111"}, {ID: "222222222"}}}
+	p, err := New(Config{Addr: hb.addr(), Devices: lister, Bus: events.NewBus(nil)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	hb.set("111111111", true)
+	p.PollOnce(context.Background())
+	reg := prometheus.NewRegistry()
+	reg.MustRegister(p.DeviceCollector())
+	want := `
+# HELP rdpanel_presence_device_online 1 if the device is online, 0 if offline (one series per tracked device; opt-in).
+# TYPE rdpanel_presence_device_online gauge
+rdpanel_presence_device_online{id="111111111"} 1
+rdpanel_presence_device_online{id="222222222"} 0
+`
+	if err := testutil.GatherAndCompare(reg, strings.NewReader(want)); err != nil {
+		t.Fatal(err)
 	}
 }

@@ -1,5 +1,6 @@
 # MetalLB, split TCP/UDP Services sharing one IP, server keys migrated from an
-# existing install, ServiceMonitor + NetworkPolicy + PDB enabled.
+# existing install, ServiceMonitor + PrometheusRule + Grafana dashboard +
+# NetworkPolicy + PDB enabled.
 server:
   relay: 203.0.113.10:21117
   encryptedOnly: true
@@ -33,6 +34,18 @@ serviceMonitor:
   enabled: true
   labels:
     release: kube-prometheus-stack
+
+prometheusRule:
+  enabled: true
+  labels:
+    release: kube-prometheus-stack
+  additionalRuleLabels:
+    team: infra
+  disabledAlerts: [RustDeskPanelAbsent]
+
+grafanaDashboard:
+  enabled: true
+  folder: RustDesk
 
 networkPolicy:
   enabled: true

@@ -1,0 +1,25 @@
+{{- if .Values.grafanaDashboard.enabled }}
+{{- $g := .Values.grafanaDashboard }}
+# Grafana dashboard (files/rustdesk-panel.json, a copy of
+# deploy/monitoring/grafana/rustdesk-panel.json) for the Grafana dashboard
+# sidecar (kube-prometheus-stack: label grafana_dashboard="1").
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "rustdesk-panel.fullname" . }}-dashboard
+  namespace: {{ $g.namespace | default .Release.Namespace }}
+  labels:
+    {{- include "rustdesk-panel.labels" . | nindent 4 }}
+    {{ $g.sidecarLabel }}: {{ $g.sidecarLabelValue | quote }}
+    {{- with $g.labels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+  {{- $ann := $g.annotations | default dict }}
+  {{- if $g.folder }}
+  {{- $ann = merge (dict $g.folderAnnotation $g.folder) $ann }}
+  {{- end }}
+  {{- with include "rustdesk-panel.annotations" (dict "root" . "extra" $ann) }}{{ . | nindent 2 }}{{ end }}
+data:
+  rustdesk-panel.json: |-
+    {{- .Files.Get "files/rustdesk-panel.json" | nindent 4 }}
+{{- end }}

@@ -97,6 +97,9 @@ panel:
   metricsAllow:
     - 127.0.0.0/8
     - ::1/128
+  # -- RDPANEL_METRICS_PER_DEVICE. Export rdpanel_presence_device_online{id}, one
+  # series per device (cardinality = fleet size). Off by default.
+  metricsPerDevice: false
   # -- RDPANEL_TOKEN_LIFETIME (Go duration, e.g. 4380h). Empty = binary default.
   tokenLifetime: ""
   # -- RDPANEL_JWT_LIFETIME. Empty = same as tokenLifetime.
@@ -484,6 +487,42 @@ serviceMonitor:
   relabelings: []
   metricRelabelings: []
   honorLabels: false
+
+# Prometheus Operator PrometheusRule with the alerts of
+# deploy/monitoring/prometheus/alerts.yaml (panel/hbbs/hbbr down, presence drop,
+# login-failure spike, 5xx ratio, reconciler failures). See docs/monitoring.md.
+prometheusRule:
+  enabled: false
+  # -- Namespace of the PrometheusRule (default: release namespace).
+  namespace: ""
+  # -- Labels matched by your Prometheus ruleSelector (kube-prometheus-stack:
+  # release: <its release name>).
+  labels: {}
+  annotations: {}
+  # -- Value of the job label in the rules. Empty = the panel Service name, which
+  # is the job label the chart's ServiceMonitor produces.
+  job: ""
+  # -- Labels added to every alert (a rule's own labels win), e.g. {team: infra}.
+  additionalRuleLabels: {}
+  # -- Alert names to leave out, e.g. [RustDeskLoginFailureSpike].
+  disabledAlerts: []
+  # -- Extra rule groups appended verbatim (PrometheusRule spec.groups items).
+  extraGroups: []
+
+# Grafana dashboard as a ConfigMap for the Grafana dashboard sidecar
+# (kube-prometheus-stack picks up ConfigMaps labelled grafana_dashboard: "1").
+grafanaDashboard:
+  enabled: false
+  # -- Namespace of the ConfigMap (default: release namespace). The sidecar must
+  # watch it (kube-prometheus-stack: grafana.sidecar.dashboards.searchNamespace).
+  namespace: ""
+  sidecarLabel: grafana_dashboard
+  sidecarLabelValue: "1"
+  # -- Grafana folder; set when the sidecar uses folderAnnotation.
+  folder: ""
+  folderAnnotation: grafana_folder
+  labels: {}
+  annotations: {}
 
 # NetworkPolicy (ignored for hostNetwork pods by most CNIs).
 networkPolicy:

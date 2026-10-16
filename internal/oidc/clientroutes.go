@@ -12,6 +12,7 @@ import (
 
 	"github.com/bropines/rustdesk-panel/internal/crypto"
 	"github.com/bropines/rustdesk-panel/internal/httpx"
+	"github.com/bropines/rustdesk-panel/internal/metrics"
 	"github.com/bropines/rustdesk-panel/internal/store"
 )
 
@@ -271,5 +272,6 @@ func (s *Service) issueClientToken(ctx context.Context, user *store.User, st *st
 	if err := s.st.AuthTokens.Create(ctx, row); err != nil {
 		return "", 0, err
 	}
+	s.telemetry.TokenIssued(metrics.MethodOIDC)
 	return tok, row.ID, nil
 }

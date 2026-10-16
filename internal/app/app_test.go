@@ -78,6 +78,15 @@ func TestRoutes(t *testing.T) {
 	if rec.Code != 200 || !strings.Contains(rec.Body.String(), "rdpanel_http_requests_total") {
 		t.Fatalf("metrics loopback: %d", rec.Code)
 	}
+	for _, series := range []string{"rdpanel_build_info{", "rdpanel_auth_login_attempts_total{",
+		"rdpanel_auth_client_tokens_issued_total{", "rdpanel_audit_events_total{", "rdpanel_hbbr_relay_sessions "} {
+		if !strings.Contains(rec.Body.String(), series) {
+			t.Fatalf("metrics: %s missing", series)
+		}
+	}
+	if strings.Contains(rec.Body.String(), "rdpanel_presence_device_online") {
+		t.Fatal("per-device presence metrics must be opt-in")
+	}
 	rec = do(t, h, http.MethodGet, "/metrics", "127.0.0.1:1234", map[string]string{"X-Forwarded-For": "198.51.100.1"})
 	if rec.Code != http.StatusForbidden {
 		t.Fatalf("metrics via proxy must be forbidden: %d", rec.Code)

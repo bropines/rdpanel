@@ -130,6 +130,8 @@ DB) succeeds.
 | `RDPANEL_TOKEN_LIFETIME`, `RDPANEL_JWT_LIFETIME`, `RDPANEL_SESSION_IDLE`, `RDPANEL_SESSION_ABSOLUTE` | panel | `4380h`, = token, `12h`, `168h` | token/session lifetimes |
 | `RDPANEL_TRUSTED_PROXIES`, `RDPANEL_REAL_IP_HEADER` | panel | loopback, `X-Forwarded-For` | client-IP resolution |
 | `RDPANEL_METRICS_ALLOW` | panel | loopback | who may read `/metrics` |
+| `RDPANEL_METRICS_PER_DEVICE` | panel | `false` | per-device presence series (see [monitoring](monitoring.md)) |
+| `RDPANEL_HBB_REF` | panel | image `HBB_REF` build arg | hbbs/hbbr source ref shown in `rdpanel_build_info` |
 | `RDPANEL_HBBS_ID_SERVER`, `RDPANEL_HBBS_RELAY_SERVER`, `RDPANEL_HBBS_PUBLIC_KEY_FILE` | panel | `127.0.0.1:21116`, `127.0.0.1:21117`, `/data/id_ed25519.pub` | where hbbs/hbbr are |
 | `RDPANEL_LOG_LEVEL`, `RDPANEL_LOG_FORMAT`, `RDPANEL_CONFIG` | panel | `info`, `json`, — | logging, optional YAML file |
 | `RDPANEL_UPDATE_CHECK` | panel | `true` | About page release check against the GitHub API (see below); `false` = no outbound request |
@@ -256,6 +258,8 @@ server {
 any forwarding header (`X-Forwarded-For`, `X-Real-IP`, `Forwarded`, …) are in
 `RDPANEL_METRICS_ALLOW`, so a loopback proxy never makes remote scrapers look
 local; blocking it on the public vhost (as above) is still recommended.
+Metrics, the Grafana dashboard, alert rules and a ready Prometheus + Grafana
+compose file are in [monitoring.md](monitoring.md).
 
 - **Trusted proxies.** The panel only honours `RDPANEL_REAL_IP_HEADER` from
   peers in `RDPANEL_TRUSTED_PROXIES` (default: loopback). With host networking

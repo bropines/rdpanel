@@ -39,6 +39,9 @@ func (a *App) startWorkers(ctx context.Context, wg *sync.WaitGroup) {
 	if r := a.HBBS.Reconciler; r != nil {
 		run("hbbs-reconcile", r.Run)
 	}
+	if rs := a.HBBS.RelayStats; rs != nil {
+		run("hbbr-relay-stats", rs.Run)
+	}
 	if c := a.HBBS.Control; c != nil {
 		run("hbbs-punch-requests", func(ctx context.Context) { a.runPunchCollector(ctx, c) })
 	}

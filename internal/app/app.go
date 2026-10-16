@@ -21,6 +21,7 @@ import (
 	"github.com/bropines/rustdesk-panel/internal/db"
 	"github.com/bropines/rustdesk-panel/internal/events"
 	"github.com/bropines/rustdesk-panel/internal/httpx"
+	"github.com/bropines/rustdesk-panel/internal/metrics"
 	"github.com/bropines/rustdesk-panel/internal/store"
 	"github.com/bropines/rustdesk-panel/internal/updatecheck"
 	"github.com/bropines/rustdesk-panel/internal/web"
@@ -61,6 +62,8 @@ type App struct {
 	// Updates is the cached GitHub release check (nil when
 	// RDPANEL_UPDATE_CHECK=false).
 	Updates *updatecheck.Checker
+	// Telemetry holds the login / client-token / audit counters.
+	Telemetry *metrics.Panel
 
 	httpMetrics *httpx.Metrics
 }
@@ -90,6 +93,9 @@ func New(ctx context.Context, cfg *config.Config, log *slog.Logger) (*App, error
 		collectors.NewProcessCollector(collectors.ProcessCollectorOpts{}),
 	)
 	a.httpMetrics = httpx.NewMetrics(a.Registry)
+	a.Telemetry = metrics.New(a.Registry)
+	bi := buildinfo.Get()
+	metrics.RegisterBuildInfo(a.Registry, bi, bi.HBBRef)
 	a.initEvents()
 	if err := a.initHBBS(); err != nil {
 		_ = a.DB.Close()

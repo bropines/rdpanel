@@ -12,6 +12,7 @@ import (
 	"github.com/bropines/rustdesk-panel/internal/auth"
 	"github.com/bropines/rustdesk-panel/internal/crypto"
 	"github.com/bropines/rustdesk-panel/internal/httpx"
+	"github.com/bropines/rustdesk-panel/internal/metrics"
 	"github.com/bropines/rustdesk-panel/internal/store"
 )
 
@@ -121,6 +122,7 @@ type TokenIssuer struct {
 	now       func() time.Time
 	tokenLife time.Duration
 	jwtLife   time.Duration
+	telemetry *metrics.Panel
 
 	mu       sync.Mutex
 	cachedAt time.Time
@@ -147,7 +149,7 @@ func (ti *TokenIssuer) tokenLifetime(ctx context.Context) time.Duration {
 
 // NewTokenIssuer builds a TokenIssuer from d (Store, JWT, Config, Log, Now).
 func NewTokenIssuer(d Deps) *TokenIssuer {
-	ti := &TokenIssuer{st: d.Store, jwt: d.JWT, log: d.Log, now: d.Now, tokenLife: 4380 * time.Hour}
+	ti := &TokenIssuer{st: d.Store, jwt: d.JWT, log: d.Log, now: d.Now, tokenLife: 4380 * time.Hour, telemetry: d.Telemetry}
 	if ti.now == nil {
 		ti.now = time.Now
 	}
@@ -196,6 +198,9 @@ func (ti *TokenIssuer) Issue(ctx context.Context, u *store.User, lc LoginContext
 		if errors.Is(err, store.ErrConflict) && attempt < 30 {
 			jwtExp = jwtExp.Add(time.Second)
 			continue
+		}
+		if err == nil {
+			ti.telemetry.TokenIssued(lc.Method)
 		}
 		return raw, err
 	}
