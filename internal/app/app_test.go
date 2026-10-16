@@ -74,6 +74,18 @@ func TestRoutes(t *testing.T) {
 		t.Fatal("security headers missing")
 	}
 
+	// Relay agent installer: public, templated with the public URL, not the SPA.
+	for _, m := range []string{http.MethodGet, http.MethodHead} {
+		rec = do(t, h, m, "/agent/install.sh", "", nil)
+		if rec.Code != 200 || !strings.HasPrefix(rec.Header().Get("Content-Type"), "text/x-shellscript") {
+			t.Fatalf("%s install.sh: %d %q", m, rec.Code, rec.Header().Get("Content-Type"))
+		}
+	}
+	if body := do(t, h, http.MethodGet, "/agent/install.sh", "", nil).Body.String(); !strings.Contains(body, "DEFAULT_PANEL_URL='https://desk.example.test'") ||
+		!strings.Contains(body, "DEFAULT_IMAGE='ghcr.io/bropines/rdpanel:latest'") {
+		t.Fatalf("install.sh not templated:\n%.500s", body)
+	}
+
 	rec = do(t, h, http.MethodGet, "/metrics", "127.0.0.1:1234", nil)
 	if rec.Code != 200 || !strings.Contains(rec.Body.String(), "rdpanel_http_requests_total") {
 		t.Fatalf("metrics loopback: %d", rec.Code)

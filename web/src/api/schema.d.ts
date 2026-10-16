@@ -3395,6 +3395,10 @@ export interface components {
             /** @description docker compose snippet for the relay host. */
             compose: string;
             panel_url: string;
+            /** @description One-line install on the relay host (`curl -fsSL <panel_url>/agent/install.sh | sudo sh -s -- --token <token>`). */
+            install_command: string;
+            /** @description The same setup as a plain `docker run` command. */
+            docker_run: string;
         };
         RelayCreated: {
             relay: components["schemas"]["Relay"];

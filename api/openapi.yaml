@@ -4382,12 +4382,16 @@ components:
         admin_state: { $ref: "#/components/schemas/RelayAdminState" }
     RelayEnrollment:
       type: object
-      required: [token, expires_at, compose, panel_url]
+      required: [token, expires_at, compose, panel_url, install_command, docker_run]
       properties:
         token: { type: string, description: One-time enrollment token (only its sha256 is stored). }
         expires_at: { type: string, format: date-time }
         compose: { type: string, description: docker compose snippet for the relay host. }
         panel_url: { type: string }
+        install_command:
+          type: string
+          description: One-line install on the relay host (`curl -fsSL <panel_url>/agent/install.sh | sudo sh -s -- --token <token>`).
+        docker_run: { type: string, description: The same setup as a plain `docker run` command. }
     RelayCreated:
       type: object
       required: [relay, enrollment]

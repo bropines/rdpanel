@@ -19,6 +19,7 @@ import (
 	"github.com/bropines/rdpanel/internal/events"
 	"github.com/bropines/rdpanel/internal/httpx"
 	"github.com/bropines/rdpanel/internal/oidc"
+	"github.com/bropines/rdpanel/internal/relays"
 	"github.com/bropines/rdpanel/internal/web"
 )
 
@@ -32,6 +33,7 @@ const shutdownTimeout = 15 * time.Second
 //	/api/v1/events   SSE (stream C)
 //	/api/*           RustDesk client API (stream A)
 //	/agent/v1/*      relay agent hub (enroll, WebSocket session)
+//	/agent/install.sh relay agent installer (static script, no auth)
 //	/*               embedded SPA
 func (a *App) Handler() http.Handler {
 	cfg := a.Config
@@ -102,6 +104,8 @@ func (a *App) Handler() http.Handler {
 	// Served next to /api/* on the public client-API host (docs/relay-agents.md).
 	if a.Relays != nil {
 		r.Route("/agent/v1", a.Relays.Register)
+		r.Method(http.MethodGet, relays.InstallScriptPath, http.HandlerFunc(a.Relays.HandleInstallScript))
+		r.Method(http.MethodHead, relays.InstallScriptPath, http.HandlerFunc(a.Relays.HandleInstallScript))
 	}
 
 	r.Handle("/*", a.SPA)
