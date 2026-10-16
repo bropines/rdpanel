@@ -36,6 +36,7 @@ var wantTables = []string{
 	"user_groups", "user_identities", "users",
 	"panel_assets", "presence_samples", // 00005_b2a_panel
 	"webauthn_challenges", "webauthn_credentials", "webauthn_user_handles", // 00008_webauthn_passkeys
+	"email_codes", // 00009_email_codes
 }
 
 func tables(t *testing.T, d *DB) []string {

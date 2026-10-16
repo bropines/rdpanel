@@ -53,6 +53,12 @@ var cheapHasher = &auth.Hasher{Params: auth.Argon2Params{Memory: 1024, Time: 1, 
 
 func newTEnv(t *testing.T) *tenv {
 	t.Helper()
+	return newTEnvWithConfig(t, nil)
+}
+
+// newTEnvWithConfig is newTEnv with a custom configuration (nil: defaults).
+func newTEnvWithConfig(t *testing.T, cfg *config.Config) *tenv {
+	t.Helper()
 	ctx := context.Background()
 	d, err := db.Open(ctx, filepath.Join(t.TempDir(), "panel.db"), db.Options{})
 	if err != nil {
@@ -67,9 +73,11 @@ func newTEnv(t *testing.T) *tenv {
 	key, _ := crypto.RandomBytes(32)
 	aead, _ := crypto.NewAEAD(key)
 	jwtSvc, _ := auth.NewClientJWT([]byte("k"), clk.now)
-	cfg := config.Defaults()
-	cfg.PublicURL = "http://panel.test"
-	cfg.WebAuthn.Origins = []string{"http://panel.test"}
+	if cfg == nil {
+		cfg = config.Defaults()
+		cfg.PublicURL = "http://panel.test"
+		cfg.WebAuthn.Origins = []string{"http://panel.test"}
+	}
 
 	e := &tenv{t: t, st: st, clk: clk, aead: aead}
 	e.deps = Deps{Log: slog.New(slog.NewTextHandler(io.Discard, nil)), Config: cfg, Store: st, AEAD: aead,

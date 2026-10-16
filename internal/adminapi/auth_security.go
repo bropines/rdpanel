@@ -52,6 +52,8 @@ func (c *authCore) registerSecurity(r chi.Router) {
 type profileRequest struct {
 	DisplayName *string     `json:"display_name"`
 	Email       opt[string] `json:"email"`
+	// Locale of e-mails: "en", "ru" or null (panel default).
+	Locale opt[string] `json:"locale"`
 }
 
 // handleUpdateProfile lets a user edit their own display name and email.
@@ -81,6 +83,15 @@ func (c *authCore) handleUpdateProfile(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
+	if req.Locale.Set {
+		u.Locale = ""
+		if !req.Locale.Null {
+			u.Locale = req.Locale.V
+		}
+		if u.Locale != "" && u.Locale != "en" && u.Locale != "ru" {
+			f["locale"] = "must be en, ru or null"
+		}
+	}
 	if len(f) > 0 {
 		validationFailed(w, "invalid profile", f)
 		return
@@ -92,6 +103,7 @@ func (c *authCore) handleUpdateProfile(w http.ResponseWriter, r *http.Request) {
 	ch := diff{}
 	ch.val("display_name", s.User.DisplayName, u.DisplayName)
 	ch.val("email", s.User.Email, u.Email)
+	ch.val("locale", s.User.Locale, u.Locale)
 	if len(ch) > 0 {
 		c.audit(ctx, r, "user.profile_update", "user", strconv.FormatInt(u.ID, 10), map[string]any{"changes": ch})
 	}
@@ -136,38 +148,55 @@ func (c *authCore) handleRevokeOtherSessions(w http.ResponseWriter, r *http.Requ
 }
 
 type securityDTO struct {
-	HasPassword            bool `json:"has_password"`
-	TOTPEnabled            bool `json:"totp_enabled"`
-	TOTPPending            bool `json:"totp_pending"`
-	TOTPRequired           bool `json:"totp_required"`
-	MustEnrollTOTP         bool `json:"must_enroll_totp"`
-	RecoveryCodesRemaining int  `json:"recovery_codes_remaining"`
-	PasskeysAvailable      bool `json:"passkeys_available"`
-	PasskeyCount           int  `json:"passkey_count"`
+	HasPassword            bool    `json:"has_password"`
+	TOTPEnabled            bool    `json:"totp_enabled"`
+	TOTPPending            bool    `json:"totp_pending"`
+	TOTPRequired           bool    `json:"totp_required"`
+	MustEnrollTOTP         bool    `json:"must_enroll_totp"`
+	RecoveryCodesRemaining int     `json:"recovery_codes_remaining"`
+	Email                  *string `json:"email"`
+	EmailVerified          bool    `json:"email_verified"`
+	Email2FAEnabled        bool    `json:"email_2fa_enabled"`
+	Email2FARequired       bool    `json:"email_2fa_required"`
+	EmailAvailable         bool    `json:"email_available"`
+	Locale                 *string `json:"locale"`
+	PasskeysAvailable      bool    `json:"passkeys_available"`
+	PasskeyCount           int     `json:"passkey_count"`
 }
 
 func (c *authCore) handleSecurity(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-	s := CurrentSession(ctx)
+	out, err := c.security(r.Context(), CurrentSession(r.Context()))
+	if err != nil {
+		internalError(w)
+		return
+	}
+	httpx.WriteJSON(w, http.StatusOK, out)
+}
+
+func (c *authCore) security(ctx context.Context, s *SessionInfo) (securityDTO, error) {
 	out := securityDTO{HasPassword: s.User.HasPassword(), TOTPEnabled: s.TOTPEnabled, MustEnrollTOTP: s.MustEnrollTOTP}
 	out.TOTPRequired = s.User.TOTPRequired || c.sess.mustEnroll(ctx, s.User, false)
 	ts, err := c.d.Store.TOTPSecrets.Get(ctx, s.User.ID)
 	if err == nil {
 		out.TOTPPending = !ts.Confirmed()
 	} else if !errors.Is(err, store.ErrNotFound) {
-		internalError(w)
-		return
+		return out, err
 	}
 	if out.RecoveryCodesRemaining, err = c.d.Store.RecoveryCodes.CountUnused(ctx, s.User.ID); err != nil {
-		internalError(w)
-		return
+		return out, err
 	}
+	u := s.User
+	out.Email, out.Locale = strPtr(u.Email), strPtr(u.Locale)
+	out.EmailVerified, out.Email2FAEnabled = u.EmailVerified(), u.Email2FAEnabled
+	out.EmailAvailable = c.mail.Enabled(ctx)
 	out.PasskeysAvailable = c.pk.available()
 	if out.PasskeyCount, err = c.d.Store.WebAuthnCredentials.CountForUser(ctx, s.User.ID); err != nil {
-		internalError(w)
-		return
+		return out, err
 	}
-	httpx.WriteJSON(w, http.StatusOK, out)
+	if out.Email2FARequired, err = c.mail.Email2FARequiredByPolicy(ctx); err != nil {
+		return out, err
+	}
+	return out, nil
 }
 
 func (c *authCore) audit(ctx context.Context, r *http.Request, action, targetType, targetID string, details map[string]any) {

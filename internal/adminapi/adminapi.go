@@ -17,6 +17,7 @@ import (
 	"github.com/bropines/rustdesk-panel/internal/config"
 	"github.com/bropines/rustdesk-panel/internal/crypto"
 	"github.com/bropines/rustdesk-panel/internal/loginlog"
+	"github.com/bropines/rustdesk-panel/internal/mailauth"
 	"github.com/bropines/rustdesk-panel/internal/metrics"
 	"github.com/bropines/rustdesk-panel/internal/oidc"
 	"github.com/bropines/rustdesk-panel/internal/store"
@@ -50,6 +51,9 @@ type Deps struct {
 	OIDC *oidc.Service
 	// TOTP verifies second factors (default: NewTOTPService(Store, AEAD)).
 	TOTP *TOTPService
+	// Mail sends e-mail codes and reset links (default: mailauth.New over
+	// Store, AEAD and Config).
+	Mail *mailauth.Service
 	// LoginEvents records login attempts (default: loginlog.DB on Store).
 	LoginEvents loginlog.Recorder
 	// Telemetry counts login attempts (nil: no metrics).
@@ -119,6 +123,7 @@ func Register(r chi.Router, d Deps) {
 	r.Use(csrfProtect, c.sess.load)
 	c.registerAuth(r)
 	c.registerSecurity(r)
+	c.registerEmail(r)
 	c.registerProviders(r)
 	registerResources(r, c)
 	registerB2b(r, d)

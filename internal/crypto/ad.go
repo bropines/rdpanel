@@ -18,6 +18,7 @@ import "strconv"
 //	share_links.password_enc                 "share_link.password:<link id>"
 //	oauth_states.pkce_verifier_enc           "oauth_state.pkce_verifier:<state id>"
 //	totp_secrets.secret_enc                  "totp:<user id>"
+//	settings["mail.smtp"].password_enc       "settings.smtp_password:0"
 //
 // Because the AD contains the row id, a row must be inserted first (to learn
 // its id) and the ciphertext written afterwards, or the id must be known in
@@ -61,3 +62,10 @@ func OAuthStatePKCEVerifierAD(stateID int64) string { return AD(ScopeOAuthStateP
 
 // TOTPSecretAD is the AD of totp_secrets.secret_enc.
 func TOTPSecretAD(userID int64) string { return AD(ScopeTOTPSecret, userID) }
+
+// ScopeSMTPPassword seals the SMTP password stored in the panel settings
+// (settings key "mail.smtp"; a single value, so the id is always 0).
+const ScopeSMTPPassword = "settings.smtp_password"
+
+// SMTPPasswordAD is the AD of the stored SMTP password.
+func SMTPPasswordAD() string { return AD(ScopeSMTPPassword, 0) }

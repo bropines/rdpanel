@@ -13,12 +13,16 @@ import (
 	"time"
 
 	"github.com/bropines/rustdesk-panel/internal/httpx"
+	"github.com/bropines/rustdesk-panel/internal/mailauth"
 	"github.com/bropines/rustdesk-panel/internal/metrics"
 	"github.com/bropines/rustdesk-panel/internal/store"
 )
 
 // tfaChallengeTTL bounds the time between the password and TOTP steps.
 const tfaChallengeTTL = 5 * time.Minute
+
+// emailChallengeTTL matches the validity of an e-mailed code (delivery may be slow).
+const emailChallengeTTL = 10 * time.Minute
 
 // tfaChallengeAD binds sealed login challenges to their purpose.
 const tfaChallengeAD = "clientapi.login_tfa"
@@ -44,7 +48,15 @@ type tfaChallenge struct {
 	UserID   int64  `json:"u"`
 	Username string `json:"n"`
 	Expires  int64  `json:"e"`
+	// Kind is the expected factor: "" or challengeTOTP, or challengeEmail.
+	Kind string `json:"k,omitempty"`
 }
+
+// Challenge kinds (tfaChallenge.Kind).
+const (
+	challengeTOTP  = "totp"
+	challengeEmail = "email"
+)
 
 var (
 	dummyHashOnce sync.Once
@@ -131,7 +143,7 @@ func (h *handler) login(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if enrolled {
-			secret, err := h.sealChallenge(u)
+			secret, err := h.sealChallenge(u, challengeTOTP)
 			if err != nil {
 				h.log.ErrorContext(r.Context(), "seal tfa challenge", slog.Any("err", err))
 				internalError(w)
@@ -139,6 +151,16 @@ func (h *handler) login(w http.ResponseWriter, r *http.Request) {
 			}
 			writeJSON(w, http.StatusOK, AuthBody{Type: "email_check", TfaType: "tfa_check", Secret: secret,
 				User: &UserPayload{Name: u.Username, Status: 1}})
+			return
+		}
+		emailRequired, err := h.Email.LoginFactorRequired(r.Context(), u)
+		if err != nil {
+			h.log.ErrorContext(r.Context(), "email factor", slog.Any("err", err))
+			internalError(w)
+			return
+		}
+		if emailRequired {
+			h.emailChallenge(w, r, u, lc.IP)
 			return
 		}
 	case "email_code", "tfa_code":
@@ -164,14 +186,24 @@ func (h *handler) login(w http.ResponseWriter, r *http.Request) {
 		if code == "" {
 			code = req.VerificationCode
 		}
-		valid, err := h.TOTP.Verify(r.Context(), u.ID, code)
+		var valid bool
+		if ch.Kind == challengeEmail {
+			factor = metrics.MethodEmail
+			valid, err = h.Email.VerifyLoginCode(r.Context(), u.ID, code)
+		} else {
+			valid, err = h.TOTP.Verify(r.Context(), u.ID, code)
+		}
 		if err != nil {
-			h.log.ErrorContext(r.Context(), "totp verify", slog.Any("err", err))
+			h.log.ErrorContext(r.Context(), "verify second factor", slog.Any("err", err), slog.String("kind", ch.Kind))
 			internalError(w)
 			return
 		}
 		if !valid {
-			fail(u, "bad_tfa_code", "Invalid verification code")
+			reason := "bad_tfa_code"
+			if ch.Kind == challengeEmail {
+				reason = "email_code_invalid"
+			}
+			fail(u, reason, "Invalid verification code")
 			return
 		}
 	default:
@@ -225,11 +257,44 @@ func (h *handler) checkPassword(r *http.Request, username, password string) (*st
 	return u, true, nil
 }
 
-func (h *handler) sealChallenge(u *store.User) (string, error) {
+// emailChallenge e-mails a sign-in code and answers step 1 with
+// {"type":"email_check","tfa_type":"email_check"}: the client then posts
+// {"type":"email_code","verificationCode":...,"secret":...}. The client has
+// no "resend" request, so every password step sends a code (a code sent
+// less than a minute ago is reused).
+func (h *handler) emailChallenge(w http.ResponseWriter, r *http.Request, u *store.User, ip string) {
+	ctx := r.Context()
+	if err := h.Email.SendLoginCode(ctx, u, ip); err != nil {
+		var rl interface{ RetryAfter() time.Duration }
+		if errors.As(err, &rl) {
+			secs := int(math.Ceil(rl.RetryAfter().Seconds()))
+			w.Header().Set("Retry-After", fmt.Sprint(secs))
+			writeError(w, http.StatusTooManyRequests, fmt.Sprintf("Too many verification e-mails, try again in %d s", secs))
+			return
+		}
+		h.log.ErrorContext(ctx, "send login code", slog.Any("err", err))
+		writeError(w, http.StatusServiceUnavailable, "Could not send the verification e-mail, try again later")
+		return
+	}
+	secret, err := h.sealChallenge(u, challengeEmail)
+	if err != nil {
+		h.log.ErrorContext(ctx, "seal email challenge", slog.Any("err", err))
+		internalError(w)
+		return
+	}
+	writeJSON(w, http.StatusOK, AuthBody{Type: "email_check", TfaType: "email_check", Secret: secret,
+		User: &UserPayload{Name: u.Username, Email: mailauth.MaskEmail(u.Email), Status: 1}})
+}
+
+func (h *handler) sealChallenge(u *store.User, kind string) (string, error) {
 	if h.AEAD == nil {
 		return "", errors.New("clientapi: no AEAD configured")
 	}
-	b, _ := json.Marshal(tfaChallenge{UserID: u.ID, Username: u.Username, Expires: h.Now().Add(tfaChallengeTTL).Unix()})
+	ttl := tfaChallengeTTL
+	if kind == challengeEmail {
+		ttl = emailChallengeTTL
+	}
+	b, _ := json.Marshal(tfaChallenge{UserID: u.ID, Username: u.Username, Expires: h.Now().Add(ttl).Unix(), Kind: kind})
 	ct, err := h.AEAD.Seal(b, []byte(tfaChallengeAD))
 	if err != nil {
 		return "", err

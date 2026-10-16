@@ -190,6 +190,89 @@ paths:
         "401": { $ref: "#/components/responses/Unauthorized" }
         "403": { $ref: "#/components/responses/Forbidden" }
         "429": { $ref: "#/components/responses/RateLimited" }
+  /auth/mfa/resend:
+    post:
+      tags: [auth]
+      operationId: resendMfaEmail
+      summary: E-mail a new sign-in code for a pending e-mail login.
+      description: |
+        Requires the pending session of a login whose second factor is an e-mailed
+        code (`mfa_method: email`). The previous code is invalidated. Limited by a
+        60 s cooldown and hourly caps (429 `rate_limited`, `Retry-After`).
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - $ref: "#/components/parameters/CsrfHeader"
+      responses:
+        "204": { description: Code sent. }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+        "502": { description: The e-mail could not be sent (`email_send_failed`). }
+  /auth/options:
+    get:
+      tags: [auth]
+      operationId: getAuthOptions
+      summary: Optional login-page features.
+      security: []
+      responses:
+        "200":
+          description: Options.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AuthOptions" }
+  /auth/password/forgot:
+    post:
+      tags: [auth]
+      operationId: forgotPassword
+      summary: Request a password reset link by e-mail.
+      description: |
+        `login` is a username or an e-mail address. The answer is always 202,
+        whether or not an account matched; the e-mail is sent in the background
+        only to active accounts with a password and a **verified** address that may
+        use password sign-in. The link (`<admin_url>/reset-password?token=…`) is
+        single-use and valid 30 minutes. 409 `password_reset_unavailable` when SMTP
+        or the panel URL is not configured. Requests are rate limited per IP.
+      security: []
+      parameters:
+        - $ref: "#/components/parameters/CsrfHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ForgotPasswordRequest" }
+      responses:
+        "202":
+          description: Accepted (identical for unknown accounts).
+          content:
+            application/json:
+              schema: { type: object }
+        "400": { $ref: "#/components/responses/ValidationFailed" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+  /auth/password/reset:
+    post:
+      tags: [auth]
+      operationId: resetPasswordByEmail
+      summary: Set a new password with a reset token from the e-mail.
+      description: |
+        Consumes the token, sets the password and revokes every panel session and
+        client token of the user (the browser's session cookie is cleared too).
+        400 `invalid_token` for unknown, used or expired tokens.
+      security: []
+      parameters:
+        - $ref: "#/components/parameters/CsrfHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ResetPasswordRequest" }
+      responses:
+        "204": { description: Password changed; sign in again. }
+        "400": { $ref: "#/components/responses/ValidationFailed" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "429": { $ref: "#/components/responses/RateLimited" }
   /auth/providers:
     get:
       tags: [auth]
@@ -463,6 +546,75 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/RecoveryCodes" }
         "401": { $ref: "#/components/responses/Unauthorized" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+  /me/security/email/verify:
+    post:
+      tags: [security]
+      operationId: sendEmailVerification
+      summary: E-mail a 6-digit verification code to my address (valid 10 min).
+      parameters:
+        - $ref: "#/components/parameters/CsrfHeader"
+      responses:
+        "204": { description: Code sent. }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409":
+          description: "`email_not_configured`, `no_email` or `already_verified`."
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+        "502": { description: The e-mail could not be sent (`email_send_failed`). }
+  /me/security/email/confirm:
+    post:
+      tags: [security]
+      operationId: confirmEmailVerification
+      summary: Confirm my address with the e-mailed code.
+      description: The code applies only while the address is unchanged. Changing the address clears verification and e-mail 2FA.
+      parameters:
+        - $ref: "#/components/parameters/CsrfHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CodeRequest" }
+      responses:
+        "200":
+          description: Verified.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SecurityOverview" }
+        "400": { description: Invalid or expired code (`code_invalid`). }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+  /me/security/email-2fa:
+    put:
+      tags: [security]
+      operationId: setEmail2fa
+      summary: Turn e-mailed sign-in codes on or off.
+      description: |
+        Enabling needs a verified address and configured SMTP (409 `email_not_verified`,
+        `email_not_configured`). Disabling needs the password or a TOTP/recovery code
+        (unless the account has neither) and is refused (403 `email_2fa_required`)
+        while the admin policy requires e-mail codes and TOTP is off. The factor applies
+        when TOTP is not enrolled, to panel and RustDesk client logins.
+      parameters:
+        - $ref: "#/components/parameters/CsrfHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/Email2faRequest" }
+      responses:
+        "200":
+          description: Updated.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SecurityOverview" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
         "409": { $ref: "#/components/responses/Conflict" }
         "429": { $ref: "#/components/responses/RateLimited" }
   /me/security/sessions:
@@ -2290,6 +2442,67 @@ paths:
         "204": { description: Removed. }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "403": { $ref: "#/components/responses/Forbidden" }
+  /settings/email:
+    get:
+      tags: [settings]
+      operationId: getEmailSettings
+      summary: Outgoing e-mail (SMTP) configuration; the password is never returned.
+      responses:
+        "200":
+          description: Effective configuration.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/EmailSettings" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+    put:
+      tags: [settings]
+      operationId: updateEmailSettings
+      summary: Update the panel-managed SMTP server and the default e-mail language.
+      description: |
+        SMTP fields are read-only (400) when `source` is `config` (RDPANEL_SMTP_HOST /
+        `smtp.host` set). An empty `host` disables e-mail. `password`: omit to keep,
+        `""` to clear; stored AEAD-encrypted.
+      parameters:
+        - $ref: "#/components/parameters/CsrfHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/EmailSettingsInput" }
+      responses:
+        "200":
+          description: Settings after the update.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/EmailSettings" }
+        "400": { $ref: "#/components/responses/ValidationFailed" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /settings/email/test:
+    post:
+      tags: [settings]
+      operationId: sendTestEmail
+      summary: Send a test e-mail through the effective configuration.
+      description: 502 `email_send_failed` carries the SMTP error message (admin only).
+      parameters:
+        - $ref: "#/components/parameters/CsrfHeader"
+      requestBody:
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/TestEmailRequest" }
+      responses:
+        "200":
+          description: Sent.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TestEmailResult" }
+        "400": { $ref: "#/components/responses/ValidationFailed" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+        "502": { description: SMTP error (`email_send_failed`). }
 
   /events:
     servers:
@@ -2507,8 +2720,9 @@ components:
           description: True when the password was accepted and `POST /auth/mfa` (or `/auth/mfa/passkey/*`) must follow (a 5 min pending session was issued).
         mfa_methods:
           type: array
-          items: { type: string, enum: [totp, passkey] }
-          description: Usable second factors when `mfa_required` (`passkey` when the user has passkeys).
+          items: { type: string, enum: [totp, passkey, email] }
+          description: "Usable second factors when `mfa_required` (`passkey` when the user has passkeys). `[email]`: a 6-digit code was e-mailed to a user without TOTP (resend with `POST /auth/mfa/resend`)."
+        email_hint: { type: string, description: Masked address the code was sent to (`email` only). }
         me: { $ref: "#/components/schemas/Me" }
     CodeRequest:
       type: object
@@ -2535,7 +2749,78 @@ components:
       additionalProperties: false
       properties:
         display_name: { type: string, maxLength: 128 }
-        email: { type: [string, "null"], format: email, description: '"" or null clears it.' }
+        email: { type: [string, "null"], format: email, description: '"" or null clears it. A new address is unverified (e-mail 2FA turns off).' }
+        locale: { type: [string, "null"], enum: [en, ru, null], description: Language of e-mails; null = panel default. }
+    AuthOptions:
+      type: object
+      required: [password_reset]
+      properties:
+        password_reset: { type: boolean, description: '"Forgot password?" is available (SMTP and the panel URL are configured).' }
+    ForgotPasswordRequest:
+      type: object
+      required: [login]
+      additionalProperties: false
+      properties:
+        login: { type: string, minLength: 1, maxLength: 320, description: Username or e-mail address. }
+    ResetPasswordRequest:
+      type: object
+      required: [token, new_password]
+      additionalProperties: false
+      properties:
+        token: { type: string }
+        new_password: { type: string, minLength: 8, maxLength: 1024 }
+    Email2faRequest:
+      type: object
+      required: [enabled]
+      additionalProperties: false
+      properties:
+        enabled: { type: boolean }
+        password: { type: string, description: Required to disable (unless the account has no password and no TOTP). }
+        code: { type: string, description: TOTP or recovery code instead of the password. }
+    EmailEncryption:
+      type: string
+      enum: [none, starttls, tls]
+    EmailSettings:
+      type: object
+      required: [source, enabled, host, port, username, password_set, from, encryption, insecure_skip_verify, default_locale, password_reset_available]
+      properties:
+        source:
+          type: string
+          enum: [none, config, settings]
+          description: "`config`: RDPANEL_SMTP_* / smtp.* (read-only here); `settings`: managed in the panel; `none`: e-mail is off."
+        enabled: { type: boolean }
+        host: { type: string }
+        port: { type: integer }
+        username: { type: string }
+        password_set: { type: boolean }
+        from: { type: string }
+        encryption: { $ref: "#/components/schemas/EmailEncryption" }
+        insecure_skip_verify: { type: boolean }
+        default_locale: { type: string, enum: [en, ru] }
+        password_reset_available: { type: boolean }
+    EmailSettingsInput:
+      type: object
+      additionalProperties: false
+      properties:
+        host: { type: string, description: Empty disables e-mail. }
+        port: { type: integer, minimum: 0, maximum: 65535, description: 0 = default for the encryption. }
+        username: { type: string }
+        password: { type: string, description: Omit to keep; "" clears. }
+        from: { type: string, description: 'Sender, e.g. "Panel <panel@example.com>".' }
+        encryption: { $ref: "#/components/schemas/EmailEncryption" }
+        insecure_skip_verify: { type: boolean }
+        default_locale: { type: string, enum: [en, ru] }
+    TestEmailRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        to: { type: string, description: "Recipient (default: my address)." }
+        locale: { type: string, enum: [en, ru] }
+    TestEmailResult:
+      type: object
+      required: [to]
+      properties:
+        to: { type: string }
     ProviderKind:
       type: string
       enum: [github, google, oidc]
@@ -2560,7 +2845,7 @@ components:
         url: { type: string, format: uri }
     SecurityOverview:
       type: object
-      required: [has_password, totp_enabled, totp_pending, totp_required, must_enroll_totp, recovery_codes_remaining, passkeys_available, passkey_count]
+      required: [has_password, totp_enabled, totp_pending, totp_required, must_enroll_totp, recovery_codes_remaining, passkeys_available, passkey_count, email, email_verified, email_2fa_enabled, email_2fa_required, email_available, locale]
       properties:
         has_password: { type: boolean }
         totp_enabled: { type: boolean }
@@ -2621,6 +2906,12 @@ components:
         synced: { type: boolean, description: The credential is backed up / synced (backup state flag). }
         clone_warning: { type: boolean, description: The signature counter went backwards; sign-in with it is refused. }
         transports: { type: array, items: { type: string } }
+        email: { type: [string, "null"] }
+        email_verified: { type: boolean }
+        email_2fa_enabled: { type: boolean, description: E-mailed sign-in codes are on (used when TOTP is off). }
+        email_2fa_required: { type: boolean, description: Admin policy requires e-mail codes for accounts without TOTP (verified address). }
+        email_available: { type: boolean, description: SMTP is configured. }
+        locale: { type: [string, "null"], enum: [en, ru, null] }
     TotpEnrollment:
       type: object
       required: [secret, otpauth_uri]
@@ -2719,7 +3010,7 @@ components:
       enum: [active, disabled]
     User:
       type: object
-      required: [id, username, display_name, role, status, has_password, totp_enabled, created_at, updated_at]
+      required: [id, username, display_name, role, status, has_password, totp_enabled, email_verified, email_2fa_enabled, created_at, updated_at]
       properties:
         id: { type: integer, format: int64 }
         username: { type: string }
@@ -2733,6 +3024,8 @@ components:
         has_password: { type: boolean }
         totp_enabled: { type: boolean }
         totp_required: { type: boolean }
+        email_verified: { type: boolean, description: The current address was confirmed with an e-mailed code (or by an admin). }
+        email_2fa_enabled: { type: boolean }
         last_login_at: { type: [string, "null"], format: date-time }
         created_at: { type: string, format: date-time }
         updated_at: { type: string, format: date-time }
@@ -3138,6 +3431,7 @@ components:
         status: { $ref: "#/components/schemas/UserStatus" }
         user_group_id: { type: [integer, "null"], format: int64 }
         totp_required: { type: boolean }
+        email_verified: { type: boolean, description: Mark the address as verified. }
     UserUpdate:
       type: object
       additionalProperties: false
@@ -3150,6 +3444,7 @@ components:
         status: { $ref: "#/components/schemas/UserStatus" }
         user_group_id: { type: [integer, "null"], format: int64 }
         totp_required: { type: boolean }
+        email_verified: { type: boolean, description: Mark the address verified or unverified (unverified also turns e-mail 2FA off). }
     PasswordReset:
       type: object
       required: [password]
@@ -3674,10 +3969,11 @@ components:
         auth:
           type: object
           description: Enforced at runtime (lifetimes apply to new sessions/tokens).
-          required: [password_login_enabled, require_admin_2fa, session_idle_hours, session_absolute_days, client_token_lifetime_hours]
+          required: [password_login_enabled, require_admin_2fa, require_email_2fa, session_idle_hours, session_absolute_days, client_token_lifetime_hours]
           properties:
             password_login_enabled: { type: boolean, description: "False refuses password sign-in for the user role (panel and client); admins keep it." }
             require_admin_2fa: { type: boolean }
+            require_email_2fa: { type: boolean, description: Users without TOTP but with a verified address must enter an e-mailed code at sign-in. }
             session_idle_hours: { type: integer, minimum: 1, maximum: 720 }
             session_absolute_days: { type: integer, minimum: 1, maximum: 365 }
             client_token_lifetime_hours: { type: integer, minimum: 1, maximum: 87600 }
@@ -3727,6 +4023,7 @@ components:
           properties:
             password_login_enabled: { type: boolean }
             require_admin_2fa: { type: boolean }
+            require_email_2fa: { type: boolean, description: Users without TOTP but with a verified address must enter an e-mailed code at sign-in. }
             session_idle_hours: { type: integer, minimum: 1, maximum: 720 }
             session_absolute_days: { type: integer, minimum: 1, maximum: 365 }
             client_token_lifetime_hours: { type: integer, minimum: 1, maximum: 87600 }

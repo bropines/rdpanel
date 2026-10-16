@@ -59,6 +59,33 @@ func (NoTOTP) Enrolled(context.Context, int64) (bool, error) { return false, nil
 // Verify implements TOTPVerifier.
 func (NoTOTP) Verify(context.Context, int64, string) (bool, error) { return false, nil }
 
+// EmailFactor is the e-mail second factor of POST /api/login (implemented by
+// mailauth.Service). The default (NoEmailFactor) never requires it.
+type EmailFactor interface {
+	// LoginFactorRequired reports whether u must enter an e-mailed code
+	// (checked only for users without TOTP).
+	LoginFactorRequired(ctx context.Context, u *store.User) (bool, error)
+	// SendLoginCode e-mails a sign-in code to u. Errors implementing
+	// RetryAfter() time.Duration are rate limits.
+	SendLoginCode(ctx context.Context, u *store.User, ip string) error
+	// VerifyLoginCode checks and consumes a code (limited attempts per code).
+	VerifyLoginCode(ctx context.Context, userID int64, code string) (bool, error)
+}
+
+// NoEmailFactor is the EmailFactor used when e-mail is not wired.
+type NoEmailFactor struct{}
+
+// LoginFactorRequired implements EmailFactor.
+func (NoEmailFactor) LoginFactorRequired(context.Context, *store.User) (bool, error) {
+	return false, nil
+}
+
+// SendLoginCode implements EmailFactor.
+func (NoEmailFactor) SendLoginCode(context.Context, *store.User, string) error { return nil }
+
+// VerifyLoginCode implements EmailFactor.
+func (NoEmailFactor) VerifyLoginCode(context.Context, int64, string) (bool, error) { return false, nil }
+
 // Strategy is a device strategy pushed in heartbeat responses: config_options
 // are merged into the client's options ("" removes a key).
 type Strategy struct {
@@ -101,6 +128,8 @@ type Deps struct {
 
 	// TOTP verifies the second factor (default NoTOTP).
 	TOTP TOTPVerifier
+	// Email is the e-mail second factor (default NoEmailFactor).
+	Email EmailFactor
 	// Kicks delivers admin "disconnect" requests through heartbeats (default:
 	// a private MemKickQueue; share one with the admin API).
 	Kicks KickQueue
@@ -184,6 +213,9 @@ func newHandler(d Deps) *handler {
 	}
 	if d.TOTP == nil {
 		d.TOTP = NoTOTP{}
+	}
+	if d.Email == nil {
+		d.Email = NoEmailFactor{}
 	}
 	if d.Kicks == nil {
 		d.Kicks = NewMemKickQueue(0, d.Now)

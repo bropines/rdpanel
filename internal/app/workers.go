@@ -79,6 +79,8 @@ func (a *App) janitorPass(ctx context.Context) {
 		{"oauth states", `DELETE FROM oauth_states WHERE expires_at < ?`, now},
 		{"webauthn challenges", `DELETE FROM webauthn_challenges WHERE expires_at < ?`, now},
 		{"audit nonces", `DELETE FROM audit_nonces WHERE created_at < ?`, now.Add(-auditNonceTTL)},
+		// Kept a day after expiry: the hourly e-mail caps count recent rows.
+		{"email codes", `DELETE FROM email_codes WHERE expires_at < ?`, now.Add(-24 * time.Hour)},
 	} {
 		res, err := a.DB.ExecContext(ctx, p.query, p.cutoff.UnixMilli())
 		if err != nil {

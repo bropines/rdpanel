@@ -21,6 +21,7 @@ import (
 	"github.com/bropines/rustdesk-panel/internal/db"
 	"github.com/bropines/rustdesk-panel/internal/events"
 	"github.com/bropines/rustdesk-panel/internal/httpx"
+	"github.com/bropines/rustdesk-panel/internal/mailauth"
 	"github.com/bropines/rustdesk-panel/internal/metrics"
 	"github.com/bropines/rustdesk-panel/internal/store"
 	"github.com/bropines/rustdesk-panel/internal/updatecheck"
@@ -57,6 +58,8 @@ type App struct {
 	// TOTP verifies second factors; it implements clientapi's TOTPVerifier
 	// (Enrolled/Verify) for the client /api/login tfa step.
 	TOTP *adminapi.TOTPService
+	// Mail sends e-mail codes and password reset links (internal/mailauth).
+	Mail *mailauth.Service
 	// StartedAt is when New ran (About page uptime).
 	StartedAt time.Time
 	// Updates is the cached GitHub release check (nil when
@@ -87,6 +90,7 @@ func New(ctx context.Context, cfg *config.Config, log *slog.Logger) (*App, error
 	a.Limiter = auth.NewBackoff(auth.DefaultBackoffConfig, nil)
 	a.Kicks = clientapi.NewMemKickQueue(0, nil)
 	a.TOTP = adminapi.NewTOTPService(a.Store, a.AEAD)
+	a.Mail = mailauth.New(mailauth.Options{Store: a.Store, AEAD: a.AEAD, Config: cfg, Log: log.With("component", "mail")})
 	a.Registry = prometheus.NewRegistry()
 	a.Registry.MustRegister(
 		collectors.NewGoCollector(),
