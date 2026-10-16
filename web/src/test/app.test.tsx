@@ -222,3 +222,22 @@ describe("devices page", () => {
     server.events.removeAllListeners();
   });
 });
+
+describe("server → relays", () => {
+  beforeEach(() => loginAs(1));
+
+  it("lists relays with the computed rotation and issues an agent token", async () => {
+    const user = userEvent.setup();
+    renderApp("/server?tab=relays");
+    expect(await screen.findByText("fra-1", undefined, { timeout: 5000 })).toBeInTheDocument();
+    expect(screen.getByText("partner")).toBeInTheDocument();
+    expect(screen.getByText(/fra-1 ×3/)).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Add relay" }));
+    await user.click(await screen.findByRole("menuitem", { name: "Relay agent" }));
+    await user.type(await screen.findByLabelText("Name"), "ams-3");
+    await user.type(screen.getByLabelText("Public host"), "relay-nl.example.com");
+    await user.click(screen.getByRole("button", { name: "Create" }));
+    expect(await screen.findByText("Enroll ams-3")).toBeInTheDocument();
+    expect(screen.getByText(/RDPANEL_AGENT_ENROLL_TOKEN/)).toBeInTheDocument();
+  });
+});

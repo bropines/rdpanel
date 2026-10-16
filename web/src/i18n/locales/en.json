@@ -713,7 +713,8 @@
     "tabs": {
       "settings": "Settings",
       "viewers": "Viewers",
-      "console": "Console"
+      "console": "Console",
+      "relays": "Relays"
     },
     "rendezvous": "ID server (hbbs)",
     "rendezvousHint": "Relay selection, login policy and client keepalive.",
@@ -743,7 +744,8 @@
       "total_bandwidth_mbps": "Global cap for all relayed traffic.",
       "single_bandwidth_mbps": "Cap for each relayed connection.",
       "downgrade_threshold": "Ratio that marks a relay as heavy (e.g. 0.66).",
-      "downgrade_start_check_s": "Seconds before heavy relays are downgraded."
+      "downgrade_start_check_s": "Seconds before heavy relays are downgraded.",
+      "relay_servers_computed": "Computed from Server → Relays (healthy relays, repeated by weight). Edit relays there."
     },
     "errors": {
       "hostPort": "Each line must be host or host:port without spaces",
@@ -1059,5 +1061,127 @@
     "sendTest": "Send test e-mail",
     "testSent": "Test e-mail sent to {{to}}",
     "testFailed": "Sending failed: {{error}}"
+  },
+  "relays": {
+    "add": "Add relay",
+    "addAgent": "Relay agent",
+    "addStatic": "Static relay",
+    "addAgentHint": "An hbbr on another host, driven by `rdpanel agent`. The agent dials out to this panel; only the relay port (21117) has to be reachable from clients.",
+    "addStaticHint": "An unmanaged hbbr (third party, legacy). It is only probed: limits, lists and live usage are not available.",
+    "added": "Relay {{name}} added",
+    "name": "Name",
+    "publicHost": "Public host",
+    "publicHostHint": "host[:port] that clients connect to (default port 21117).",
+    "region": "Region",
+    "weight": "Weight",
+    "weightHint": "Share of new sessions (0-5); 0 keeps the relay out of rotation.",
+    "weightShort": "weight {{w}}",
+    "inRotation": "In rotation",
+    "rotation": "Rotation",
+    "rotationCol": "Rotation",
+    "notInRotation": "not in rotation",
+    "rotationUnmanaged": "no healthy relay; hbbs keeps its own list (RELAY)",
+    "fallback": "No relay is healthy: the local relay is used anyway",
+    "shrunk": "weights reduced to fit hbbs' 1 KiB command",
+    "observed_one": "hbbs reports {{count}} entry",
+    "observed_other": "hbbs reports {{count}} entries",
+    "observedMismatch": "differs, will be re-sent",
+    "healthCol": "Health",
+    "agentCol": "Agent",
+    "sessions": "Sessions",
+    "adminState": "State",
+    "empty": "No relays yet",
+    "emptyHint": "Add a relay agent or a static relay. The co-located hbbr appears here when RELAY (or RDPANEL_HBBS_RELAY_PUBLIC_HOST) is set.",
+    "probe": "Probe now",
+    "probeOk": "Probe passed ({{ms}} ms)",
+    "probeFailed": "Probe failed: {{error}}",
+    "approve": "Approve",
+    "revoke": "Revoke agent",
+    "drain": "Drain",
+    "enable": "Enable",
+    "disable": "Disable",
+    "newToken": "New enrollment token",
+    "newTokenTitle": "New enrollment token for {{name}}?",
+    "newTokenHint": "The current agent key stops working and the agent is disconnected. Start the agent with the new token to enroll it again.",
+    "deleted": "Relay deleted",
+    "deleteTitle": "Delete relay {{name}}?",
+    "deleteHint": "It leaves hbbs' relay list; a connected agent is disconnected. Running sessions on that relay continue.",
+    "kind": {
+      "local": "local",
+      "static": "static",
+      "agent": "agent"
+    },
+    "health": {
+      "pending": "pending",
+      "active": "active",
+      "degraded": "degraded",
+      "offline": "offline"
+    },
+    "state": {
+      "enabled": "enabled",
+      "draining": "draining",
+      "disabled": "disabled"
+    },
+    "agent": {
+      "revoked": "revoked",
+      "waitingEnroll": "waiting for enrollment",
+      "noToken": "not enrolled",
+      "needsApproval": "needs approval",
+      "connected": "connected",
+      "disconnected": "disconnected",
+      "configPending": "config pending"
+    },
+    "options": {
+      "requireApproval": "Approve new agents",
+      "requireApprovalHint": "An enrolled agent gets its config (and starts hbbr) only after an admin approves it.",
+      "allowPrivate": "Allow private relay hosts",
+      "allowPrivateHint": "Let static relays and probes target private, loopback and link-local addresses (off: SSRF guard)."
+    },
+    "enroll": {
+      "title": "Enroll {{name}}",
+      "hint": "Run this on the relay host (host networking, so hbbr sees real client IPs). The token is shown only now.",
+      "token": "Token",
+      "expires": "Expires",
+      "once": "single use",
+      "stepEnrolled": "Agent enrolled",
+      "stepApproved": "Approved by an admin",
+      "stepAutoApproved": "Approved (no approval gate)",
+      "stepConnected": "Agent connected",
+      "stepProbe": "End-to-end probe passed"
+    },
+    "drawer": {
+      "settings": "Relay",
+      "usage": "Live sessions",
+      "usageUnavailable": "Live usage is not available right now.",
+      "noSessions": "No active sessions",
+      "peer": "Peer",
+      "lastProbe": "Last probe",
+      "probeError": "Probe error",
+      "healthSince": "Health since",
+      "agent": "Agent",
+      "session": "Session",
+      "host": "Host",
+      "versions": "Versions",
+      "enrolled": "Enrolled",
+      "config": "Config (applied / desired)",
+      "hbbrUp": "running",
+      "hbbrDown": "not running",
+      "restarts_one": "{{count}} restart",
+      "restarts_other": "{{count}} restarts",
+      "keyMismatch": "key differs from hbbs",
+      "load": "Load"
+    },
+    "overrides": {
+      "title": "Limits and lists",
+      "hint": "Empty fields inherit the global relay profile (Server → Settings, hbbr part).",
+      "global": "global",
+      "unset": "server default",
+      "entries_one": "{{count}} entry",
+      "entries_other": "{{count}} entries",
+      "override": "override",
+      "inherit": "inherit",
+      "save": "Save overrides",
+      "saved": "Overrides saved; the agent applies them"
+    }
   }
 }

@@ -1769,6 +1769,205 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/relays": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Relays (local, static, agents) with health, agent state and the computed hbbs relay list (admin).
+         * @description hbbs' relay list (`relay_servers`) is computed from this table: relays that are enabled,
+         *     in rotation, weight > 0 and `active` or `degraded`, each repeated `weight` times
+         *     (hbbs picks relays round-robin and keeps duplicates). Failing relays leave the list
+         *     after 3 failed end-to-end probes. See docs/relay-agents.md.
+         */
+        get: operations["listRelays"];
+        put?: never;
+        /** Add a static relay or a relay agent. For an agent, the response carries the one-time enrollment token (shown once). */
+        post: operations["createRelay"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/relays/rotation": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The computed hbbs relay list and what hbbs currently hands out (admin). */
+        get: operations["getRelayRotation"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/relays/options": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Relay options (approval gate for new agents, private relay hosts). */
+        get: operations["getRelayOptions"];
+        /** Replace the relay options. */
+        put: operations["updateRelayOptions"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/relays/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["RelayId"];
+            };
+            cookie?: never;
+        };
+        /** One relay. */
+        get: operations["getRelay"];
+        put?: never;
+        post?: never;
+        /** Delete a static or agent relay (the local relay cannot be deleted). */
+        delete: operations["deleteRelay"];
+        options?: never;
+        head?: never;
+        /**
+         * Change name, host, region, weight, rotation membership or admin state (enabled, draining, disabled).
+         * @description `draining` takes the relay out of hbbs' list while running sessions continue;
+         *     `disabled` also tells an agent to stop hbbr.
+         */
+        patch: operations["updateRelay"];
+        trace?: never;
+    };
+    "/relays/{id}/enroll-token": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["RelayId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Issue a new one-time enrollment token (1 h); the enrolled agent's key stops working. */
+        post: operations["resetRelayEnrollment"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/relays/{id}/approve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["RelayId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Approve an enrolled agent (it then gets a running config). */
+        post: operations["approveRelay"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/relays/{id}/revoke": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["RelayId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Revoke an agent's key and disconnect it (re-enable with a new enrollment token). */
+        post: operations["revokeRelay"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/relays/{id}/probe": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["RelayId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Run the end-to-end relay probe now (two RequestRelay legs with the hbbs key; bytes must pass). */
+        post: operations["probeRelay"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/relays/{id}/settings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["RelayId"];
+            };
+            cookie?: never;
+        };
+        /** Per-relay overrides of the global relay profile (the hbbr part of /server/settings), and the effective values. */
+        get: operations["getRelaySettings"];
+        /** Replace the overrides of an agent relay (null = inherit the global profile). */
+        put: operations["updateRelaySettings"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/relays/{id}/usage": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["RelayId"];
+            };
+            cookie?: never;
+        };
+        /** Live hbbr `usage` of one relay (local admin channel, or a command over the agent session). */
+        get: operations["getRelayUsageById"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/settings": {
         parameters: {
             query?: never;
@@ -2993,6 +3192,190 @@ export interface components {
             current_kbps: number;
         };
         /** @enum {string} */
+        RelayKind: "local" | "static" | "agent";
+        /**
+         * @description pending = never probed / agent not approved; active = probe OK (agent: connected and config acked);
+         *     degraded = probe OK but the agent session is down or its config lags > 5 min, or 1-2 failed probes
+         *     (still in rotation); offline = 3 failed probes in a row (out of rotation).
+         * @enum {string}
+         */
+        RelayHealthState: "pending" | "active" | "degraded" | "offline";
+        /** @enum {string} */
+        RelayAdminState: "enabled" | "draining" | "disabled";
+        RelayAgentStatus: {
+            /** Format: date-time */
+            reported_at?: string | null;
+            hbbr_up: boolean;
+            hbbr_restarts: number;
+            hbbr_error?: string | null;
+            /** @description First 8 characters of the key hbbr runs with. */
+            key_fp?: string | null;
+            /** @description key_fp equals the hbbs public key's fingerprint. */
+            key_matches?: boolean | null;
+            admin_rtt_ms: number;
+            /** Format: int64 */
+            config_version: number;
+            apply_errors?: {
+                [key: string]: string;
+            };
+            relays_active: number;
+            total_mb: number;
+            current_kbps: number;
+            /** @description Host NIC receive rate in bit/s (all traffic). */
+            rx_bps: number;
+            tx_bps: number;
+            load1: number;
+            mem_used_pct: number;
+        };
+        RelayAgent: {
+            enrolled: boolean;
+            /** @description An unused enrollment token exists. */
+            token_pending: boolean;
+            /** Format: date-time */
+            enroll_expires_at?: string | null;
+            require_approval: boolean;
+            approved: boolean;
+            /** Format: date-time */
+            approved_at?: string | null;
+            /** Format: date-time */
+            revoked_at?: string | null;
+            /** Format: date-time */
+            enrolled_at?: string | null;
+            enrolled_from_ip?: string | null;
+            hostname?: string | null;
+            agent_version?: string | null;
+            hbbr_version?: string | null;
+            arch?: string | null;
+            connected: boolean;
+            /** Format: date-time */
+            connected_at?: string | null;
+            remote_ip?: string | null;
+            /** Format: date-time */
+            last_seen_at?: string | null;
+            /** Format: int64 */
+            desired_version: number;
+            /** Format: int64 */
+            acked_version: number;
+            /** Format: date-time */
+            acked_at?: string | null;
+            ack_errors: {
+                [key: string]: string;
+            };
+            status?: components["schemas"]["RelayAgentStatus"] | null;
+        };
+        Relay: {
+            /** Format: int64 */
+            id: number;
+            name: string;
+            kind: components["schemas"]["RelayKind"];
+            /** @description host[:port] handed to clients (default port 21117). */
+            public_host: string;
+            region?: string | null;
+            weight: number;
+            in_rotation: boolean;
+            admin_state: components["schemas"]["RelayAdminState"];
+            health: components["schemas"]["RelayHealthState"];
+            /** Format: date-time */
+            health_since?: string | null;
+            /** Format: date-time */
+            last_probe_at?: string | null;
+            last_probe_ms?: number | null;
+            last_probe_error?: string | null;
+            /** @description Entries in hbbs' computed list (0 = not in rotation). */
+            rotation_weight: number;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+            agent?: components["schemas"]["RelayAgent"] | null;
+        };
+        RelayRotationMember: {
+            /** Format: int64 */
+            id: number;
+            name: string;
+            host: string;
+            weight: number;
+        };
+        RelayRotation: {
+            /** @description The computed `relay-servers` list (with weight duplicates). */
+            servers: string[];
+            members: components["schemas"]["RelayRotationMember"][];
+            /** @description Nothing is healthy; the local relay is used anyway (hbbs never gets an empty list). */
+            fallback: boolean;
+            /** @description Weights were scaled down to fit hbbs' 1 KiB admin command. */
+            shrunk: boolean;
+            error?: string | null;
+            /** @description What hbbs reports now (`rs`). */
+            observed?: string[] | null;
+            observed_error?: string | null;
+        };
+        RelayList: {
+            items: components["schemas"]["Relay"][];
+            rotation: components["schemas"]["RelayRotation"];
+        };
+        RelayCreate: {
+            /** @enum {string} */
+            kind: "static" | "agent";
+            name: string;
+            public_host: string;
+            region?: string | null;
+            /** @default 1 */
+            weight: number;
+            /** @default true */
+            in_rotation: boolean;
+        };
+        RelayPatch: {
+            name?: string;
+            public_host?: string;
+            region?: string | null;
+            weight?: number;
+            in_rotation?: boolean;
+            admin_state?: components["schemas"]["RelayAdminState"];
+        };
+        RelayEnrollment: {
+            /** @description One-time enrollment token (only its sha256 is stored). */
+            token: string;
+            /** Format: date-time */
+            expires_at: string;
+            /** @description docker compose snippet for the relay host. */
+            compose: string;
+            panel_url: string;
+        };
+        RelayCreated: {
+            relay: components["schemas"]["Relay"];
+            enrollment: components["schemas"]["RelayEnrollment"] | null;
+        };
+        RelayOptions: {
+            /** @description New agents wait for an admin's approval after enrolling (default true). */
+            require_approval: boolean;
+            /** @description Allow static relays / probes to private */
+            allow_private_hosts: boolean;
+        };
+        /** @description hbbr settings (same keys as ServerSettingsValues). In overrides, null = inherit the global profile. */
+        RelaySettingsValues: {
+            blacklist?: string[] | null;
+            blocklist?: string[] | null;
+            limit_speed_mbps?: number | null;
+            total_bandwidth_mbps?: number | null;
+            single_bandwidth_mbps?: number | null;
+            downgrade_threshold?: number | null;
+            downgrade_start_check_s?: number | null;
+        };
+        RelaySettingsState: {
+            overrides: components["schemas"]["RelaySettingsValues"];
+            global: components["schemas"]["RelaySettingsValues"];
+            effective: components["schemas"]["RelaySettingsValues"];
+        };
+        RelayHealthEvent: {
+            /** Format: int64 */
+            id: number;
+            name: string;
+            health: components["schemas"]["RelayHealthState"];
+            previous?: string;
+            connected: boolean;
+            error?: string;
+        };
+        /** @enum {string} */
         ConsoleTarget: "hbbs" | "hbbr";
         ConsoleCommand: {
             target: components["schemas"]["ConsoleTarget"];
@@ -3177,6 +3560,7 @@ export interface components {
         };
     };
     parameters: {
+        RelayId: number;
         /** @description Must equal the rdpanel_csrf cookie. */
         CsrfHeader: string;
         Limit: number;
@@ -6516,6 +6900,423 @@ export interface operations {
             };
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
+        };
+    };
+    listRelays: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Relays. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RelayList"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    createRelay: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Must equal the rdpanel_csrf cookie. */
+                "X-CSRF-Token": components["parameters"]["CsrfHeader"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RelayCreate"];
+            };
+        };
+        responses: {
+            /** @description Created. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RelayCreated"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    getRelayRotation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Rotation. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RelayRotation"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    getRelayOptions: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Options. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RelayOptions"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    updateRelayOptions: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Must equal the rdpanel_csrf cookie. */
+                "X-CSRF-Token": components["parameters"]["CsrfHeader"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RelayOptions"];
+            };
+        };
+        responses: {
+            /** @description Options. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RelayOptions"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    getRelay: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["RelayId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Relay. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Relay"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    deleteRelay: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Must equal the rdpanel_csrf cookie. */
+                "X-CSRF-Token": components["parameters"]["CsrfHeader"];
+            };
+            path: {
+                id: components["parameters"]["RelayId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Deleted. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    updateRelay: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Must equal the rdpanel_csrf cookie. */
+                "X-CSRF-Token": components["parameters"]["CsrfHeader"];
+            };
+            path: {
+                id: components["parameters"]["RelayId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RelayPatch"];
+            };
+        };
+        responses: {
+            /** @description Relay. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Relay"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    resetRelayEnrollment: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Must equal the rdpanel_csrf cookie. */
+                "X-CSRF-Token": components["parameters"]["CsrfHeader"];
+            };
+            path: {
+                id: components["parameters"]["RelayId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Enrollment material (shown once). */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RelayEnrollment"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    approveRelay: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Must equal the rdpanel_csrf cookie. */
+                "X-CSRF-Token": components["parameters"]["CsrfHeader"];
+            };
+            path: {
+                id: components["parameters"]["RelayId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Relay. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Relay"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    revokeRelay: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Must equal the rdpanel_csrf cookie. */
+                "X-CSRF-Token": components["parameters"]["CsrfHeader"];
+            };
+            path: {
+                id: components["parameters"]["RelayId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Relay. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Relay"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    probeRelay: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Must equal the rdpanel_csrf cookie. */
+                "X-CSRF-Token": components["parameters"]["CsrfHeader"];
+            };
+            path: {
+                id: components["parameters"]["RelayId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Relay after the probe. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Relay"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    getRelaySettings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["RelayId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Settings. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RelaySettingsState"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    updateRelaySettings: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Must equal the rdpanel_csrf cookie. */
+                "X-CSRF-Token": components["parameters"]["CsrfHeader"];
+            };
+            path: {
+                id: components["parameters"]["RelayId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RelaySettingsValues"];
+            };
+        };
+        responses: {
+            /** @description Settings. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RelaySettingsState"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    getRelayUsageById: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["RelayId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Active relays. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** Format: date-time */
+                        checked_at: string;
+                        items: components["schemas"]["RelayUsage"][];
+                    };
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            503: components["responses"]["Unavailable"];
         };
     };
     getSettings: {

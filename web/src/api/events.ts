@@ -11,6 +11,7 @@ export interface PanelEvents {
   "device.updated": Schemas["Device"];
   "audit.connection": Schemas["ConnectionAudit"];
   "hbbs.health": Schemas["ServerHealth"];
+  "relay.health": Schemas["RelayHealthEvent"];
 }
 export type PanelEventName = keyof PanelEvents;
 export const PANEL_EVENT_NAMES: PanelEventName[] = [
@@ -18,6 +19,7 @@ export const PANEL_EVENT_NAMES: PanelEventName[] = [
   "device.updated",
   "audit.connection",
   "hbbs.health",
+  "relay.health",
 ];
 
 export type StreamStatus = "connecting" | "open" | "reconnecting" | "closed";

@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { Activity, Radio, Server, SlidersHorizontal, TerminalSquare, View } from "lucide-react";
+import { Activity, Network, Radio, Server, SlidersHorizontal, TerminalSquare, View } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 import type { Schemas } from "@/api/client";
@@ -11,6 +11,7 @@ import { Skeleton, Tabs, TabsContent, TabsList, TabsTrigger } from "@/components
 import { useTableSearch } from "@/lib/use-table";
 import { cn } from "@/lib/utils";
 import { Console } from "@/pages/server/Console";
+import { RelaysTab } from "@/pages/server/Relays";
 import { ServerSettingsForm } from "@/pages/server/ServerSettingsForm";
 import { Viewers } from "@/pages/server/Viewers";
 
@@ -104,6 +105,10 @@ export function ServerPage() {
             <SlidersHorizontal />
             {t("server.tabs.settings")}
           </TabsTrigger>
+          <TabsTrigger value="relays">
+            <Network />
+            {t("server.tabs.relays")}
+          </TabsTrigger>
           <TabsTrigger value="viewers">
             <View />
             {t("server.tabs.viewers")}
@@ -114,6 +119,7 @@ export function ServerPage() {
           </TabsTrigger>
         </TabsList>
         <TabsContent value="settings">{tab === "settings" && <ServerSettingsForm />}</TabsContent>
+        <TabsContent value="relays">{tab === "relays" && <RelaysTab />}</TabsContent>
         <TabsContent value="viewers">{tab === "viewers" && <Viewers />}</TabsContent>
         <TabsContent value="console">{tab === "console" && <Console />}</TabsContent>
       </Tabs>
