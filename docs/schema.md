@@ -13,6 +13,7 @@ automatically on start (`rdpanel serve`, `rdpanel user ...`).
 | `00004_device_public_key.sql` | devices.pk |
 | `00005_b2a_panel.sql` | panel_assets (branding logo), presence_samples (dashboard online series) |
 | `00006_b2b_punch_requests.sql` | punch_requests |
+| `00010_relay_agents.sql` | relays, relay_agents, relay_settings ([relay-agents.md](relay-agents.md), [design](design/relay-agents.md#9-db-schema-migration-00008_relay_agentssql)) |
 
 Later streams add new numbered files; never edit an applied migration.
 

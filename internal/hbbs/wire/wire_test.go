@@ -197,3 +197,24 @@ func FuzzDecodeEnvelope(f *testing.F) {
 		}
 	})
 }
+
+// RequestRelay{uuid:"u1", licence_key:"K"} (rendezvous.proto: RendezvousMessage
+// request_relay = 18; RequestRelay uuid = 2, licence_key = 6):
+//
+//	inner = 0x12 0x02 "u1" 0x32 0x01 "K"               -> 7 bytes
+//	outer = tag(18,LEN)=(18<<3|2)=146 -> 0x92 0x01, len 0x07, inner -> 10 bytes
+func TestRequestRelayGolden(t *testing.T) {
+	msg := EncodeRequestRelay(RequestRelay{UUID: "u1", LicenceKey: "K"})
+	want := "9201" + "07" + "12" + "02" + hex.EncodeToString([]byte("u1")) + "32" + "01" + hex.EncodeToString([]byte("K"))
+	if got := hex.EncodeToString(msg); got != want {
+		t.Fatalf("request relay\n got %s\nwant %s", got, want)
+	}
+	env, err := DecodeEnvelope(msg)
+	if err != nil || env.Field != FieldRequestRelay {
+		t.Fatalf("envelope %+v %v", env, err)
+	}
+	rr, err := DecodeRequestRelay(env.Body)
+	if err != nil || rr.UUID != "u1" || rr.LicenceKey != "K" || rr.ID != "" {
+		t.Fatalf("decoded %+v %v", rr, err)
+	}
+}

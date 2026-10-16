@@ -80,6 +80,8 @@ type Deps struct {
 	Control ServerControl
 	// Reconciler owns the desired hbbs/hbbr settings (nil: /server/settings 503).
 	Reconciler SettingsReconciler
+	// Relays manages relays and relay agents (nil: /relays/* answer 503).
+	Relays RelayManager
 	// ConsoleLimit caps raw console commands per admin per minute (default 30).
 	ConsoleLimit int
 	// ---- end stream B2b ----

@@ -122,7 +122,7 @@ func vRelayServers(args []string) ([]string, bool, error) {
 		return nil, false, nil
 	case 1:
 		list := strings.Split(args[0], ",")
-		norm, err := NormalizeRelayServers(list)
+		norm, err := NormalizeWeightedRelayServers(list)
 		if err != nil {
 			return nil, false, err
 		}
@@ -346,10 +346,26 @@ var hostnameRe = regexp.MustCompile(`^(?i:[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)(\.
 // MaxRelayServers bounds the relay server list.
 const MaxRelayServers = 32
 
+// MaxWeightedRelayServers bounds a weighted relay list (MaxRelayServers
+// distinct relays, each repeated at most 5 times); the 1000-byte command
+// line limit usually bites first.
+const MaxWeightedRelayServers = MaxRelayServers * 5
+
 // NormalizeRelayServers validates relay entries ("host", "host:port",
 // "1.2.3.4", "[v6]:port"), trims blanks and de-duplicates. hbbs resolves each
 // entry with DNS and silently drops failures, so only syntax is checked here.
 func NormalizeRelayServers(in []string) ([]string, error) {
+	return normalizeRelays(in, true)
+}
+
+// NormalizeWeightedRelayServers is NormalizeRelayServers without the
+// de-duplication: hbbs picks relays round-robin over the list as given, so
+// repeating an entry gives it more weight (computed relay rotation).
+func NormalizeWeightedRelayServers(in []string) ([]string, error) {
+	return normalizeRelays(in, false)
+}
+
+func normalizeRelays(in []string, dedupe bool) ([]string, error) {
 	seen := map[string]bool{}
 	out := make([]string, 0, len(in))
 	for _, s := range in {
@@ -360,12 +376,12 @@ func NormalizeRelayServers(in []string) ([]string, error) {
 		if err := validateRelay(s); err != nil {
 			return nil, err
 		}
-		if !seen[s] {
+		if !seen[s] || !dedupe {
 			seen[s] = true
 			out = append(out, s)
 		}
 	}
-	if len(out) > MaxRelayServers {
+	if len(seen) > MaxRelayServers || len(out) > MaxWeightedRelayServers {
 		return nil, errArgs("at most %d relay servers", MaxRelayServers)
 	}
 	return out, nil

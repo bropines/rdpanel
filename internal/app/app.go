@@ -23,6 +23,7 @@ import (
 	"github.com/bropines/rdpanel/internal/httpx"
 	"github.com/bropines/rdpanel/internal/mailauth"
 	"github.com/bropines/rdpanel/internal/metrics"
+	"github.com/bropines/rdpanel/internal/relays"
 	"github.com/bropines/rdpanel/internal/store"
 	"github.com/bropines/rdpanel/internal/updatecheck"
 	"github.com/bropines/rdpanel/internal/web"
@@ -52,6 +53,9 @@ type App struct {
 	EventsAuth events.Authenticator
 	// HBBS is the hbbs/hbbr integration (presence, admin channel, reconciler).
 	HBBS HBBS
+	// Relays manages relays (local, static, agents), the computed hbbs relay
+	// list and the agent hub at /agent/v1/*.
+	Relays *relays.Service
 	// Kicks queues admin "disconnect" requests delivered by client heartbeats;
 	// shared by the client API (Take) and the admin API (Kick).
 	Kicks *clientapi.MemKickQueue
@@ -101,6 +105,10 @@ func New(ctx context.Context, cfg *config.Config, log *slog.Logger) (*App, error
 	bi := buildinfo.Get()
 	metrics.RegisterBuildInfo(a.Registry, bi, bi.HBBRef)
 	a.initEvents()
+	if err := a.initRelays(); err != nil {
+		_ = a.DB.Close()
+		return nil, err
+	}
 	if err := a.initHBBS(); err != nil {
 		_ = a.DB.Close()
 		return nil, err

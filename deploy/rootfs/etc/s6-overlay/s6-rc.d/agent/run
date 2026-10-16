@@ -1,0 +1,13 @@
+#!/command/with-contenv sh
+# rdpanel agent: relay host mode (RDPANEL_MODE=agent, docs/relay-agents.md).
+# The agent supervises hbbr as its child (`hbbr -p 21117 -k <hbbs public key>`,
+# the key comes from the panel) and keeps an outbound WebSocket session to
+# RDPANEL_AGENT_PANEL_URL. Data: /data (agent.key, agent-state.json,
+# blacklist.txt/blocklist.txt). In the default panel mode this service idles.
+exec 2>&1
+if [ "${RDPANEL_MODE:-panel}" != agent ]; then exec /command/s6-pause; fi
+cd /data || exit 1
+RDPANEL_AGENT_HBBR_BIN=${RDPANEL_AGENT_HBBR_BIN:-/usr/bin/hbbr}
+RDPANEL_AGENT_DATA_DIR=${RDPANEL_AGENT_DATA_DIR:-/data}
+export RDPANEL_AGENT_HBBR_BIN RDPANEL_AGENT_DATA_DIR
+exec /usr/libexec/rdpanel/as-service-user /usr/bin/rdpanel agent

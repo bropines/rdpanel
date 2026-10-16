@@ -2,6 +2,8 @@
 #
 # RD Panel all-in-one image: hbbs + hbbr (bropines/rustdesk-server, AGPL-3.0)
 # and rdpanel (this repo, MIT) supervised by s6-overlay v3 on Alpine.
+# With RDPANEL_MODE=agent the same image is a relay host: s6 runs only
+# `rdpanel agent`, which supervises hbbr (docs/relay-agents.md).
 #
 # Build context: the repository root.
 #
@@ -127,6 +129,7 @@ ENV PATH=/command:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin \
     PUID=10001 \
     PGID=10001 \
     ENCRYPTED_ONLY=0 \
+    RDPANEL_MODE=panel \
     RDPANEL_DATA_DIR=/data/panel \
     RDPANEL_HBBS_PUBLIC_KEY_FILE=/data/id_ed25519.pub \
     RDPANEL_HBB_REF=${HBB_REF}

@@ -9,6 +9,9 @@
 #                     -> read by hbbs itself from the environment (with-contenv
 #                        and as-service-user keep the container env)
 exec 2>&1
+# Relay host mode (RDPANEL_MODE=agent): only the agent service works; it runs
+# hbbr itself. This service idles.
+if [ "${RDPANEL_MODE:-panel}" = agent ]; then exec /command/s6-pause; fi
 cd /data || exit 1
 
 set --

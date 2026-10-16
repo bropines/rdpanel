@@ -243,6 +243,7 @@ Summary:
 | `RDPANEL_METRICS_PER_DEVICE` | panel | `false` | per-device presence series (see [monitoring](monitoring.md)) |
 | `RDPANEL_HBB_REF` | panel | image `HBB_REF` build arg | hbbs/hbbr source ref shown in `rdpanel_build_info` |
 | `RDPANEL_HBBS_ID_SERVER`, `RDPANEL_HBBS_RELAY_SERVER`, `RDPANEL_HBBS_PUBLIC_KEY_FILE` | panel | `127.0.0.1:21116`, `127.0.0.1:21117`, `/data/id_ed25519.pub` | where hbbs/hbbr are |
+| `RDPANEL_HBBS_RELAY_PUBLIC_HOST`, `RDPANEL_MODE`, `RDPANEL_AGENT_*` | panel, agent | first `RELAY` entry, `panel` | local relay host; `RDPANEL_MODE=agent` turns the image into a relay agent, see [relay-agents.md](relay-agents.md) |
 | `RDPANEL_LOG_LEVEL`, `RDPANEL_LOG_FORMAT`, `RDPANEL_CONFIG` | panel | `info`, `json`, — | logging, optional YAML file |
 | `RDPANEL_UPDATE_CHECK` | panel | `true` | About page release check against the GitHub API (see [below](#about-page-and-update-check)); `false` = no outbound request |
 | `RDPANEL_SMTP_HOST`, `_PORT`, `_ENCRYPTION`, `_USERNAME`, `_PASSWORD`, `_PASSWORD_FILE`, `_FROM`, `_INSECURE_SKIP_VERIFY` | panel | off | outgoing e-mail (see [E-mail](#e-mail-verification-codes-and-password-reset)); otherwise configurable in Settings → E-mail |

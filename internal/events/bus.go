@@ -22,6 +22,9 @@ const (
 	AuditConnection Type = "audit.connection"
 	// HBBSHealth: reachability of hbbs/hbbr changed (data: Health).
 	HBBSHealth Type = "hbbs.health"
+	// RelayHealth: a relay's health, agent connection or config state
+	// changed (data: RelayState). Admins only.
+	RelayHealth Type = "relay.health"
 )
 
 // Audience restricts who may receive an event.
@@ -91,6 +94,16 @@ type Health struct {
 	// RTTMillis is the round-trip time of the probe that observed the state.
 	RTTMillis float64 `json:"rtt_ms,omitempty"`
 	Error     string  `json:"error,omitempty"`
+}
+
+// RelayState is the payload of RelayHealth (internal/relays).
+type RelayState struct {
+	ID        int64  `json:"id"`
+	Name      string `json:"name"`
+	Health    string `json:"health"`
+	Previous  string `json:"previous,omitempty"`
+	Connected bool   `json:"connected"`
+	Error     string `json:"error,omitempty"`
 }
 
 // DefaultBuffer is the per-subscriber queue length.

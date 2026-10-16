@@ -402,6 +402,10 @@ func (c *b2bCore) handlePatchServerSettings(w http.ResponseWriter, r *http.Reque
 		c.fail(w, r, "server settings", err)
 		return
 	}
+	if _, ok := patch["relay_servers"]; ok && c.d.Relays != nil {
+		badRequest(w, "relay_servers is computed from the Relays tab (Server → Relays); add, weight or drain relays there")
+		return
+	}
 	keys, msg := applySettingsPatch(&desired, patch)
 	if msg != "" {
 		badRequest(w, msg)

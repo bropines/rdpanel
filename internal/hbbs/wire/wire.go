@@ -25,6 +25,7 @@
 //	field 23  OnlineRequest  { string id = 1; repeated string peers = 2; }
 //	field 24  OnlineResponse { bytes states = 1; }
 //	field 25  KeyExchange    { repeated bytes keys = 1; }
+//	field 18  RequestRelay   { string id = 1; string uuid = 2; ...; string licence_key = 6; }
 //
 // OnlineResponse.states is a bitmap with ceil(n/8) bytes: peer i is online when
 // states[i/8] & (0x80 >> (i%8)) is set (MSB first).
@@ -42,6 +43,7 @@ const (
 	FieldOnlineRequest  = 23
 	FieldOnlineResponse = 24
 	FieldKeyExchange    = 25
+	FieldRequestRelay   = 18
 )
 
 // MaxFrameLen is the largest payload the framing can express.
@@ -140,6 +142,51 @@ func EncodeKeyExchange(keys ...[]byte) []byte {
 		inner = appendLenField(inner, 1, k)
 	}
 	return appendLenField(nil, FieldKeyExchange, inner)
+}
+
+// RequestRelay is the subset of hbb_common's RequestRelay the panel's relay
+// probe needs: hbbr pairs two connections by UUID and checks LicenceKey
+// against its -k key.
+type RequestRelay struct {
+	ID         string // field 1, the peer id (unused by hbbr)
+	UUID       string // field 2
+	LicenceKey string // field 6, the hbbs public key
+}
+
+// EncodeRequestRelay returns RendezvousMessage{request_relay{...}} (unframed).
+// Empty fields are omitted (proto3).
+func EncodeRequestRelay(m RequestRelay) []byte {
+	var inner []byte
+	if m.ID != "" {
+		inner = appendLenField(inner, 1, []byte(m.ID))
+	}
+	if m.UUID != "" {
+		inner = appendLenField(inner, 2, []byte(m.UUID))
+	}
+	if m.LicenceKey != "" {
+		inner = appendLenField(inner, 6, []byte(m.LicenceKey))
+	}
+	return appendLenField(make([]byte, 0, len(inner)+4), FieldRequestRelay, inner)
+}
+
+// DecodeRequestRelay parses a RequestRelay body. Used by test doubles of hbbr.
+func DecodeRequestRelay(body []byte) (RequestRelay, error) {
+	var m RequestRelay
+	err := walk(body, func(num int, wt int, val []byte) error {
+		if wt != wtLen {
+			return nil
+		}
+		switch num {
+		case 1:
+			m.ID = string(val)
+		case 2:
+			m.UUID = string(val)
+		case 6:
+			m.LicenceKey = string(val)
+		}
+		return nil
+	})
+	return m, err
 }
 
 // Envelope is a decoded RendezvousMessage: the number of the oneof field that

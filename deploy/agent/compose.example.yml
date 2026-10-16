@@ -1,0 +1,48 @@
+# Relay agent: an extra hbbr on another host, managed by the central RD Panel
+# (docs/relay-agents.md). Same image as the panel, RDPANEL_MODE=agent: s6 runs
+# only `rdpanel agent`, which supervises hbbr with the hbbs PUBLIC key it gets
+# from the panel and keeps an outbound WebSocket session to the panel.
+#
+#   1. Panel: Server -> Relays -> Add relay -> Relay agent. Copy the one-time
+#      token (valid 1 h) or the whole generated compose snippet.
+#   2. Relay host:
+#        mkdir relay && cd relay && cp .../compose.example.yml compose.yml   # edit
+#        docker compose up -d && docker compose logs -f
+#   3. Panel: approve the relay (unless the approval gate is off). It enters
+#      hbbs' relay list once the end-to-end probe passes.
+#
+# Only TCP 21117 (relay) must be reachable from clients. No inbound management
+# port: the agent dials out to RDPANEL_AGENT_PANEL_URL (the public client-API
+# host; the reverse proxy must pass /agent/v1/ there, WebSocket included).
+# Never publish or proxy the hbbr port from loopback: its admin channel
+# answers loopback peers.
+services:
+  relay:
+    image: ghcr.io/bropines/rdpanel:latest
+    container_name: rdpanel-relay
+    # hbbr must see real client IPs (black/blocklists, usage); with bridge
+    # networking it would see the docker proxy instead.
+    network_mode: host
+    restart: unless-stopped
+    environment:
+      RDPANEL_MODE: agent
+      RDPANEL_AGENT_PANEL_URL: https://desk-api.example.com
+      # One-time token from the panel; ignored once enrolled (agent-state.json),
+      # so it can stay here.
+      RDPANEL_AGENT_ENROLL_TOKEN: "<token from the panel>"
+      # RDPANEL_AGENT_RELAY_PORT: "21117"         # hbbr port (default 21117)
+      # RDPANEL_AGENT_PANEL_CA: /data/panel-ca.pem # extra CA for a private panel cert
+      # RDPANEL_AGENT_HOSTNAME: relay-de-1          # reported host name
+      # RDPANEL_LOG_FORMAT: text
+      # Never set PORT: hbbr would listen on PORT+1. KEY is ignored (the agent
+      # passes -k itself).
+    volumes:
+      # agent.key (identity, keep it), agent-state.json (last config, enforced
+      # while the panel is unreachable), blacklist.txt/blocklist.txt.
+      - ./relay-data:/data
+    stop_grace_period: 20s
+    ulimits:
+      nofile: { soft: 1048576, hard: 1048576 }
+    logging:
+      driver: json-file
+      options: { max-size: 20m, max-file: "5" }

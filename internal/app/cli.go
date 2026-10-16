@@ -24,6 +24,9 @@ const usage = `rdpanel — RustDesk API server and admin panel
 
 Usage:
   rdpanel serve                                   run the HTTP server
+  rdpanel agent [run|health]                      relay agent mode: supervise hbbr on a relay
+                                                  host for a central panel (RDPANEL_AGENT_*,
+                                                  see docs/relay-agents.md)
   rdpanel user create [--admin] [--password-stdin] [--email E] [--display-name N] <username>
   rdpanel user reset-password [--password-stdin] <username>
   rdpanel migrate-legacy --from <rustdeskapi.db> [--dry-run] [--report <file>] [--force]
@@ -74,6 +77,8 @@ func run(ctx context.Context, args []string, env config.LookupFunc, stdio Stdio)
 			return fmt.Errorf("%w: serve takes no arguments", errUsage)
 		}
 		return cmdServe(ctx, env, stdio)
+	case "agent":
+		return cmdAgent(ctx, args[1:], env, stdio)
 	case "migrate-legacy":
 		return cmdMigrateLegacy(ctx, args[1:], env, stdio)
 	case "config":

@@ -55,6 +55,9 @@ export function LiveProvider({ children }: { children: ReactNode }) {
           case "hbbs.health":
             qc.setQueryData(["server", "health"], data);
             break;
+          case "relay.health":
+            void qc.invalidateQueries({ queryKey: ["relays"] });
+            break;
         }
       },
     });

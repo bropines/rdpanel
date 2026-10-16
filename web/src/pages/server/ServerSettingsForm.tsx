@@ -248,8 +248,8 @@ export function ServerSettingsForm() {
           <CardDescription>{t("server.rendezvousHint")}</CardDescription>
         </CardHeader>
         <CardContent>
-          <Row k="relay_servers" state={state} label={t("server.keys.relay_servers")} hint={t("server.hints.relay_servers")} error={errors.relay_servers} dirty={dirtyKeys.has("relay_servers")}>
-            <Textarea id="srv-relay_servers" rows={3} className="font-mono" value={draft.relay_servers} onChange={(e) => set("relay_servers", e.target.value)} placeholder="relay.example.com:21117" />
+          <Row k="relay_servers" state={state} label={t("server.keys.relay_servers")} hint={t("server.hints.relay_servers_computed")} error={errors.relay_servers} dirty={dirtyKeys.has("relay_servers")}>
+            <Textarea id="srv-relay_servers" rows={3} className="font-mono" value={draft.relay_servers} readOnly placeholder="relay.example.com:21117" />
           </Row>
           <Row k="always_use_relay" state={state} label={t("server.keys.always_use_relay")} hint={t("server.hints.always_use_relay")} dirty={dirtyKeys.has("always_use_relay")}>
             <Switch id="srv-always_use_relay" checked={draft.always_use_relay} onCheckedChange={(v) => set("always_use_relay", v)} />

@@ -157,6 +157,10 @@ type HBBSConfig struct {
 	// RelayServer is the hbbr TCP address (default 127.0.0.1:21117); the hbbr
 	// admin channel shares this port (loopback only).
 	RelayServer string `yaml:"relay_server"`
+	// RelayPublicHost is the public host[:port] of the co-located hbbr as
+	// clients reach it; the "local" relay on the Relays tab is seeded from it.
+	// Default: the first entry of RELAY (the hbbs -r value in the s6 image).
+	RelayPublicHost string `yaml:"relay_public_host"`
 	// PublicKeyFile is the hbbs public key served to clients. Default: <DataDir>/id_ed25519.pub.
 	PublicKeyFile string `yaml:"public_key_file"`
 	// Enabled turns on the hbbs/hbbr workers (presence poller, reconciler).
@@ -223,6 +227,15 @@ func Load(lookup LookupFunc) (*Config, error) {
 	}
 	if err := cfg.applyEnv(lookup); err != nil {
 		return nil, err
+	}
+	if cfg.HBBS.RelayPublicHost == "" {
+		// The s6 image hands RELAY to hbbs (-r); its first entry is the
+		// co-located hbbr.
+		if v, ok := lookup("RELAY"); ok {
+			if l := splitList(v); len(l) > 0 && !strings.Contains(l[0], "=") {
+				cfg.HBBS.RelayPublicHost = l[0]
+			}
+		}
 	}
 	if err := cfg.loadSecretFiles(); err != nil {
 		return nil, err
@@ -316,6 +329,7 @@ func (c *Config) envVars() []envVar {
 		{"RDPANEL_METRICS_PER_DEVICE", boolean(&c.HTTP.MetricsPerDevice)},
 		{"RDPANEL_HBBS_ID_SERVER", str(&c.HBBS.IDServer)},
 		{"RDPANEL_HBBS_RELAY_SERVER", str(&c.HBBS.RelayServer)},
+		{"RDPANEL_HBBS_RELAY_PUBLIC_HOST", str(&c.HBBS.RelayPublicHost)},
 		{"RDPANEL_HBBS_PUBLIC_KEY_FILE", str(&c.HBBS.PublicKeyFile)},
 		{"RDPANEL_HBBS_ENABLED", boolean(&c.HBBS.Enabled)},
 		{"RDPANEL_HBBS_POLL_INTERVAL", dur(&c.HBBS.PollInterval)},
@@ -477,6 +491,9 @@ func (c *Config) Validate() error {
 	}
 	if _, err := portOf(c.HBBS.RelayServer); err != nil {
 		add("hbbs.relay_server: %v", err)
+	}
+	if h := c.HBBS.RelayPublicHost; h != "" && (strings.ContainsAny(h, " ,;/") || len(h) > 255) {
+		add("hbbs.relay_public_host %q: must be host[:port]", h)
 	}
 	if c.HBBS.PollInterval < time.Second {
 		add("hbbs.poll_interval must be >= 1s")
