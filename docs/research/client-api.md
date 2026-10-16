@@ -217,6 +217,8 @@ Client behaviour:
 - `type == "email_check"`: the client shows a code dialog. It is an email code unless `tfa_type == "tfa_check"`, which means a TOTP code. Step 2 re-posts with `type: "email_code"`, `verificationCode`, `tfaCode` (TOTP only), `secret`, and `username = user.name`.
 - Any other `type`: "Failed, bad response from server".
 
+rdpanel answers step 1 with `tfa_type: "tfa_check"` for users with TOTP and with `tfa_type: "email_check"` (plus `user.email` masked, e.g. `a***e@example.com`) for users whose e-mailed sign-in codes apply (opt-in or admin policy, verified address, SMTP configured); a code is e-mailed on every password step (a still-valid code sent < 60 s ago is reused). The factor kind is sealed in `secret`, so a TOTP code cannot answer an e-mail challenge and vice versa; each code allows 5 wrong guesses.
+
 **Errors:**
 - Non-200 status: `RequestException(status, body.error ?? '')`.
 - 200 with an `error` key: error.

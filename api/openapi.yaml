@@ -2855,6 +2855,12 @@ components:
         recovery_codes_remaining: { type: integer }
         passkeys_available: { type: boolean, description: The server has a WebAuthn relying party configured. }
         passkey_count: { type: integer }
+        email: { type: [string, "null"] }
+        email_verified: { type: boolean }
+        email_2fa_enabled: { type: boolean, description: E-mailed sign-in codes are on (used when TOTP is off). }
+        email_2fa_required: { type: boolean, description: Admin policy requires e-mail codes for accounts without TOTP (verified address). }
+        email_available: { type: boolean, description: SMTP is configured. }
+        locale: { type: [string, "null"], enum: [en, ru, null] }
     PasskeyCeremony:
       type: object
       required: [ceremony_id, options]
@@ -2906,12 +2912,6 @@ components:
         synced: { type: boolean, description: The credential is backed up / synced (backup state flag). }
         clone_warning: { type: boolean, description: The signature counter went backwards; sign-in with it is refused. }
         transports: { type: array, items: { type: string } }
-        email: { type: [string, "null"] }
-        email_verified: { type: boolean }
-        email_2fa_enabled: { type: boolean, description: E-mailed sign-in codes are on (used when TOTP is off). }
-        email_2fa_required: { type: boolean, description: Admin policy requires e-mail codes for accounts without TOTP (verified address). }
-        email_available: { type: boolean, description: SMTP is configured. }
-        locale: { type: [string, "null"], enum: [en, ru, null] }
     TotpEnrollment:
       type: object
       required: [secret, otpauth_uri]

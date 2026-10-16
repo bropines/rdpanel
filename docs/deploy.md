@@ -136,6 +136,7 @@ DB) succeeds.
 | `RDPANEL_HBBS_ID_SERVER`, `RDPANEL_HBBS_RELAY_SERVER`, `RDPANEL_HBBS_PUBLIC_KEY_FILE` | panel | `127.0.0.1:21116`, `127.0.0.1:21117`, `/data/id_ed25519.pub` | where hbbs/hbbr are |
 | `RDPANEL_LOG_LEVEL`, `RDPANEL_LOG_FORMAT`, `RDPANEL_CONFIG` | panel | `info`, `json`, — | logging, optional YAML file |
 | `RDPANEL_UPDATE_CHECK` | panel | `true` | About page release check against the GitHub API (see below); `false` = no outbound request |
+| `RDPANEL_SMTP_HOST`, `_PORT`, `_ENCRYPTION`, `_USERNAME`, `_PASSWORD`, `_PASSWORD_FILE`, `_FROM`, `_INSECURE_SKIP_VERIFY` | panel | off | outgoing e-mail (see [E-mail](#e-mail-verification-codes-and-password-reset)); otherwise configurable in Settings → E-mail |
 | `HEALTHCHECK_PORTS` | healthcheck | `21115 21116 21117 21118 21119` | ports that must listen |
 
 Do not set `PORT` (hbbr would listen on `PORT+1`) or `KEY` (overrides the key
@@ -287,6 +288,51 @@ IP address; a panel reached as `http://10.0.0.5:21114` has passkeys disabled
 passkeys there, sign in through an OIDC provider that supports them (e.g. Pocket
 ID, Authentik, Keycloak) — the panel's OIDC support covers both panel and client
 logins.
+
+### E-mail: verification, codes and password reset
+
+With an SMTP server configured the panel offers:
+
+- **Address verification** — *Profile & security → E-mail* sends a 6-digit code to
+  the user's address. Changing the address clears the verification (and the
+  e-mail second factor). Admins can mark an address verified in the user form.
+- **E-mailed sign-in codes** — a per-user opt-in (verified address only) that asks
+  for a code after the password, on the panel (also after an OIDC login) and in
+  the RustDesk client (`/api/login` answers `{"type":"email_check","tfa_type":"email_check"}`;
+  the client shows its built-in code dialog). TOTP wins when both are enabled.
+  *Settings → Security → Require e-mailed codes without TOTP* makes it mandatory
+  for every user without TOTP who has a verified address (users without one are
+  not locked out). If SMTP is removed later the factor is not enforced.
+- **Forgot password?** on the login page — sends a single-use link
+  (`<admin_url>/reset-password?token=…`, 30 minutes) to active accounts with a
+  password and a **verified** address; the answer never reveals whether an
+  account exists. A reset revokes every panel session and client token of the
+  user. Needs `RDPANEL_ADMIN_URL` or `RDPANEL_PUBLIC_URL` for the link.
+
+Codes are 6 random digits, stored as hashes, valid 10 minutes, invalidated after
+5 wrong guesses or by a newer code. Sending has a 60 s cooldown and hourly caps
+(10 e-mails per user, 30 per client IP); login backoff applies to wrong codes.
+Failed codes appear in the sign-in audit (`email_code_invalid`); the
+`rdpanel_auth_login_attempts_total` metric uses `method="email"`. E-mails are
+plain text + minimal HTML, in English or Russian (the user's choice in the
+profile, else Settings → E-mail → default language).
+
+Configure SMTP either in **Settings → E-mail** (the password is stored
+AEAD-encrypted; a *Send test e-mail* button shows the server's error) or with the
+environment, which then makes the form read-only:
+
+```sh
+RDPANEL_SMTP_HOST=smtp.example.com
+RDPANEL_SMTP_PORT=587                 # default by encryption: 587 / 465 / 25
+RDPANEL_SMTP_ENCRYPTION=starttls      # starttls | tls | none
+RDPANEL_SMTP_USERNAME=panel@example.com
+RDPANEL_SMTP_PASSWORD_FILE=/run/secrets/smtp_password   # or RDPANEL_SMTP_PASSWORD
+RDPANEL_SMTP_FROM="RustDesk Panel <panel@example.com>"
+```
+
+`none` sends credentials in clear text — use it only for a relay on a trusted
+network. `RDPANEL_SMTP_INSECURE_SKIP_VERIFY=true` accepts self-signed
+certificates.
 
 `/metrics` is answered only when the resolved client IP **and** every address in
 any forwarding header (`X-Forwarded-For`, `X-Real-IP`, `Forwarded`, …) are in
