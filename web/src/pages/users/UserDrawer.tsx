@@ -12,6 +12,7 @@ import { addressBooksApi } from "@/api/addressBooks";
 import { devicesApi } from "@/api/devices";
 import { userKeys, usersApi, type UserDetail } from "@/api/users";
 import { ConfirmDialog, EmptyState, ErrorState, Field, KeyValue, Mono, OnlineDot, RelativeTime, SectionTitle, useToastError } from "@/components";
+import { ApiTokenList } from "@/components/ApiTokenList";
 import { PasskeyList } from "@/components/PasskeyList";
 import { SessionsList } from "@/components/SessionsList";
 import { Badge } from "@/components/ui/badge";
@@ -132,6 +133,17 @@ function SecurityTab({ user }: { user: UserDetail }) {
   const [confirm, setConfirm] = useState<"totp" | "revoke" | null>(null);
   const [unlinkId, setUnlinkId] = useState<number | null>(null);
   const [revokePasskey, setRevokePasskey] = useState<{ id: number; name: string } | null>(null);
+  const [revokeToken, setRevokeToken] = useState<{ id: number; name: string } | null>(null);
+  const apiTokens = useQuery({ queryKey: userKeys.apiTokens(user.id), queryFn: () => usersApi.apiTokens(user.id) });
+  const revokeApiToken = useMutation({
+    mutationFn: (tid: number) => usersApi.revokeApiToken(user.id, tid),
+    onSuccess: () => {
+      toast.success(t("apiTokens.revoked"));
+      setRevokeToken(null);
+      void qc.invalidateQueries({ queryKey: userKeys.apiTokens(user.id) });
+    },
+    onError: toastError,
+  });
   const sessions = useQuery({ queryKey: userKeys.sessions(user.id), queryFn: () => usersApi.sessions(user.id) });
   const passkeys = useQuery({ queryKey: userKeys.passkeys(user.id), queryFn: () => usersApi.passkeys(user.id) });
   const revokeKey = useMutation({
@@ -233,6 +245,19 @@ function SecurityTab({ user }: { user: UserDetail }) {
       </section>
 
       <section>
+        <SectionTitle>{t("apiTokens.title")}</SectionTitle>
+        <ApiTokenList
+          tokens={apiTokens.data?.items}
+          isLoading={apiTokens.isLoading}
+          actions={(tok) => (
+            <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => setRevokeToken(tok)} aria-label={t("apiTokens.revoke")}>
+              <X />
+            </Button>
+          )}
+        />
+      </section>
+
+      <section>
         <SectionTitle>{t("identities.title")}</SectionTitle>
         {user.identities.length === 0 ? (
           <p className="text-sm text-muted-foreground">{t("identities.none")}</p>
@@ -306,6 +331,16 @@ function SecurityTab({ user }: { user: UserDetail }) {
         destructive
         pending={revokeKey.isPending}
         onConfirm={() => revokePasskey && revokeKey.mutate(revokePasskey.id)}
+      />
+      <ConfirmDialog
+        open={revokeToken !== null}
+        onOpenChange={(o) => !o && setRevokeToken(null)}
+        title={t("apiTokens.revokeUserTitle", { name: revokeToken?.name ?? "", user: user.username })}
+        description={t("apiTokens.revokeDescription")}
+        confirmLabel={t("apiTokens.revoke")}
+        destructive
+        pending={revokeApiToken.isPending}
+        onConfirm={() => revokeToken && revokeApiToken.mutate(revokeToken.id)}
       />
       <ConfirmDialog
         open={unlinkId !== null}

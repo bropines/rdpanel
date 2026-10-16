@@ -19,6 +19,7 @@ import { Skeleton } from "@/components/ui/misc";
 import { useMe } from "@/lib/session";
 import { useTableSearch } from "@/lib/use-table";
 import { oidcErrorKey } from "@/pages/login-errors";
+import { ApiTokensSection } from "@/pages/my/ApiTokensSection";
 import { EmailSection } from "@/pages/my/EmailSection";
 import { PasskeysSection } from "@/pages/my/PasskeysSection";
 import { TotpSection } from "@/pages/my/TotpSection";
@@ -246,6 +247,9 @@ export function ProfilePage() {
       </Section>
       <Section title={t("identities.title")} description={t("identities.hint")}>
         <Identities />
+      </Section>
+      <Section title={t("apiTokens.title")} description={t("apiTokens.hint")}>
+        <ApiTokensSection />
       </Section>
     </div>
   );

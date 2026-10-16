@@ -28,6 +28,9 @@ export const usersApi = {
   passkeys: (id: number) => api.request<{ items: Schemas["Passkey"][] }>(`/users/${id}/passkeys`),
   revokePasskey: (id: number, passkeyId: number) =>
     api.request<void>(`/users/${id}/passkeys/${passkeyId}`, { method: "DELETE" }),
+  apiTokens: (id: number) => api.request<{ items: Schemas["ApiToken"][] }>(`/users/${id}/api-tokens`),
+  revokeApiToken: (id: number, tokenId: number) =>
+    api.request<void>(`/users/${id}/api-tokens/${tokenId}`, { method: "DELETE" }),
 };
 
 export const groupsApi = {
@@ -58,6 +61,7 @@ export const userKeys = {
   detail: (id: number) => ["users", "detail", id] as const,
   sessions: (id: number) => ["users", "sessions", id] as const,
   passkeys: (id: number) => ["users", "passkeys", id] as const,
+  apiTokens: (id: number) => ["users", "api-tokens", id] as const,
 };
 
 export const groupKeys = {

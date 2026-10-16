@@ -21,6 +21,9 @@
  *   POST   /me/security/passkeys/register/{begin,finish}            → Passkey (begin needs re-auth)
  *   PATCH  /me/security/passkeys/{id} {name}                        → Passkey
  *   DELETE /me/security/passkeys/{id}                               → 204
+ *   GET    /me/api-tokens                                           → {items: ApiToken[]}
+ *   POST   /me/api-tokens {name, scope, expires_in_days?}           → ApiTokenCreated (secret shown once)
+ *   DELETE /me/api-tokens/{id}                                      → 204
  */
 import { api, type ApiClient, type Schemas } from "@/api/client";
 import { createPasskey, type JsonObject } from "@/lib/webauthn";
@@ -34,6 +37,9 @@ export type PasswordChange = Schemas["ChangePasswordRequest"];
 export type ReauthRequest = Schemas["ReauthRequest"];
 export type SecurityOverview = Schemas["SecurityOverview"];
 export type Passkey = Schemas["Passkey"];
+export type ApiToken = Schemas["ApiToken"];
+export type ApiTokenCreated = Schemas["ApiTokenCreated"];
+export type CreateApiToken = Schemas["CreateApiTokenRequest"];
 
 const S = "/me/security";
 
@@ -72,6 +78,9 @@ export function securityApi(client: ApiClient = api) {
     },
     renamePasskey: (id: number, name: string) => client.request<Passkey>(`${S}/passkeys/${id}`, { method: "PATCH", body: { name } }),
     deletePasskey: (id: number) => client.request<void>(`${S}/passkeys/${id}`, { method: "DELETE" }),
+    apiTokens: () => client.request<{ items: ApiToken[] }>("/me/api-tokens"),
+    createApiToken: (body: CreateApiToken) => client.request<ApiTokenCreated>("/me/api-tokens", { method: "POST", body }),
+    revokeApiToken: (id: number) => client.request<void>(`/me/api-tokens/${id}`, { method: "DELETE" }),
   };
 }
 
