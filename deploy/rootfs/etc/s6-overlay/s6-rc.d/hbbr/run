@@ -7,6 +7,9 @@
 #      DOWNGRADE_START_CHECK, RUST_LOG -> read by hbbr from the environment.
 # Do not set PORT on the container: hbbr would listen on PORT+1.
 exec 2>&1
+# Relay host mode (RDPANEL_MODE=agent): only the agent service works; it runs
+# hbbr itself. This service idles.
+if [ "${RDPANEL_MODE:-panel}" = agent ]; then exec /command/s6-pause; fi
 cd /data || exit 1
 
 set --

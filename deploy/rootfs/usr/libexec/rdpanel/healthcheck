@@ -8,6 +8,13 @@ set -u
 
 fail() { echo "unhealthy: $*"; exit 1; }
 
+# Relay host mode: the agent service and its health file (hbbr up when it
+# should run, panel session state is informational).
+if [ "${RDPANEL_MODE:-panel}" = agent ]; then
+	[ "$(/command/s6-svstat -o up /run/service/agent 2>/dev/null)" = true ] || fail "service agent is not up"
+	exec /usr/bin/rdpanel agent health
+fi
+
 for s in hbbs hbbr panel; do
 	[ "$(/command/s6-svstat -o up "/run/service/$s" 2>/dev/null)" = true ] || fail "service $s is not up"
 done

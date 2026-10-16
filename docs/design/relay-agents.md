@@ -1,6 +1,8 @@
 # Design: remote relay agents and panel federation
 
-Status: **draft for discussion**, not implemented. Target: the next minor version after v1.
+Status: **phases 0 and 1 implemented** (branch `feat/relay-agents`); phases 2-4 open. The open
+questions are decided in [§16](#16-decisions-and-implementation-status), which also lists where the
+implementation differs from this draft. User guide: [`../relay-agents.md`](../relay-agents.md).
 
 Sources: this repo at `main` (`040325f`) and `rustdesk-server` at `merge-upstream-1.1.16` (`8b6f490`).
 `srv:` marks paths in the server fork; unprefixed paths are in this repo. Line numbers in
@@ -655,3 +657,59 @@ MVP (phases 0+1) is about **8-10 dev days**. Everything through phase 3 is about
    entrypoint (one artifact, ~10 MB larger)?
 10. **Client relay override.** Confirm whether a client's own "Relay server" setting overrides
     hbbs's choice. Should the panel push a strategy that clears it?
+
+---
+
+## 16. Decisions and implementation status
+
+The maintainer did not answer §15; these defaults were taken (2026-10) and implemented.
+
+| # | Question | Decision |
+|---|---|---|
+| 1 | Trust model | Relay hosts are the operator's own. New agents **require admin approval by default** (`relays.require_approval`, toggle on the Relays tab); an unapproved agent gets `run=false` and does not start hbbr. |
+| 2 | Relay key | Accepted as upstream: anyone with the hbbs public key can use the relay. No relay-side auth now. |
+| 3 | Supervisor | **The agent is hbbr's parent** (option 1): restart with backoff 1 s → 30 s (reset after 60 s up), `-k` changes restart hbbr, `hbbr:` output is logged. Trade-off: an agent crash takes hbbr (and its sessions) down; the supervisor loop is separate from the WS session and the container restarts the agent. s6 only runs `rdpanel agent`. |
+| 4 | Selection | Weighted round-robin only (duplicates in `rs`, interleaved). No geo. |
+| 5 | Agent endpoint | `/agent/v1/*` on the **public client-API host**; the reverse proxy must pass `/agent/v1/` (with WebSocket upgrade) next to `/api/*`. Per-IP token bucket plus failure backoff (`auth.Limiter`). |
+| 6 | WS relay 21119 on agents | Not in the MVP (hbbr listens, nothing manages or proxies it). |
+| 7 | Traffic | Hourly per-relay aggregates only, in phase 2. |
+| 8 | Federation | Parked; shared external IdP is the documented answer. |
+| 9 | Packaging | **Same image** `ghcr.io/bropines/rdpanel` with `RDPANEL_MODE=agent` (s6 runs only the `agent` longrun; hbbs, hbbr and panel idle with `s6-pause`; `key-secret` creates no hbbs key pair; the healthcheck runs `rdpanel agent health`). Compose example `deploy/agent/compose.example.yml`. **Helm left for phase 2** (the panel chart is a StatefulSet built around hbbs; a values switch was not cheap). |
+| 10 | Client relay override | Documented only. |
+
+### What exists
+
+- **Phase 0.** Migration `00010_relay_agents.sql` (not `00008`: those numbers were taken):
+  `relays`, `relay_agents`, `relay_settings`; the admin-typed `relay_servers` row becomes static
+  relays (Down restores it). `relay_traffic_samples` is deferred to phase 2. The local relay is
+  seeded at runtime from `RDPANEL_HBBS_RELAY_PUBLIC_HOST` (default: first entry of `RELAY`).
+  `internal/relays`: E2E probe (`wire.EncodeRequestRelay`, SSRF guard, resolved address dialed),
+  health state machine, weighted rotation with proportional shrinking, `reconcile.RelaySource`.
+  `PATCH /server/settings` refuses `relay_servers` (computed). Relays tab: list, add static/agent,
+  weight, drain/enable/disable, probe, delete; `relay.health` SSE; `rdpanel_relay_*` metrics.
+- **Phase 1.** Agent hub `/agent/v1/{enroll,connect}` (`internal/relays/hub.go`, protocol in
+  `internal/relays/agentproto`), config versions by content hash + ACK, status, `usage` and
+  `restart-hbbr` commands, supersede/revoke, audit with actor `agent:<id>`. `rdpanel agent`
+  (`internal/agent`): enrollment, ed25519 challenge, persisted state, hbbr supervisor, the hbbr half
+  of the reconciler (`reconcile.ApplyHBBR`, `WriteListFiles`) reused over `control`. Global
+  profile + per-relay overrides (`GET/PUT /relays/{id}/settings`).
+
+### Differences from the draft
+
+- Health: 1-2 failed probes make an active relay **degraded** (still in rotation) before offline;
+  the local relay is never offline while its loopback admin channel answers, and a loopback local
+  host is not probed at all (it would hit hbbr's admin branch).
+- The enrollment response carries no config: it arrives over the session (only after approval).
+  `hello` reports the version the agent enforces; the agent re-sends its last ACK after `hello`.
+- `PUT /relays/{id}/settings` (complete override set) instead of PATCH; added
+  `GET/PUT /relays/options` (approval gate, private hosts) and `/relays/{id}/usage`.
+- `control.SetRelayServers` keeps duplicates (weights); admin input is still de-duplicated.
+- Status uses hbbr `usage` plus `/proc` (load, memory, NIC rates); the `stats` fork patch is phase 2.
+- Agent version skew: versions are shown, but the panel does not yet filter keys by agent version.
+- No `--panel-ca` SPKI pin; `RDPANEL_AGENT_PANEL_CA` adds a CA bundle.
+
+### Left for later
+
+Phase 2: hbbr `stats` patch, `relay_traffic_samples` + charts, alerts, Helm chart, auto-block,
+Grafana panels for `rdpanel_relay_*`. Phase 3: geo / prefix selection, load-aware weights,
+multi-key hbbr. WS 21119 on agents. Federation.

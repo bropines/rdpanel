@@ -93,6 +93,7 @@ Put a TLS reverse proxy in front of the panel, then configure clients with ID se
 - **Kubernetes:** Helm chart in [`deploy/helm/rdpanel`](deploy/helm/rdpanel).
 - **Single sign-on:** [`docs/oidc.md`](docs/oidc.md) (Authentik, Keycloak, Pocket ID,
   GitHub, Google). **Monitoring:** [`docs/monitoring.md`](docs/monitoring.md).
+- **Extra relays on other hosts (relay agents):** [`docs/relay-agents.md`](docs/relay-agents.md).
 - **Coming from lejianwen/rustdesk-api:** [`docs/migration.md`](docs/migration.md). Keep the
   same `RUSTDESK_API_JWT_KEY` and hbbs key pair, then
   `rdpanel migrate-legacy --from rustdeskapi.db --dry-run`.
@@ -168,6 +169,7 @@ Environment variables override the optional YAML file named by `RDPANEL_CONFIG`
 | `RDPANEL_HBB_REF` | — (set by the image) | hbbs/hbbr source ref reported as `hbb_ref` in `rdpanel_build_info` |
 | `RDPANEL_HBBS_ID_SERVER` (`hbbs.id_server`) | `127.0.0.1:21116` | hbbs rendezvous address (admin channel = port − 1) |
 | `RDPANEL_HBBS_RELAY_SERVER` (`hbbs.relay_server`) | `127.0.0.1:21117` | hbbr address (admin channel on the same port) |
+| `RDPANEL_HBBS_RELAY_PUBLIC_HOST` (`hbbs.relay_public_host`) | first entry of `RELAY` | public `host[:port]` of the co-located hbbr; seeds the local relay of Server → Relays ([relay agents](docs/relay-agents.md)) |
 | `RDPANEL_HBBS_PUBLIC_KEY_FILE` (`hbbs.public_key_file`) | `<data>/id_ed25519.pub` | hbbs public key served to clients |
 | `RDPANEL_HBBS_ENABLED` (`hbbs.enabled`) | `true` | presence poller + hbbs/hbbr reconciler workers |
 | `RDPANEL_HBBS_POLL_INTERVAL` (`hbbs.poll_interval`) | `5s` | presence poll period (batched `OnlineRequest`) |
