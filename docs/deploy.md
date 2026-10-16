@@ -16,7 +16,7 @@ single host. Kubernetes: see the [Helm chart](../deploy/helm/rdpanel/README.md);
 - [Data layout and backups](#data-layout-and-backups)
 - Optional features: [passkeys](#passkeys), [e-mail](#e-mail-verification-codes-and-password-reset),
   [WebSocket and TCP-mode clients](#websocket-and-tcp-mode-clients),
-  [About page and update check](#about-page-and-update-check)
+  [About page and update check](#about-page-and-update-check), [server logs](#server-logs)
 - [Image tags and upgrades](#image-tags-and-upgrades) —
   [from the lejianwen s6 image](#upgrading-from-the-lejianwen-s6-image-lejianwenrustdesk-server-s6--rustdesk-api)
 - [Container internals](#container-internals)
@@ -246,6 +246,7 @@ Summary:
 | `RDPANEL_HBBS_ID_SERVER`, `RDPANEL_HBBS_RELAY_SERVER`, `RDPANEL_HBBS_PUBLIC_KEY_FILE` | panel | `127.0.0.1:21116`, `127.0.0.1:21117`, `/data/id_ed25519.pub` | where hbbs/hbbr are |
 | `RDPANEL_HBBS_RELAY_PUBLIC_HOST`, `RDPANEL_MODE`, `RDPANEL_AGENT_*` | panel, agent | first `RELAY` entry, `panel` | local relay host; `RDPANEL_MODE=agent` turns the image into a relay agent, see [relay-agents.md](relay-agents.md) |
 | `RDPANEL_LOG_LEVEL`, `RDPANEL_LOG_FORMAT`, `RDPANEL_CONFIG` | panel | `info`, `json`, — | logging, optional YAML file |
+| `RDPANEL_LOGS_BUFFER`, `RDPANEL_LOGS_DIR` | panel, log pipelines | `2000`, `/run/rdpanel/logs` | Server → Logs: lines kept per source (`0` = off) and the s6-log capture dir (see [Server logs](#server-logs)) |
 | `RDPANEL_UPDATE_CHECK` | panel | `true` | About page release check against the GitHub API (see [below](#about-page-and-update-check)); `false` = no outbound request |
 | `RDPANEL_SMTP_HOST`, `_PORT`, `_ENCRYPTION`, `_USERNAME`, `_PASSWORD`, `_PASSWORD_FILE`, `_FROM`, `_INSECURE_SKIP_VERIFY` | panel | off | outgoing e-mail (see [E-mail](#e-mail-verification-codes-and-password-reset)); otherwise configurable in Settings → E-mail |
 | `HEALTHCHECK_PORTS` | healthcheck | `21115 21116 21117 21118 21119` | ports that must listen |
@@ -261,6 +262,7 @@ Summary:
   id_ed25519.pub             public key given to clients (0644)
   db_v2.sqlite3              hbbs peer table
   blacklist.txt, blocklist.txt   hbbr lists (written by the panel)
+  machine-id                 /etc/machine-id links here (created on first start, 0644)
   panel/                     RDPANEL_DATA_DIR
     panel.db (+ -wal, -shm)  panel database (SQLite WAL)
     secret.key               AEAD key for secrets at rest (back it up with panel.db!)
@@ -433,6 +435,30 @@ To say whether a newer release exists, `rdpanel` asks
 - set `RDPANEL_UPDATE_CHECK=false` (YAML `update_check: false`) on air-gapped hosts or if
   the panel must not make outbound requests.
 
+## Server logs
+
+**Server → Logs** (admins) shows recent hbbs, hbbr and panel lines: source chips,
+minimum level, search, a live tail (scrolling up pauses auto-scroll), copy line and a
+text download.
+
+- **Capture:** each service's log pipeline writes every line to the container's stdout
+  (`docker logs` is unchanged) and also to `s6-log` under
+  `$RDPANEL_LOGS_DIR/<service>/` (`/run/rdpanel/logs`; `current` rotated at 1 MB, 2 old
+  files kept, ~3 MB per service). The panel tails those files, so a slow or restarting
+  panel never blocks hbbs/hbbr, and the page is refilled after a panel restart.
+- **Memory:** the panel keeps the last `RDPANEL_LOGS_BUFFER` lines per source
+  (default `2000`). `0` turns the page and the file copies off.
+- **Secrets are redacted before storing:** the hbbs key pair, the JWT and secrets-at-rest
+  keys, the SMTP password, JWTs, bearer/basic credentials, `Authorization`/`Cookie`
+  headers, `password=`/`token=`/`secret=`-style pairs and credentials in URLs. Use
+  `docker logs` for unredacted output.
+- **Outside the image** (plain `rdpanel serve`, `RDPANEL_LOGS_DIR` empty) only the
+  panel's own lines appear.
+- **API:** `GET /api/v1/admin/server/logs` (filters `source`, `level`, `q`, paging
+  `limit`/`before`), `…/logs/stream` (SSE) and `…/logs/download`, see
+  [api/openapi.yaml](../api/openapi.yaml). Metric: `rdpanel_logs_dropped_total{source}`
+  counts lines a too-slow live viewer skipped.
+
 ## Image tags and upgrades
 
 | Tag | Built from |
@@ -512,6 +538,9 @@ Background for troubleshooting and hardening; not needed for a normal install.
    - **JWT key:** if `RUSTDESK_API_JWT_KEY` is unset, makes sure
      `$RDPANEL_DATA_DIR/jwt.key` exists. The hbbs run script exports its content as
      `RUSTDESK_API_JWT_KEY`, so the panel and hbbs (MUST_LOGIN) always use the same key.
+   - **Machine id:** `/etc/machine-id` is a link to `/data/machine-id`, created once
+     with 32 random hex chars (hbbs/hbbr read it; a non-empty `/etc/machine-id` you
+     mount yourself is left alone).
    - **Ownership:** chowns `/data` and the panel data dir to `PUID:PGID` (default
      `10001:10001`; skipped when `PUID=0`). Data dirs created by root-run images therefore
      keep working.
@@ -521,7 +550,8 @@ Background for troubleshooting and hardening; not needed for a normal install.
    full control of hbbs/hbbr through the loopback admin channel), so one unprivileged uid
    for all of them is enough. None needs root because all ports are above 1024.
 3. Each service's stdout/stderr goes through an s6-rc pipeline logger that prefixes lines
-   with `[hbbs] `, `[hbbr] `, `[panel] ` and writes them to the container's stdout.
+   with `[hbbs] `, `[hbbr] `, `[panel] ` and writes them to the container's stdout
+   (and, for Server → Logs, unprefixed to `s6-log` under `$RDPANEL_LOGS_DIR/<service>/`).
    Services restart automatically when they exit.
 
 </details>

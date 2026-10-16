@@ -1,4 +1,28 @@
-#!/bin/sh
+#!/command/with-contenv sh
 # s6-rc pipeline consumer: copy the producer's output to the container's stdout,
 # one line at a time, prefixed with "[<name>] ".
-exec /command/s6-setuidgid nobody awk -v p="[$1] " '{ print p $0; fflush() }'
+#
+# Server -> Logs: for hbbs, hbbr and panel each unprefixed line is also handed
+# to s6-log, which keeps it in $RDPANEL_LOGS_DIR/<name>/current (default
+# /run/rdpanel/logs; rotated at 1 MB, 2 archives kept). rdpanel tails those
+# files; it is never in this pipeline, so a slow or stopped panel cannot block
+# hbbs/hbbr, and the files refill the page after an rdpanel restart.
+# RDPANEL_LOGS_BUFFER=0, an empty RDPANEL_LOGS_DIR or agent mode turn the copy off.
+# shellcheck disable=SC2016 # $0 in the awk programs is awk's, not the shell's
+name=$1
+dir=${RDPANEL_LOGS_DIR-/run/rdpanel/logs}
+capture=
+case "$name" in hbbs | hbbr | panel) capture=1 ;; esac
+[ "${RDPANEL_MODE:-panel}" = agent ] && capture=
+[ "${RDPANEL_LOGS_BUFFER:-2000}" = 0 ] && capture=
+[ -n "$dir" ] || capture=
+case "$dir" in *[!A-Za-z0-9/._-]*) echo "[$name] prefix-log: RDPANEL_LOGS_DIR has unsupported characters, not capturing" >&2; capture= ;; esac
+
+if [ -n "$capture" ] && mkdir -p "$dir/$name" 2>/dev/null && chown nobody "$dir/$name" 2>/dev/null; then
+	chmod 0755 "$dir/$name" 2>/dev/null
+	umask 022
+	exec /command/s6-setuidgid nobody awk -v p="[$name] " \
+		-v sink="exec /command/s6-log -- n2 s1000000 $dir/$name" \
+		'{ print p $0; fflush(); print $0 | sink; fflush(sink) }'
+fi
+exec /command/s6-setuidgid nobody awk -v p="[$name] " '{ print p $0; fflush() }'

@@ -1791,6 +1791,87 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/server/logs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Recent hbbs/hbbr/panel log lines from the in-memory buffer (admin).
+         * @description Newest `limit` matching entries, returned oldest first. Page back with
+         *     `before=<next_before>`. Lines are redacted (keys, tokens, passwords) before
+         *     they are stored. In the s6 image hbbs, hbbr and panel lines are captured
+         *     (`capture: files`); a plain `rdpanel serve` captures only its own lines
+         *     (`capture: panel`). With `RDPANEL_LOGS_BUFFER=0` the buffer is off
+         *     (`enabled: false`, `capture: off`, no items).
+         */
+        get: operations["listServerLogs"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/server/logs/download": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * All buffered lines matching the filters as text (admin).
+         * @description `Content-Disposition: attachment; filename="rdpanel-logs-<UTC time>.txt"`; one line per entry,
+         *     oldest first, `[<source>] <raw line>` (redacted).
+         */
+        get: operations["downloadServerLogs"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/server/logs/stream": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Live log lines as Server-Sent Events (admin).
+         * @description `text/event-stream`, same session cookie (no CSRF, GET). With `after=<seq>` buffered
+         *     matching entries newer than `seq` are replayed first. Events:
+         *
+         *     ```
+         *     id: 1234
+         *     event: log
+         *     data: {<LogEntry>}
+         *
+         *     event: dropped
+         *     data: {"dropped":17}      # lines skipped because this client was too slow
+         *
+         *     event: unauthenticated    # the session ended; the stream closes
+         *     data: {}
+         *     ```
+         *
+         *     A `: keepalive` comment is sent every 15 s; the session is re-checked then.
+         */
+        get: operations["streamServerLogs"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/relays": {
         parameters: {
             query?: never;
@@ -3237,6 +3318,54 @@ export interface components {
         PunchRequestPage: components["schemas"]["PageMeta"] & {
             items: components["schemas"]["PunchRequest"][];
         };
+        /**
+         * @description Normalised level (trace -> debug, fatal/panic -> error).
+         * @enum {string}
+         */
+        LogLevel: "debug" | "info" | "warn" | "error";
+        LogEntry: {
+            /**
+             * Format: int64
+             * @description Process-local id, increasing across sources (restarts at 1 when rdpanel restarts).
+             */
+            seq: number;
+            /**
+             * Format: date-time
+             * @description Time from the line itself (UTC); continuation lines inherit the previous line's time.
+             */
+            time: string | null;
+            /** @enum {string} */
+            source: "hbbs" | "hbbr" | "panel" | "other";
+            level: components["schemas"]["LogLevel"];
+            /** @description Message without timestamp/level; panel JSON attributes appended as key=value. */
+            message: string;
+            /** @description The full line as written by the service (redacted). */
+            raw: string;
+        };
+        LogSourceInfo: {
+            /** @enum {string} */
+            name: "hbbs" | "hbbr" | "panel" | "other";
+            /** @description Lines currently buffered. */
+            lines: number;
+        };
+        LogPage: {
+            enabled: boolean;
+            /**
+             * @description `files`: hbbs, hbbr and panel (s6 image, RDPANEL_LOGS_DIR); `panel`: only the panel's own
+             *     lines (plain `rdpanel serve`); `off`: RDPANEL_LOGS_BUFFER=0.
+             * @enum {string}
+             */
+            capture: "files" | "panel" | "off";
+            /** @description Lines kept per source (RDPANEL_LOGS_BUFFER). */
+            capacity: number;
+            sources: components["schemas"]["LogSourceInfo"][];
+            items: components["schemas"]["LogEntry"][];
+            /**
+             * Format: int64
+             * @description Pass as `before` for older entries; null when there are none.
+             */
+            next_before: number | null;
+        };
         RelayUsage: {
             /** @description ip:port */
             peer: string;
@@ -3623,6 +3752,12 @@ export interface components {
         /** @description 1-based page number. */
         Page: number;
         PageSize: number;
+        /** @description Comma-separated sources (`hbbs`, `hbbr`, `panel`, `other`); empty = all. */
+        LogSource: string;
+        /** @description Minimum level. */
+        LogLevel: components["schemas"]["LogLevel"];
+        /** @description Only entries with `seq` above this. */
+        LogAfter: number;
         /** @description Case-insensitive substring search. */
         Q: string;
         /** @description Inclusive lower time bound. */
@@ -7007,6 +7142,119 @@ export interface operations {
             };
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
+        };
+    };
+    listServerLogs: {
+        parameters: {
+            query?: {
+                /** @description Comma-separated sources (`hbbs`, `hbbr`, `panel`, `other`); empty = all. */
+                source?: components["parameters"]["LogSource"];
+                /** @description Minimum level. */
+                level?: components["parameters"]["LogLevel"];
+                /** @description Case-insensitive substring search. */
+                q?: components["parameters"]["Q"];
+                limit?: number;
+                /** @description Only entries with `seq` below this (the previous page's `next_before`). */
+                before?: number;
+                /** @description Only entries with `seq` above this. */
+                after?: components["parameters"]["LogAfter"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Page. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LogPage"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    downloadServerLogs: {
+        parameters: {
+            query?: {
+                /** @description Comma-separated sources (`hbbs`, `hbbr`, `panel`, `other`); empty = all. */
+                source?: components["parameters"]["LogSource"];
+                /** @description Minimum level. */
+                level?: components["parameters"]["LogLevel"];
+                /** @description Case-insensitive substring search. */
+                q?: components["parameters"]["Q"];
+                /** @description Only entries with `seq` above this. */
+                after?: components["parameters"]["LogAfter"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Log text. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": string;
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            /** @description The buffer is disabled (`logs_disabled`). */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    streamServerLogs: {
+        parameters: {
+            query?: {
+                /** @description Comma-separated sources (`hbbs`, `hbbr`, `panel`, `other`); empty = all. */
+                source?: components["parameters"]["LogSource"];
+                /** @description Minimum level. */
+                level?: components["parameters"]["LogLevel"];
+                /** @description Case-insensitive substring search. */
+                q?: components["parameters"]["Q"];
+                /** @description Only entries with `seq` above this. */
+                after?: components["parameters"]["LogAfter"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Event stream (never ends on its own). */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/event-stream": string;
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            /** @description The buffer is disabled (`logs_disabled`). */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
         };
     };
     listRelays: {

@@ -18,6 +18,7 @@ import (
 	"github.com/bropines/rdpanel/internal/config"
 	"github.com/bropines/rdpanel/internal/crypto"
 	"github.com/bropines/rdpanel/internal/loginlog"
+	"github.com/bropines/rdpanel/internal/logs"
 	"github.com/bropines/rdpanel/internal/mailauth"
 	"github.com/bropines/rdpanel/internal/metrics"
 	"github.com/bropines/rdpanel/internal/oidc"
@@ -88,6 +89,13 @@ type Deps struct {
 	ClientOptions *clientopts.Service
 	// ConsoleLimit caps raw console commands per admin per minute (default 30).
 	ConsoleLimit int
+	// Logs is the recent log lines buffer behind /server/logs* (nil or
+	// capacity 0: the endpoints report the buffer as disabled).
+	Logs *logs.Buffer
+	// LogSources are the sources the Logs page always lists (with 0 lines).
+	LogSources []string
+	// LogCapture is LogCaptureFiles or LogCapturePanel (default).
+	LogCapture string
 	// ---- end stream B2b ----
 
 	// ---- About page (GET /about) ----
@@ -132,5 +140,5 @@ func Register(r chi.Router, d Deps) {
 	c.registerEmail(r)
 	c.registerProviders(r)
 	registerResources(r, c)
-	registerB2b(r, d)
+	registerB2b(r, d, c.sess.load)
 }

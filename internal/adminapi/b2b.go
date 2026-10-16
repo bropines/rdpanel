@@ -60,10 +60,12 @@ type b2bCore struct {
 	d       Deps
 	log     *slog.Logger
 	console *windowLimiter
+	// sessLoad re-loads the session of long-lived streams (logs SSE).
+	sessLoad func(http.Handler) http.Handler
 }
 
 // registerB2b mounts the address-book, audit and server routes.
-func registerB2b(r chi.Router, d Deps) {
+func registerB2b(r chi.Router, d Deps, sessLoad func(http.Handler) http.Handler) {
 	limit := d.ConsoleLimit
 	if limit <= 0 {
 		limit = 30
@@ -71,7 +73,7 @@ func registerB2b(r chi.Router, d Deps) {
 	if d.ClientOptions == nil {
 		d.ClientOptions = clientopts.New(d.Store, d.AEAD, d.Store.Now)
 	}
-	c := &b2bCore{d: d, log: d.Log, console: newWindowLimiter(limit, time.Minute, d.Store.Now)}
+	c := &b2bCore{d: d, log: d.Log, console: newWindowLimiter(limit, time.Minute, d.Store.Now), sessLoad: sessLoad}
 	if c.log == nil {
 		c.log = slog.New(slog.NewTextHandler(io.Discard, nil))
 	}

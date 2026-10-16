@@ -108,10 +108,11 @@ func cmdServe(ctx context.Context, env config.LookupFunc, stdio Stdio) error {
 	if err != nil {
 		return err
 	}
-	log := NewLogger(cfg.Log, stdio.Err)
+	logBuf, logW := newLogBuffer(cfg, stdio.Err)
+	log := NewLogger(cfg.Log, logW)
 	info := buildinfo.Get()
 	log.Info("starting rdpanel", slog.String("version", info.Version), slog.String("commit", info.Commit))
-	a, err := New(ctx, cfg, log)
+	a, err := New(ctx, cfg, log, WithLogBuffer(logBuf))
 	if err != nil {
 		return err
 	}

@@ -84,6 +84,8 @@ See [deploy.md → Passkeys](deploy.md#passkeys) for how the RP id and origins a
 |---|---|---|
 | `RDPANEL_LOG_LEVEL` (`log.level`) | `info` | `debug`, `info`, `warn`, `error` |
 | `RDPANEL_LOG_FORMAT` (`log.format`) | `json` | `json` or `text` |
+| `RDPANEL_LOGS_BUFFER` (`logs.buffer`) | `2000` | Server → Logs: recent lines kept in memory per source (hbbs, hbbr, panel), 0–100000; `0` turns the page off |
+| `RDPANEL_LOGS_DIR` (`logs.dir`) | — (image: `/run/rdpanel/logs`) | s6-log directories (`<dir>/<source>/current`) the panel tails for hbbs/hbbr/panel lines; empty = only the panel's own lines ([deploy.md → Server logs](deploy.md#server-logs)) |
 | `RDPANEL_UPDATE_CHECK` (`update_check`) | `true` | About page "update available" check: the server asks the GitHub releases API at most every 6 h (failures tolerated); `false` = no outbound request |
 
 ### E-mail (SMTP)

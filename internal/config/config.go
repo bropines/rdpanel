@@ -55,6 +55,7 @@ type Config struct {
 	HTTP     HTTPConfig     `yaml:"http"`
 	HBBS     HBBSConfig     `yaml:"hbbs"`
 	Log      LogConfig      `yaml:"log"`
+	Logs     LogsConfig     `yaml:"logs"`
 	SMTP     SMTPConfig     `yaml:"smtp"`
 }
 
@@ -183,6 +184,17 @@ type LogConfig struct {
 	Format string `yaml:"format"`
 }
 
+// LogsConfig controls the in-memory log buffer behind Server -> Logs.
+type LogsConfig struct {
+	// Buffer is the number of recent lines kept per source (hbbs, hbbr,
+	// panel); 0 disables the buffer and the Logs page.
+	Buffer int `yaml:"buffer"`
+	// Dir holds one s6-log directory per source (<dir>/<source>/current),
+	// written by the s6 image's log pipelines (/run/rdpanel/logs there). When
+	// empty, only the panel's own lines are captured.
+	Dir string `yaml:"dir"`
+}
+
 // Defaults returns the built-in configuration before files and env are applied.
 func Defaults() *Config {
 	return &Config{
@@ -206,7 +218,8 @@ func Defaults() *Config {
 			PollInterval:      5 * time.Second,
 			ReconcileInterval: 15 * time.Second,
 		},
-		Log: LogConfig{Level: "info", Format: "json"},
+		Log:  LogConfig{Level: "info", Format: "json"},
+		Logs: LogsConfig{Buffer: 2000},
 	}
 }
 
@@ -337,6 +350,8 @@ func (c *Config) envVars() []envVar {
 		{"RDPANEL_HBBS_LIST_DIR", str(&c.HBBS.ListDir)},
 		{"RDPANEL_LOG_LEVEL", str(&c.Log.Level)},
 		{"RDPANEL_LOG_FORMAT", str(&c.Log.Format)},
+		{"RDPANEL_LOGS_BUFFER", integer(&c.Logs.Buffer)},
+		{"RDPANEL_LOGS_DIR", str(&c.Logs.Dir)},
 		{"RDPANEL_UPDATE_CHECK", boolean(&c.UpdateCheck)},
 		{"RDPANEL_SMTP_HOST", str(&c.SMTP.Host)},
 		{"RDPANEL_SMTP_PORT", integer(&c.SMTP.Port)},
@@ -510,6 +525,9 @@ func (c *Config) Validate() error {
 	case "json", "text":
 	default:
 		add("log.format %q: must be json or text", c.Log.Format)
+	}
+	if c.Logs.Buffer < 0 || c.Logs.Buffer > 100000 {
+		add("logs.buffer %d: must be 0-100000 lines per source (0 disables the Logs page)", c.Logs.Buffer)
 	}
 	switch c.SMTP.Encryption {
 	case SMTPEncryptionNone, SMTPEncryptionSTARTTLS, SMTPEncryptionTLS:
