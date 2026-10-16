@@ -3,6 +3,7 @@ name: helm
 on:
   push:
     branches: [main]
+    tags: ['v*']
     paths:
       - deploy/helm/**
       - .github/workflows/helm.yml
@@ -68,3 +69,27 @@ jobs:
           done
       - name: package
         run: helm package "$CHART" -d /tmp/charts
+
+  # Tag vX.Y.Z -> oci://ghcr.io/bropines/charts/rdpanel:X.Y.Z (chart version and
+  # appVersion are set from the tag).
+  publish:
+    name: publish chart
+    if: github.ref_type == 'tag'
+    needs: lint
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: azure/setup-helm@v4
+        with:
+          version: ${{ env.HELM_VERSION }}
+      - name: package
+        run: |
+          v="${GITHUB_REF_NAME#v}"
+          helm package "$CHART" -d /tmp/charts --version "$v" --app-version "$v"
+      - name: push
+        run: |
+          echo "${{ secrets.GITHUB_TOKEN }}" | helm registry login ghcr.io -u "${{ github.actor }}" --password-stdin
+          helm push /tmp/charts/rdpanel-*.tgz oci://ghcr.io/bropines/charts
