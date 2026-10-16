@@ -371,6 +371,11 @@ func (s *Service) handleMessage(ctx context.Context, c *agentConn, env agentprot
 			s.audit(ctx, c.id, c.remoteIP, "relay.agent.config_error", map[string]any{"relay": c.name,
 				"version": a.Version, "errors": a.Errors})
 		}
+		// A freshly applied config (e.g. hbbr just started after approval):
+		// probe on the next pass instead of waiting for the probe interval.
+		s.mu.Lock()
+		delete(s.probedAt, c.id)
+		s.mu.Unlock()
 		s.Notify()
 		return nil
 	case agentproto.TypeStatus:

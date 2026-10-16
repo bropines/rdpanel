@@ -596,6 +596,11 @@ func (a *Agent) applyOnce(ctx context.Context, force bool) {
 	if err := reconcile.WriteListFiles(a.cfg.DataDir, s); err != nil {
 		errs["list_files"] = err.Error()
 	}
+	if c.Run && !a.sup.Status().Up {
+		// hbbr is (re)starting; the supervisor's start event re-runs this pass.
+		// No ACK yet: the panel sees the config as pending, not failed.
+		return
+	}
 	if c.Run {
 		// hbbr needs a moment after a (re)start before its admin port answers.
 		var rtt time.Duration
