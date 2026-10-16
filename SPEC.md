@@ -2,7 +2,7 @@
 
 A self-hosted **API server + admin panel** for RustDesk, wire-compatible with official RustDesk
 clients (1.3.x–1.4.x) and with the hbbs/hbbr fork at
-[bropines/rustdesk-server](https://github.com/bropines/rustdesk-server) (branch `merge-upstream-1.1.16`).
+[bropines/rustdesk-server](https://github.com/bropines/rustdesk-server) (branch `rdpanel`).
 It replaces [lejianwen/rustdesk-api](https://github.com/lejianwen/rustdesk-api) v2.7 (+ rustdesk-api-web)
 and ships as one s6 container together with hbbs/hbbr.
 

@@ -1,31 +1,20 @@
 # rdpanel Helm chart (RD Panel)
 
-Runs the whole self-hosted RustDesk server stack as **one pod** from the image
-`ghcr.io/bropines/rdpanel` (s6-overlay):
+Runs RD Panel and the RustDesk server stack (hbbs + hbbr + panel) on Kubernetes as **one
+pod** from the image `ghcr.io/bropines/rdpanel`. For cluster operators; for a single
+docker host see [docs/deploy.md](../../../docs/deploy.md).
 
-| process | role | ports |
-|---|---|---|
-| `hbbs` | rendezvous / ID server | 21115/tcp NAT test (+ loopback admin), 21116/tcp+udp, 21118/tcp WebSocket |
-| `hbbr` | relay | 21117/tcp (+ loopback admin), 21119/tcp WebSocket |
-| `rdpanel` | RustDesk API server + admin panel | 21114/tcp HTTP (`/api`, UI, `/healthz`, `/metrics`) |
+## Contents
 
-The panel controls hbbs/hbbr through their **loopback-only** admin channels
-(`127.0.0.1:21115`, `127.0.0.1:21117`), so the three processes must share a
-network namespace. That is why they are one container and not three Deployments.
-
-## Why a StatefulSet with exactly one replica
-
-`replicaCount` accepts only `0` or `1` (enforced by `values.schema.json`):
-
-- hbbs keeps peer registrations, punch-hole state and relay settings **in memory**.
-  Two pods would be two unrelated ID servers. Clients would only find peers that
-  registered on the same pod.
-- The panel uses **SQLite** (one writer) on a ReadWriteOnce volume.
-- The server key pair `id_ed25519` identifies the server to clients and must be unique.
-
-`replicaCount: 0` stops the server without uninstalling the release. The legacy
-migration Job uses it. The StatefulSet gives a stable PVC (`data-<fullname>-0`)
-and ordered, non-overlapping restarts, so two pods never write the same SQLite file.
+- [Install](#install) · [What runs in the pod](#what-runs-in-the-pod)
+- [Networking modes](#networking-modes) · [Secrets](#secrets) ·
+  [Legacy migration](#legacy-migration-lejianwenrustdesk-api) ·
+  [Monitoring and policies](#monitoring-and-policies)
+- [Values](#values) · [Examples](#examples)
+- [Upgrading from the `rustdesk-panel` chart](#upgrading-from-the-rustdesk-panel-chart--01x) ·
+  [Why a StatefulSet with exactly one replica](#why-a-statefulset-with-exactly-one-replica)
+- [Development / validation](#development--validation) ·
+  [Publishing the chart](#publishing-the-chart-release-procedure)
 
 ## Install
 
@@ -45,35 +34,34 @@ kubectl -n rustdesk exec -it rustdesk-rustdesk-panel-0 -- rdpanel user create --
 kubectl -n rustdesk exec rustdesk-rustdesk-panel-0 -- cat /data/id_ed25519.pub   # client "Key"
 ```
 
-RustDesk client settings: **ID server** is the rendezvous address (LoadBalancer
-IP/DNS or node address), **Relay server** is `server.relay`, **API server** is
-`panel.publicURL`, and **Key** is the public key shown above.
+RustDesk client settings:
 
-## Upgrading from the `rustdesk-panel` chart (≤ 0.1.x)
+| client field | value |
+|---|---|
+| ID server | the rendezvous address (LoadBalancer IP/DNS or node address) |
+| Relay server | `server.relay` |
+| API server | `panel.publicURL` |
+| Key | the public key shown above |
 
-Up to 0.1.x the chart was called `rustdesk-panel` and published as
-`oci://ghcr.io/bropines/charts/rustdesk-panel`, with the image
-`ghcr.io/bropines/rustdesk-panel`. The project is now **RD Panel**: chart
-`rdpanel`, image `ghcr.io/bropines/rdpanel`.
+Resource names keep the historical base name `rustdesk-panel` (hence the pod
+`rustdesk-rustdesk-panel-0` for a release called `rustdesk`); see
+[Upgrading from the `rustdesk-panel` chart](#upgrading-from-the-rustdesk-panel-chart--01x).
 
-Resource names, the `app.kubernetes.io/name` selector label and the PVC name
-still use the historical base name `rustdesk-panel` (unless `nameOverride` is
-set), so an existing release upgrades in place: the StatefulSet, its immutable
-selector and `volumeClaimTemplates`, the PVC `data-<fullname>-0`, Services and
-Secrets keep their names. Only the `helm.sh/chart` label changes, which rolls
-the pod once.
+## What runs in the pod
 
-```sh
-helm upgrade rustdesk oci://ghcr.io/bropines/charts/rdpanel --version <version> \
-  -n rustdesk --reuse-values
-```
+The image runs three processes under s6-overlay:
 
-- If your values pin `image.repository: ghcr.io/bropines/rustdesk-panel`, change
-  it to `ghcr.io/bropines/rdpanel` (or drop it to use the chart default); the
-  old repository gets no new releases.
-- Do not set `nameOverride` on an existing release: it renames every resource
-  and the StatefulSet selector, which Kubernetes rejects. New installs may set
-  `nameOverride: rdpanel` to get `rdpanel` in resource names.
+| process | role | ports |
+|---|---|---|
+| `hbbs` | rendezvous / ID server | 21115/tcp NAT test (+ loopback admin), 21116/tcp+udp, 21118/tcp WebSocket |
+| `hbbr` | relay | 21117/tcp (+ loopback admin), 21119/tcp WebSocket |
+| `rdpanel` | RustDesk API server + admin panel | 21114/tcp HTTP (`/api`, UI, `/healthz`, `/metrics`) |
+
+The panel controls hbbs/hbbr through their **loopback-only** admin channels
+(`127.0.0.1:21115`, `127.0.0.1:21117`), so the three processes must share a network
+namespace. That is why they are one container and not three Deployments, and why the
+chart runs a single-replica StatefulSet
+([details](#why-a-statefulset-with-exactly-one-replica)).
 
 ## Networking modes
 
@@ -85,9 +73,9 @@ nodeSelector: {kubernetes.io/hostname: my-node}
 rendezvous: {service: {enabled: false}}
 ```
 
-hbbs binds 21115–21119 directly on the node. It sees real client addresses and
-replies to UDP from the address that clients contacted. NAT hole punching (P2P)
-therefore behaves as it does on bare metal. In this mode:
+hbbs binds 21115–21119 directly on the node. It sees real client addresses and replies
+to UDP from the address that clients contacted, so NAT hole punching (P2P) behaves as it
+does on bare metal. In this mode:
 
 - `dnsPolicy` defaults to `ClusterFirstWithHostNet`.
 - Pin the pod to one node, because clients are configured with that node's address. Open the ports in the node firewall.
@@ -140,9 +128,11 @@ Client paths: `/ws/id` → hbbs 21118, `/ws/relay` → hbbr 21119.
 > `compute-full-forwarded-for: false` (the defaults). For that reason the WS
 > ports are **disabled** on the L4 rendezvous Service by default.
 
-`websocket.ingress.enabled: true` creates a ClusterIP Service `<fullname>-ws` and
-a separate Ingress with long timeouts (set your controller's annotations). The
-Gateway API equivalent is `httpRoute.websocketRules: true`.
+To expose them:
+
+- `websocket.ingress.enabled: true` creates a ClusterIP Service `<fullname>-ws` and a
+  separate Ingress with long timeouts (set your controller's annotations);
+- the Gateway API equivalent is `httpRoute.websocketRules: true`.
 
 ## Secrets
 
@@ -170,9 +160,9 @@ You have three options:
 > the keys on every sync. In those setups always use option 1 or 2. Flux
 > helm-controller runs a real install/upgrade, so lookup works there.
 
-`secrets.setSecretKey: false` stops passing `RDPANEL_SECRET_KEY`. The panel then
-uses or creates `/data/panel/secret.key` on the volume, for example after you copy
-over a docker install's `secret.key`.
+**Key file on the volume instead:** `secrets.setSecretKey: false` stops passing
+`RDPANEL_SECRET_KEY`. The panel then uses or creates `/data/panel/secret.key` on the
+volume, for example after you copy over a docker install's `secret.key`.
 
 ### Server key pair (optional)
 
@@ -193,6 +183,7 @@ writes it into `/data` and validates it. Alternatively, copy both files into the
 
 The Job runs `rdpanel migrate-legacy --from /legacy/rustdeskapi.db --report /data/panel/migration-report.json`
 against the release's data PVC. The legacy database is mounted read-only from a PVC or a hostPath.
+What the importer does and how to read its report: [docs/migration.md](../../../docs/migration.md).
 
 1. Install the chart normally once (`replicaCount: 1`). This creates the PVC and
    the hbbs keys. Use the **old** `RUSTDESK_API_JWT_KEY` (see Secrets), and
@@ -213,12 +204,14 @@ against the release's data PVC. The legacy database is mounted read-only from a 
      --set replicaCount=1 --set migration.enabled=false
    ```
 
-For a hostPath source, `migration.legacy.hostPath=/srv/rustdesk-api/data`. Use
-`migration.nodeSelector` so the Job runs on that node. With a ReadWriteOnce data
-volume, the Job has to land on the node where the volume can attach. Most CSI
-drivers handle that once the server pod is gone. The Job name contains the
-release revision because Job specs are immutable. `ttlSecondsAfterFinished`
-cleans it up.
+Notes:
+
+- **hostPath source:** `migration.legacy.hostPath=/srv/rustdesk-api/data`. Use
+  `migration.nodeSelector` so the Job runs on that node.
+- **ReadWriteOnce data volume:** the Job has to land on the node where the volume can
+  attach. Most CSI drivers handle that once the server pod is gone.
+- The Job name contains the release revision because Job specs are immutable.
+  `ttlSecondsAfterFinished` cleans it up.
 
 ## Monitoring and policies
 
@@ -248,7 +241,9 @@ cleans it up.
 
 ## Values
 
-The full list with comments is in [`values.yaml`](values.yaml). These are the main ones:
+The full list with comments is in [`values.yaml`](values.yaml). The main ones are below; the
+panel's `RDPANEL_*` settings that have no dedicated key go into `panel.env`
+([reference](../../../docs/configuration.md)).
 
 | key | default | description |
 |---|---|---|
@@ -258,11 +253,11 @@ The full list with comments is in [`values.yaml`](values.yaml). These are the ma
 | `server.encryptedOnly` | `true` | `ENCRYPTED_ONLY=1` |
 | `server.alwaysUseRelay` | `false` | `ALWAYS_USE_RELAY=Y/N` |
 | `server.mustLogin` | `false` | `MUST_LOGIN=Y/N` (hbbs requires a panel JWT) |
-| `server.tcpKeepalive` | `false` | `TCP_KEEPALIVE=Y/N`: keepalives for clients in TCP/WebSocket mode ("Use WebSocket", UDP blocked) so they stay online; see docs/deploy.md |
+| `server.tcpKeepalive` | `false` | `TCP_KEEPALIVE=Y/N`: keepalives for clients in TCP/WebSocket mode ("Use WebSocket", UDP blocked) so they stay online; see [docs/deploy.md](../../../docs/deploy.md#websocket-and-tcp-mode-clients) |
 | `server.env` | `{}` | extra env for hbbs/hbbr (for example `RUST_LOG`) |
 | `panel.listen` | `:21114` | `RDPANEL_LISTEN`. The container port comes from it. |
 | `panel.publicURL` | `""` | `RDPANEL_PUBLIC_URL` |
-| `panel.adminURL` | `""` | `RDPANEL_ADMIN_URL` (panel host when it differs from the public client-API host; expose only `/api/` minus `/api/v1/` publicly, see docs/deploy.md) |
+| `panel.adminURL` | `""` | `RDPANEL_ADMIN_URL` (panel host when it differs from the public client-API host; expose only `/api/` minus `/api/v1/` publicly, see [docs/deploy.md](../../../docs/deploy.md#split-hosts-public-client-api--internal-admin-panel)) |
 | `panel.dataDir` | `/data/panel` | `RDPANEL_DATA_DIR` |
 | `panel.hbbsPublicKeyFile` | `/data/id_ed25519.pub` | `RDPANEL_HBBS_PUBLIC_KEY_FILE` |
 | `panel.trustedProxies` | loopback | `RDPANEL_TRUSTED_PROXIES` |
@@ -277,7 +272,7 @@ The full list with comments is in [`values.yaml`](values.yaml). These are the ma
 | `secrets.setSecretKey` | `true` | pass `RDPANEL_SECRET_KEY` |
 | `secrets.keep` | `true` | `helm.sh/resource-policy: keep` |
 | `serverKeys.enabled` / `existingSecret` / `privateKey` / `publicKey` | off | `KEY_PRIV` / `KEY_PUB` |
-| `hostNetwork` | `false` | see Networking modes |
+| `hostNetwork` | `false` | see [Networking modes](#networking-modes) |
 | `dnsPolicy` | auto | `ClusterFirstWithHostNet` when hostNetwork |
 | `service.*` | ClusterIP 21114 | panel Service |
 | `rendezvous.service.enabled` | `true` | |
@@ -307,6 +302,49 @@ The full list with comments is in [`values.yaml`](values.yaml). These are the ma
 - [`ci/hostnetwork-values.yaml`](ci/hostnetwork-values.yaml): hostNetwork, panel on loopback, exec probes, no Services.
 - [`ci/loadbalancer-values.yaml`](ci/loadbalancer-values.yaml): MetalLB split TCP/UDP with a shared IP, existing secrets and key pair, ServiceMonitor, PrometheusRule, Grafana dashboard, NetworkPolicy, PDB.
 - [`ci/ingress-values.yaml`](ci/ingress-values.yaml): ingress-nginx and cert-manager, WebSocket Ingress, HTTPRoute, NodePort rendezvous.
+
+## Upgrading from the `rustdesk-panel` chart (≤ 0.1.x)
+
+Up to 0.1.x the chart was called `rustdesk-panel` and published as
+`oci://ghcr.io/bropines/charts/rustdesk-panel`, with the image
+`ghcr.io/bropines/rustdesk-panel`. The project is now **RD Panel**: chart
+`rdpanel`, image `ghcr.io/bropines/rdpanel`.
+
+Resource names, the `app.kubernetes.io/name` selector label and the PVC name
+still use the historical base name `rustdesk-panel` (unless `nameOverride` is
+set), so an existing release upgrades in place: the StatefulSet, its immutable
+selector and `volumeClaimTemplates`, the PVC `data-<fullname>-0`, Services and
+Secrets keep their names. Only the `helm.sh/chart` label changes, which rolls
+the pod once.
+
+```sh
+helm upgrade rustdesk oci://ghcr.io/bropines/charts/rdpanel --version <version> \
+  -n rustdesk --reuse-values
+```
+
+- If your values pin `image.repository: ghcr.io/bropines/rustdesk-panel`, change
+  it to `ghcr.io/bropines/rdpanel` (or drop it to use the chart default); the
+  old repository gets no new releases.
+- Do not set `nameOverride` on an existing release: it renames every resource
+  and the StatefulSet selector, which Kubernetes rejects. New installs may set
+  `nameOverride: rdpanel` to get `rdpanel` in resource names.
+
+## Why a StatefulSet with exactly one replica
+
+`replicaCount` accepts only `0` or `1` (enforced by `values.schema.json`):
+
+- hbbs keeps peer registrations, punch-hole state and relay settings **in memory**.
+  Two pods would be two unrelated ID servers. Clients would only find peers that
+  registered on the same pod.
+- The panel uses **SQLite** (one writer) on a ReadWriteOnce volume.
+- The server key pair `id_ed25519` identifies the server to clients and must be unique.
+
+Also:
+
+- `replicaCount: 0` stops the server without uninstalling the release. The legacy
+  migration Job uses it.
+- The StatefulSet gives a stable PVC (`data-<fullname>-0`) and ordered, non-overlapping
+  restarts, so two pods never write the same SQLite file.
 
 ## Development / validation
 

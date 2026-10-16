@@ -1,7 +1,26 @@
 # Monitoring
 
-rdpanel exposes Prometheus metrics on `GET /metrics` (same listener as the
-panel, `RDPANEL_LISTEN`). The repository ships:
+How to scrape RD Panel with Prometheus, which metrics and alerts exist, and the ready-made
+Grafana dashboard. For operators running Prometheus/Grafana on a docker host or with
+kube-prometheus-stack.
+
+- [Quick start](#quick-start) · [Access to /metrics](#access-to-metrics)
+- [Metrics](#metrics) · [Alerts](#alerts) · [Dashboard](#dashboard)
+- [Prometheus + Grafana with docker compose](#prometheus--grafana-with-docker-compose) ·
+  [Kubernetes (Helm)](#kubernetes-helm)
+
+## Quick start
+
+- **Docker host:** run the bundled stack —
+  [Prometheus + Grafana with docker compose](#prometheus--grafana-with-docker-compose).
+- **Kubernetes:** enable `serviceMonitor`, `prometheusRule` and `grafanaDashboard` in the
+  Helm values — [Kubernetes (Helm)](#kubernetes-helm).
+- **Existing Prometheus:** allow its address in `RDPANEL_METRICS_ALLOW` and scrape
+  `GET /metrics` on the panel listener (`RDPANEL_LISTEN`); import the dashboard and the
+  alert rules below.
+
+Metrics are served on `GET /metrics`, on the same listener as the panel (`RDPANEL_LISTEN`).
+What the repository ships:
 
 | file | what |
 |---|---|
@@ -13,16 +32,20 @@ panel, `RDPANEL_LISTEN`). The repository ships:
 ## Access to /metrics
 
 `/metrics` answers only when the client IP, and every address in forwarding
-headers, is in `RDPANEL_METRICS_ALLOW` (default loopback only); everything else
-gets 403. So:
+headers, is in `RDPANEL_METRICS_ALLOW` (default loopback only). Everything else
+gets 403.
 
-- **Same host, host networking** (the compose files in this repo): scrape
-  `127.0.0.1:21114` from a host-network Prometheus. Nothing to change.
-- **Prometheus elsewhere**: add its address, e.g.
-  `RDPANEL_METRICS_ALLOW=127.0.0.0/8,::1/128,10.8.0.5/32`, and scrape the panel
-  port directly (a reverse proxy in front adds `X-Forwarded-For` and is refused
-  on purpose). Keep `location = /metrics { return 404; }` on public vhosts.
-- **Kubernetes**: add the Prometheus pod CIDR to `panel.metricsAllow`.
+| where Prometheus runs | what to do |
+|---|---|
+| same host, host networking (the compose files in this repo) | scrape `127.0.0.1:21114` from a host-network Prometheus; nothing to change |
+| elsewhere | add its address, e.g. `RDPANEL_METRICS_ALLOW=127.0.0.0/8,::1/128,10.8.0.5/32`, and scrape the panel port directly |
+| Kubernetes | add the Prometheus pod CIDR to `panel.metricsAllow` |
+
+Notes:
+
+- Scrape the panel port directly: a reverse proxy in front adds `X-Forwarded-For` and is
+  refused on purpose.
+- Keep `location = /metrics { return 404; }` on public vhosts.
 
 ## Metrics
 
@@ -56,11 +79,12 @@ Plus the standard `go_*` and `process_*` collectors.
 
 ### hbbr relay statistics
 
-The relay gauges come from hbbr's admin command `usage`, polled every
-`RDPANEL_HBBS_RECONCILE_INTERVAL` (15 s) over the loopback admin channel, and
-skipped while the reconciler sees hbbr's admin channel down. Only aggregates are
-exported; the per-relay `ip:port` lines are never used as labels. hbbr's numbers
-are coarse:
+- Source: hbbr's admin command `usage`, polled every `RDPANEL_HBBS_RECONCILE_INTERVAL`
+  (15 s) over the loopback admin channel; skipped while the reconciler sees hbbr's admin
+  channel down.
+- Only aggregates are exported; the per-relay `ip:port` lines are never used as labels.
+
+hbbr's numbers are coarse:
 
 - a relay shows up only after its first second;
 - "current" speed is refreshed only while packets flow, so an idle relay keeps
@@ -68,9 +92,9 @@ are coarse:
 - a relay's line disappears when it closes, so there is no exact running total
   of relayed traffic (`relay_active_bytes` drops when sessions end).
 
-The whole hbbs/hbbr integration (presence, admin channel, relay stats) needs
-`RDPANEL_HBBS_ENABLED=true` (default) and loopback addresses (same container or
-shared network namespace, see [hbbs-integration.md](research/hbbs-integration.md)).
+> The whole hbbs/hbbr integration (presence, admin channel, relay stats) needs
+> `RDPANEL_HBBS_ENABLED=true` (default) and loopback addresses (same container or
+> shared network namespace, see [hbbs-integration.md](research/hbbs-integration.md)).
 
 ### Cardinality
 
@@ -81,11 +105,13 @@ instead.
 
 ## Alerts
 
-[`alerts.yaml`](../deploy/monitoring/prometheus/alerts.yaml) (group
-`rustdesk-panel`, all selectors use `job="rustdesk-panel"`). The job, group and
-`RustDeskPanel*` alert names, and the dashboard uid below, predate the rename to
-RD Panel and are kept so existing scrape configs, Alertmanager routes, silences
-and dashboard links keep working:
+Rules: [`alerts.yaml`](../deploy/monitoring/prometheus/alerts.yaml) — group
+`rustdesk-panel`; all selectors use `job="rustdesk-panel"`.
+
+> **Why the old name?** The job, group and `RustDeskPanel*` alert names, and the dashboard
+> uid below, predate the rename to RD Panel. They are kept so existing scrape configs,
+> Alertmanager routes, silences and dashboard links keep working.
+
 
 | alert | severity | fires when |
 |---|---|---|
@@ -101,7 +127,7 @@ and dashboard links keep working:
 | `RustDeskLoginFailureSpike` | warning | > 10 failed or rate-limited logins/min per surface for 5 min |
 | `RustDeskAuditStoreErrors` | warning | audit records fail to store (5xx to clients) |
 
-Thresholds are starting points. Check changes with
+Thresholds are starting points. Check changes with:
 
 ```sh
 cd deploy/monitoring/prometheus
@@ -124,8 +150,11 @@ docker run --rm -v "$PWD":/w -w /w --entrypoint promtool prom/prometheus:v3.5.0 
 - **Server settings reconciler**: admin channels, re-applications, drift corrections;
 - **Process**: memory, goroutines, SSE subscribers, event bus.
 
-Import it in Grafana (Dashboards > New > Import > upload JSON) and pick the
-Prometheus data source, or provision it from a file as the compose example does.
+To install it, either:
+
+- import it in Grafana (Dashboards > New > Import > upload JSON) and pick the Prometheus
+  data source, or
+- provision it from a file, as the compose example does.
 
 ## Prometheus + Grafana with docker compose
 
@@ -139,12 +168,16 @@ docker compose up -d
 ssh -L 3000:127.0.0.1:3000 <host>   # then http://127.0.0.1:3000, user admin
 ```
 
-Prometheus (`127.0.0.1:9090`, 30 days retention) loads `alerts.yaml`; Grafana
-(`127.0.0.1:3000`) gets the Prometheus data source and the dashboard in the
-`RustDesk` folder. Both listen on loopback only. If the panel listens on another
-port (for example `RDPANEL_LISTEN=127.0.0.1:31114`), edit the target in
-`prometheus/prometheus.yml`. There is no Alertmanager in the example: add an
-`alerting:` block to `prometheus.yml` to route alerts.
+| service | address | what it gets |
+|---|---|---|
+| Prometheus | `127.0.0.1:9090` | 30 days retention, loads `alerts.yaml` |
+| Grafana | `127.0.0.1:3000` | the Prometheus data source and the dashboard in the `RustDesk` folder |
+
+- Both listen on loopback only.
+- If the panel listens on another port (for example `RDPANEL_LISTEN=127.0.0.1:31114`),
+  edit the target in `prometheus/prometheus.yml`.
+- There is no Alertmanager in the example: add an `alerting:` block to `prometheus.yml`
+  to route alerts.
 
 ## Kubernetes (Helm)
 
@@ -166,8 +199,8 @@ grafanaDashboard:
   # folder: RustDesk                            # grafana_folder annotation
 ```
 
-The PrometheusRule carries the rules of `alerts.yaml` (the chart keeps a copy in
-`files/alerts.yaml`; a Go test keeps both copies and the metric names in sync)
-with `job="rustdesk-panel"` replaced by the panel Service name, which is the job
-label the chart's ServiceMonitor produces. If you scrape the panel differently,
-set `prometheusRule.job`.
+- The PrometheusRule carries the rules of `alerts.yaml`. The chart keeps a copy in
+  `files/alerts.yaml`; a Go test keeps both copies and the metric names in sync.
+- `job="rustdesk-panel"` is replaced by the panel Service name, which is the job label the
+  chart's ServiceMonitor produces. If you scrape the panel differently, set
+  `prometheusRule.job`.

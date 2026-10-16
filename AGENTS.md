@@ -65,8 +65,8 @@ scripts/e2e-server.sh && (cd web && npm run e2e:real)   # Playwright against a r
 - **Metrics:** low-cardinality labels only (no users, IPs, device ids unless opt-in).
   Grafana dashboard and alert rules exist twice (`deploy/monitoring` and the Helm chart's
   `files/`); a Go test fails if they drift.
-- **Config:** new settings get an `RDPANEL_*` env var plus YAML key, a row in the README
-  config table and in `docs/deploy.md`, and an entry in `deploy/rdpanel.env.example`
+- **Config:** new settings get an `RDPANEL_*` env var plus YAML key, a row in
+  `docs/configuration.md` and in `docs/deploy.md`, and an entry in `deploy/rdpanel.env.example`
   when operators are likely to set it.
 - **Naming:** the product is **RD Panel** (slug `rdpanel`). Use "RustDesk" only
   descriptively ("for RustDesk", "RustDesk clients"), never as our product name.

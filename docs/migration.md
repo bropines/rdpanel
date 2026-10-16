@@ -1,30 +1,36 @@
 # Migrating from lejianwen/rustdesk-api
 
-`rdpanel migrate-legacy` imports the SQLite database of
-[lejianwen/rustdesk-api](https://github.com/lejianwen/rustdesk-api) v2.7 (`data/rustdeskapi.db`,
-schema version 265) into a fresh RD Panel database. The mapping is specified in
-`docs/research/legacy-model-and-migration.md` §7.4. This page is the operator guide.
+Step-by-step guide for moving an existing
+[lejianwen/rustdesk-api](https://github.com/lejianwen/rustdesk-api) v2.7 install to RD Panel
+with `rdpanel migrate-legacy`, without making RustDesk clients log in again. For operators
+of the old server.
 
-```
-rdpanel migrate-legacy --from <rustdeskapi.db> [--dry-run] [--report <file>] [--force]
-                       [--allow-version N] [--legacy-tz Z]
-```
+- [Overview](#overview) · [Before you start](#before-you-start)
+- Steps: [1. Back up](#1-back-up-and-freeze-the-legacy-database) ·
+  [2. Dry run](#2-dry-run) · [3. Read the report](#3-read-the-report) · [4. Run](#4-run) ·
+  [5. Verify](#5-verify)
+- [Rollback](#rollback) · [Command reference](#command-reference) ·
+  [What is imported](#what-is-imported)
 
-| flag | meaning |
-|---|---|
-| `--from` | legacy database. It is opened **read-only and immutable** and is never modified. |
-| `--dry-run` | performs the whole import in a transaction and rolls it back. The report is still produced and nothing is written to the target. |
-| `--report` | writes the JSON report (counts and warnings, never secrets) to this file. The file is created with mode 0600. |
-| `--force` | imports even if the target already has users or a completed import. Legacy ids are preserved, so any id conflict still aborts the import. |
-| `--allow-version N` | accepts legacy schema version `N` instead of 265. |
-| `--legacy-tz` | time zone for legacy timestamps that carry **no** UTC offset. rustdesk-api always writes an offset, so the default `UTC` is normally correct. |
+Running the old **s6 container** (`lejianwen/rustdesk-server-s6`)? Follow
+[deploy.md → Upgrading from the lejianwen s6 image](deploy.md#upgrading-from-the-lejianwen-s6-image-lejianwenrustdesk-server-s6--rustdesk-api)
+for the container side; it uses the importer described here. On Kubernetes, see the Helm
+chart's [legacy migration Job](../deploy/helm/rdpanel/README.md#legacy-migration-lejianwenrustdesk-api).
 
-The target is the database configured for `rdpanel serve` (`RDPANEL_DATA_DIR` / `RDPANEL_DB_PATH`).
-Migrations are applied first. The import uses the same secrets key (`secret.key` / `RDPANEL_SECRET_KEY`)
-as the server, so **run it with the same configuration as the server**. Otherwise the server cannot decrypt
-the imported OAuth client secrets and address-book passwords.
+## Overview
 
-Exit codes: 0 success, 1 failure (nothing committed), 2 usage error.
+`rdpanel migrate-legacy` imports the SQLite database of rustdesk-api v2.7
+(`data/rustdeskapi.db`, schema version 265) into a fresh RD Panel database. The mapping is
+specified in `docs/research/legacy-model-and-migration.md` §7.4.
+
+- **Source:** opened read-only and immutable; never modified.
+- **Target:** the database configured for `rdpanel serve` (`RDPANEL_DATA_DIR` /
+  `RDPANEL_DB_PATH`). Migrations are applied first.
+- **Same configuration as the server.** The import uses the same secrets key
+  (`secret.key` / `RDPANEL_SECRET_KEY`) as the server. Run it with the server's
+  configuration, otherwise the server cannot decrypt the imported OAuth client secrets
+  and address-book passwords.
+- **All or nothing:** the import is one transaction.
 
 ## Before you start
 
@@ -37,7 +43,7 @@ Exit codes: 0 success, 1 failure (nothing committed), 2 usage error.
 
 ## 1. Back up and freeze the legacy database
 
-Stop rustdesk-api so that nothing writes to the file. Then copy the database:
+Stop rustdesk-api so that nothing writes to the file, then copy the database:
 
 ```sh
 docker stop rustdesk-api            # keep the container; do not remove it
@@ -45,10 +51,12 @@ cp -a ./data/rustdeskapi.db ./rustdeskapi-$(date +%F).db
 sha256sum ./data/rustdeskapi.db ./rustdeskapi-$(date +%F).db
 ```
 
-If a non-empty `rustdeskapi.db-wal` exists next to the file, the importer refuses to run, because
-immutable mode would ignore the transactions in the WAL. Either checkpoint it
-(`sqlite3 rustdeskapi.db 'PRAGMA wal_checkpoint(TRUNCATE)'`) or make a consistent copy with
-`sqlite3 rustdeskapi.db ".backup rustdeskapi-copy.db"`, and import the copy.
+> **WAL file.** If a non-empty `rustdeskapi.db-wal` exists next to the file, the importer
+> refuses to run, because immutable mode would ignore the transactions in the WAL. Either:
+>
+> - checkpoint it: `sqlite3 rustdeskapi.db 'PRAGMA wal_checkpoint(TRUNCATE)'`, or
+> - make a consistent copy with `sqlite3 rustdeskapi.db ".backup rustdeskapi-copy.db"` and
+>   import the copy.
 
 ## 2. Dry run
 
@@ -56,13 +64,22 @@ immutable mode would ignore the transactions in the WAL. Either checkpoint it
 rdpanel migrate-legacy --from ./rustdeskapi-copy.db --dry-run --report dry-run.json
 ```
 
-The summary lists, per legacy table: rows **read**, **imported**, **deduped** (merged into another row
-with the same natural key), **orphaned** (the referenced parent is missing, so the row was dropped) and
-**skipped** (dropped on purpose, e.g. expired tokens). `read = imported + deduped + orphaned + skipped`.
+The summary lists, per legacy table:
+
+| column | meaning |
+|---|---|
+| **read** | rows in the legacy table |
+| **imported** | rows written |
+| **deduped** | merged into another row with the same natural key |
+| **orphaned** | the referenced parent is missing, so the row was dropped |
+| **skipped** | dropped on purpose, e.g. expired tokens |
+
+`read = imported + deduped + orphaned + skipped`.
 
 ## 3. Read the report
 
-`errors` block the import. Nothing is committed while any error is present, including in dry-run mode.
+**`errors` block the import.** Nothing is committed while any error is present, including in
+dry-run mode.
 
 | error code | what to do |
 |---|---|
@@ -70,7 +87,7 @@ with the same natural key), **orphaned** (the referenced parent is missing, so t
 | `invalid_username`, `user_id_range` | Fix the user in the legacy DB. |
 | `version` | The schema is not v265. Check the rustdesk-api version. Use `--allow-version` only after reviewing the differences. |
 
-`warnings` do not block the import. They tell you what changed:
+**`warnings` do not block the import.** They tell you what changed:
 
 | warning code | meaning / action |
 |---|---|
@@ -101,9 +118,10 @@ The `extra` object of each table gives further numbers, such as `expired`, `expi
 rdpanel migrate-legacy --from ./rustdeskapi-copy.db --report import.json
 ```
 
-The whole import is one transaction. Either everything is committed or nothing is. A successful run
-is recorded in `migration_runs` together with its report. A failed run is recorded with `status = failed`
-and leaves no other data behind. A second run is refused while a completed import exists.
+- The whole import is one transaction: either everything is committed or nothing is.
+- A successful run is recorded in `migration_runs` together with its report.
+- A failed run is recorded with `status = failed` and leaves no other data behind.
+- A second run is refused while a completed import exists.
 
 ## 5. Verify
 
@@ -116,8 +134,9 @@ and leaves no other data behind. A second run is refused while a completed impor
   SELECT rustdesk_id, owner_user_id, datetime(last_seen_at/1000, 'unixepoch') FROM devices ORDER BY last_seen_at DESC LIMIT 10;
   SELECT status, dry_run, source_version, started_at FROM migration_runs;
   ```
-- Start `rdpanel serve`, then log in to the panel with a migrated account. Open a RustDesk client that was
-  logged in before. It should still show the account and its address book, with no new login.
+- Start `rdpanel serve`, then log in to the panel with a migrated account.
+- Open a RustDesk client that was logged in before. It should still show the account and
+  its address book, with no new login.
 - OAuth: log in with each provider once.
 
 ## Rollback
@@ -128,11 +147,36 @@ The legacy side is never modified. To roll back:
 2. `docker start rustdesk-api` (the container you stopped in step 1, still on the original `data/`).
 3. Restore `rustdeskapi.db` from the backup if anything else touched it.
 
-Logins made on the new server after the cutover do not exist on the old one. Clients that logged in
-again since the cutover must do so once more. To retry the import, delete the new `panel-data`
-directory (or only `panel.db*`, keeping `secret.key`) and start again at step 2.
+After a rollback:
+
+- Logins made on the new server after the cutover do not exist on the old one. Clients
+  that logged in again since the cutover must do so once more.
+- To retry the import, delete the new `panel-data` directory (or only `panel.db*`, keeping
+  `secret.key`) and start again at step 2.
+
+## Command reference
+
+```
+rdpanel migrate-legacy --from <rustdeskapi.db> [--dry-run] [--report <file>] [--force]
+                       [--allow-version N] [--legacy-tz Z]
+```
+
+| flag | meaning |
+|---|---|
+| `--from` | legacy database. It is opened **read-only and immutable** and is never modified. |
+| `--dry-run` | performs the whole import in a transaction and rolls it back. The report is still produced and nothing is written to the target. |
+| `--report` | writes the JSON report (counts and warnings, never secrets) to this file. The file is created with mode 0600. |
+| `--force` | imports even if the target already has users or a completed import. Legacy ids are preserved, so any id conflict still aborts the import. |
+| `--allow-version N` | accepts legacy schema version `N` instead of 265. |
+| `--legacy-tz` | time zone for legacy timestamps that carry **no** UTC offset. rustdesk-api always writes an offset, so the default `UTC` is normally correct. |
+
+Exit codes: 0 success, 1 failure (nothing committed), 2 usage error.
 
 ## What is imported
+
+<details>
+<summary>Legacy table → new table mapping</summary>
+
 
 | legacy | new | notes |
 |---|---|---|
@@ -153,6 +197,8 @@ directory (or only `panel.db*`, keeping `secret.key`) and start again at step 2.
 | `audit_files` | `file_transfer_audits` | invalid JSON info wrapped as `{"raw": ...}` |
 | `share_records` | `share_links` | token hashed, password encrypted, expired links skipped |
 | `server_cmds` | `server_commands` | target 21115 → hbbs, 21117 → hbbr |
+
+</details>
 
 AUTOINCREMENT sequences are raised to the legacy `sqlite_sequence` values, so ids of deleted legacy
 users or collections are never handed out again. This matters because old JWTs and cached

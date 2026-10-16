@@ -16,8 +16,8 @@ on:
   workflow_dispatch:
     inputs:
       server_ref:
-        description: bropines/rustdesk-server ref (branch, tag or sha) for hbbs/hbbr
-        default: 8b6f490ccdb63f58252d833f52761356841f69ba # merge-upstream-1.1.16 @ 8b6f490 (tcp-keepalive)
+        description: bropines/rustdesk-server ref (branch, tag or sha) for hbbs/hbbr; maintained branch is rdpanel
+        default: 8b6f490ccdb63f58252d833f52761356841f69ba # rdpanel branch @ 8b6f490 (tcp-keepalive)
         required: true
       push:
         description: push the image to ghcr.io
@@ -35,7 +35,7 @@ env:
   IMAGE: ghcr.io/bropines/rdpanel
   SERVER_REPO: bropines/rustdesk-server
   # Pinned hbbs/hbbr source for push/tag builds; bump deliberately after
-  # testing a newer bropines/rustdesk-server commit.
+  # testing a newer commit of the bropines/rustdesk-server `rdpanel` branch.
   SERVER_REF: ${{ inputs.server_ref || '8b6f490ccdb63f58252d833f52761356841f69ba' }}
 
 jobs:

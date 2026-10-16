@@ -1,19 +1,33 @@
 # Sign-in with OIDC
 
-RD Panel can sign users in through GitHub, Google or any OpenID Connect provider, both in
-the panel and in the RustDesk client ("Login" → provider button). Providers are managed in
+How to let users sign in to RD Panel through GitHub, Google or any OpenID Connect provider
+(Authentik, Keycloak, Pocket ID, Zitadel, …). It works both in the panel and in the
+RustDesk client ("Login" → provider button). For admins: providers are managed in
 **Identity providers** (admin only).
 
-There is exactly one redirect URI to register at the provider:
+- [Quick start](#quick-start) · [Provider settings in the panel](#provider-settings-in-the-panel)
+- Providers: [Authentik](#authentik) · [Pocket ID, Keycloak, Zitadel, …](#pocket-id-keycloak-zitadel-)
+  · [GitHub and Google](#github-and-google)
 
-```
-<RDPANEL_PUBLIC_URL>/api/oidc/callback
-```
+## Quick start
 
-It serves both the panel and the RustDesk client. With split hosts (public client API +
-internal panel, see [`deploy.md`](deploy.md#split-hosts-public-client-api--internal-admin-panel))
-the callback is still on the public host and the panel session is handed over to the
-internal host afterwards; the reverse proxy must expose `/api/oidc/callback` publicly.
+1. At the provider, create a confidential OAuth/OIDC client with exactly one redirect URI:
+
+   ```
+   <RDPANEL_PUBLIC_URL>/api/oidc/callback
+   ```
+
+2. In RD Panel open **Identity providers**, add a provider (see the
+   [fields](#provider-settings-in-the-panel)) and press **Test**.
+3. Users sign in with the new button, or link the provider to an existing account (see
+   [Linking existing accounts](#linking-existing-accounts)).
+
+The one callback serves both the panel and the RustDesk client.
+
+> **Split hosts** (public client API + internal panel, see
+> [`deploy.md`](deploy.md#split-hosts-public-client-api--internal-admin-panel)): the
+> callback is still on the public host, and the panel session is handed over to the
+> internal host afterwards. The reverse proxy must expose `/api/oidc/callback` publicly.
 
 ## Provider settings in the panel
 
@@ -29,8 +43,12 @@ internal host afterwards; the reverse proxy must expose `/api/oidc/callback` pub
 | Auto-register | create a panel user on first sign-in; leave off to allow only linked accounts |
 | Link by verified e-mail | link to an existing user with the same address, **only** if the provider sends `email_verified: true` |
 
-**Test** checks discovery and the client credentials. Existing users can link a provider
-themselves: sign in with the password, then **Profile & security → Linked accounts**.
+**Test** checks discovery and the client credentials.
+
+### Linking existing accounts
+
+Existing users can link a provider themselves: sign in with the password, then
+**Profile & security → Linked accounts**.
 
 ## Authentik
 
@@ -45,28 +63,40 @@ themselves: sign in with the password, then **Profile & security → Linked acco
      *Based on the User's hashed ID* (default)
 2. **Applications → Applications → Create**: name `RD Panel`, slug `rdpanel`, provider
    `rdpanel`. To restrict access, add a group/policy binding to the application.
-3. In RD Panel add a provider with kind `oidc`, issuer
-   `https://<authentik host>/application/o/rdpanel/`, the client ID/secret, scopes
-   `openid profile email`, PKCE `S256`.
+3. In RD Panel add a provider:
 
-Authentik's default e-mail mapping may report `email_verified: false`; then either link
-accounts from the profile page or use a custom scope mapping that returns the verified
-state you trust.
+   | field | value |
+   |---|---|
+   | Kind | `oidc` |
+   | Issuer | `https://<authentik host>/application/o/rdpanel/` |
+   | Client ID / secret | from step 1 |
+   | Scopes | `openid profile email` |
+   | PKCE | `S256` |
+
+> **`email_verified`:** Authentik's default e-mail mapping may report
+> `email_verified: false`. Then either link accounts from the profile page, or use a
+> custom scope mapping that returns the verified state you trust.
 
 **Passkeys for the RustDesk client:** the client cannot use WebAuthn itself, but it signs
-in through the browser, so enabling passkeys/WebAuthn in Authentik (an authenticator
-validation stage with WebAuthn) gives client users passkey sign-in. The panel also
-supports passkeys natively (Profile & security → Passkeys).
+in through the browser. Enabling passkeys/WebAuthn in Authentik (an authenticator
+validation stage with WebAuthn) therefore gives client users passkey sign-in. The panel
+also supports passkeys natively (Profile & security → Passkeys).
 
 ## Pocket ID, Keycloak, Zitadel, …
 
-Same pattern: create a confidential OIDC client with the redirect URI above, then enter
-the issuer, client ID and secret in RD Panel. Keycloak's issuer is
-`https://<host>/realms/<realm>`; Pocket ID's is its base URL.
+Same pattern:
+
+1. Create a confidential OIDC client with the redirect URI above.
+2. Enter the issuer, client ID and secret in RD Panel.
+
+| provider | issuer |
+|---|---|
+| Keycloak | `https://<host>/realms/<realm>` |
+| Pocket ID | its base URL |
 
 ## GitHub and Google
 
-- **GitHub:** Settings → Developer settings → OAuth Apps → New; callback URL as above.
-  Kind `github`, no issuer.
-- **Google:** Cloud Console → Credentials → OAuth client ID (Web application);
-  authorized redirect URI as above. Kind `google`.
+| provider | where to create the client | RD Panel kind |
+|---|---|---|
+| **GitHub** | Settings → Developer settings → OAuth Apps → New; callback URL as above | `github`, no issuer |
+| **Google** | Cloud Console → Credentials → OAuth client ID (Web application); authorized redirect URI as above | `google` |
