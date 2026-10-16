@@ -17,6 +17,7 @@ const (
 	MethodPassword = "password"
 	MethodOIDC     = "oidc"
 	MethodWebAuth  = "webauth"
+	MethodPasskey  = "passkey"
 )
 
 // Client kinds (login_events.client_kind).

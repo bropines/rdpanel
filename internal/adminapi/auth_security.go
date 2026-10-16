@@ -40,6 +40,11 @@ func (c *authCore) registerSecurity(r chi.Router) {
 		r.Get("/me/security/identities", c.handleListIdentities)
 		r.Delete("/me/security/identities/{id}", c.handleUnlinkIdentity)
 		r.Post("/me/security/identities/link/{slug}", c.handleLinkIdentity)
+		r.Get("/me/security/passkeys", c.handleListMyPasskeys)
+		r.Post("/me/security/passkeys/register/begin", c.handlePasskeyRegisterBegin)
+		r.Post("/me/security/passkeys/register/finish", c.handlePasskeyRegisterFinish)
+		r.Patch("/me/security/passkeys/{id}", c.handleRenamePasskey)
+		r.Delete("/me/security/passkeys/{id}", c.handleDeleteMyPasskey)
 	})
 	r.With(RequireUser).Patch("/me", c.handleUpdateProfile)
 }
@@ -137,6 +142,8 @@ type securityDTO struct {
 	TOTPRequired           bool `json:"totp_required"`
 	MustEnrollTOTP         bool `json:"must_enroll_totp"`
 	RecoveryCodesRemaining int  `json:"recovery_codes_remaining"`
+	PasskeysAvailable      bool `json:"passkeys_available"`
+	PasskeyCount           int  `json:"passkey_count"`
 }
 
 func (c *authCore) handleSecurity(w http.ResponseWriter, r *http.Request) {
@@ -152,6 +159,11 @@ func (c *authCore) handleSecurity(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if out.RecoveryCodesRemaining, err = c.d.Store.RecoveryCodes.CountUnused(ctx, s.User.ID); err != nil {
+		internalError(w)
+		return
+	}
+	out.PasskeysAvailable = c.pk.available()
+	if out.PasskeyCount, err = c.d.Store.WebAuthnCredentials.CountForUser(ctx, s.User.ID); err != nil {
 		internalError(w)
 		return
 	}

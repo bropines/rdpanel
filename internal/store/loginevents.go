@@ -14,6 +14,7 @@ const (
 	LoginMethodPassword = "password"
 	LoginMethodOIDC     = "oidc"
 	LoginMethodWebAuth  = "webauth"
+	LoginMethodPasskey  = "passkey"
 
 	LoginSuccess = "success"
 	LoginFailure = "failure"

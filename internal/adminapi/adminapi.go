@@ -113,6 +113,9 @@ type DeviceRateInfo struct {
 // RequireUser or RequireAdmin (see session.go).
 func Register(r chi.Router, d Deps) {
 	c := newAuthCore(d)
+	if !c.pk.available() && d.Log != nil {
+		d.Log.Info("panel passkeys disabled", "reason", c.pk.disabled.Error())
+	}
 	r.Use(csrfProtect, c.sess.load)
 	c.registerAuth(r)
 	c.registerSecurity(r)

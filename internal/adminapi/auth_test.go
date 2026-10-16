@@ -69,6 +69,7 @@ func newTEnv(t *testing.T) *tenv {
 	jwtSvc, _ := auth.NewClientJWT([]byte("k"), clk.now)
 	cfg := config.Defaults()
 	cfg.PublicURL = "http://panel.test"
+	cfg.WebAuthn.Origins = []string{"http://panel.test"}
 
 	e := &tenv{t: t, st: st, clk: clk, aead: aead}
 	e.deps = Deps{Log: slog.New(slog.NewTextHandler(io.Discard, nil)), Config: cfg, Store: st, AEAD: aead,

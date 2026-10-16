@@ -77,6 +77,7 @@ func (a *App) janitorPass(ctx context.Context) {
 		cutoff      time.Time
 	}{
 		{"oauth states", `DELETE FROM oauth_states WHERE expires_at < ?`, now},
+		{"webauthn challenges", `DELETE FROM webauthn_challenges WHERE expires_at < ?`, now},
 		{"audit nonces", `DELETE FROM audit_nonces WHERE created_at < ?`, now.Add(-auditNonceTTL)},
 	} {
 		res, err := a.DB.ExecContext(ctx, p.query, p.cutoff.UnixMilli())

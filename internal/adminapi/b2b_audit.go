@@ -215,7 +215,8 @@ func (c *b2bCore) handleAuditLogins(w http.ResponseWriter, r *http.Request) {
 	sort := q.sort("-created_at", "created_at")
 	f := store.LoginEventQuery{AuditQuery: q.auditQuery(p, strings.HasPrefix(sort, "-")),
 		UserID: q.int64Ptr("user_id"), Result: q.enum("result", store.LoginSuccess, store.LoginFailure),
-		Method:        q.enum("method", store.LoginMethodPassword, store.LoginMethodOIDC, store.LoginMethodWebAuth),
+		Method: q.enum("method", store.LoginMethodPassword, store.LoginMethodOIDC, store.LoginMethodWebAuth,
+			store.LoginMethodPasskey),
 		IncludeHidden: u.IsAdmin()}
 	switch q.enum("client_kind", "web", "client") {
 	case "web":

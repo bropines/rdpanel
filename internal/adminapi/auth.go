@@ -38,6 +38,7 @@ type authCore struct {
 	totp     *TOTPService
 	limiter  auth.Limiter
 	events   loginlog.Recorder
+	pk       *passkeys
 	dummyMu  sync.Once
 	dummyPwH string
 }
@@ -47,7 +48,8 @@ func newAuthCore(d Deps) *authCore {
 	if totp == nil {
 		totp = NewTOTPService(d.Store, d.AEAD)
 	}
-	c := &authCore{d: d, sess: newSessions(d, totp), totp: totp, limiter: d.Limiter, events: d.LoginEvents}
+	c := &authCore{d: d, sess: newSessions(d, totp), totp: totp, limiter: d.Limiter, events: d.LoginEvents,
+		pk: newPasskeys(d.Config)}
 	if c.limiter == nil {
 		c.limiter = auth.NewBackoff(auth.DefaultBackoffConfig, d.Store.Now)
 	}
@@ -119,6 +121,10 @@ func (c *authCore) registerAuth(r chi.Router) {
 	r.Get("/auth/csrf", c.handleCSRF)
 	r.Post("/auth/login", c.handleLogin)
 	r.Post("/auth/mfa", c.handleMFA)
+	r.Post("/auth/mfa/passkey/begin", c.handlePasskeyMFABegin)
+	r.Post("/auth/mfa/passkey/finish", c.handlePasskeyMFAFinish)
+	r.Post("/auth/passkey/begin", c.handlePasskeyLoginBegin)
+	r.Post("/auth/passkey/finish", c.handlePasskeyLoginFinish)
 	r.Post("/auth/logout", c.handleLogout)
 	r.With(requireSession).Get("/auth/me", c.handleMe)
 	r.Get("/auth/providers", c.handleProviders)
@@ -157,8 +163,11 @@ type loginRequest struct {
 // loginResponse: either mfa_required (session cookie is a pending session)
 // or the authenticated Me.
 type loginResponse struct {
-	MFARequired bool   `json:"mfa_required"`
-	Me          *meDTO `json:"me,omitempty"`
+	MFARequired bool `json:"mfa_required"`
+	// MFAMethods lists the usable second factors ("totp", "passkey") when
+	// MFARequired.
+	MFAMethods []string `json:"mfa_methods,omitempty"`
+	Me         *meDTO   `json:"me,omitempty"`
 }
 
 func (c *authCore) handleLogin(w http.ResponseWriter, r *http.Request) {
@@ -241,7 +250,7 @@ func (c *authCore) handleLogin(w http.ResponseWriter, r *http.Request) {
 				internalError(w)
 				return
 			}
-			httpx.WriteJSON(w, http.StatusOK, loginResponse{MFARequired: true})
+			httpx.WriteJSON(w, http.StatusOK, loginResponse{MFARequired: true, MFAMethods: c.mfaMethods(ctx, user.ID)})
 			return
 		}
 		valid, err := c.totp.verify(ctx, user.ID, req.TOTPCode)
@@ -353,6 +362,13 @@ type providerOptionDTO struct {
 	Kind        string `json:"kind"`
 }
 
+// loginOptionsDTO is the /auth/providers body: provider buttons plus whether
+// "Sign in with a passkey" is offered.
+type loginOptionsDTO struct {
+	Items   []providerOptionDTO `json:"items"`
+	Passkey bool                `json:"passkey"`
+}
+
 // handleProviders lists enabled providers for the login page buttons.
 func (c *authCore) handleProviders(w http.ResponseWriter, r *http.Request) {
 	provs, err := c.d.Store.IdentityProviders.List(r.Context(), true)
@@ -372,7 +388,7 @@ func (c *authCore) handleProviders(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
-	httpx.WriteJSON(w, http.StatusOK, itemsDTO[providerOptionDTO]{Items: out})
+	httpx.WriteJSON(w, http.StatusOK, loginOptionsDTO{Items: out, Passkey: c.pk.available()})
 }
 
 type oidcStartRequest struct {

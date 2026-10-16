@@ -223,3 +223,55 @@ func TestHBBSWorkerSettings(t *testing.T) {
 		}
 	}
 }
+
+func TestWebAuthnRP(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		env     map[string]string
+		rpID    string
+		origins string
+		err     string
+	}{
+		{name: "unconfigured", env: nil, err: "passkeys are disabled"},
+		{name: "public only", env: map[string]string{"RDPANEL_PUBLIC_URL": "https://rd.example.com/"},
+			rpID: "rd.example.com", origins: "https://rd.example.com"},
+		{name: "internal admin host", env: map[string]string{"RDPANEL_PUBLIC_URL": "https://rd.example.com",
+			"RDPANEL_ADMIN_URL": "https://panel.internal.lan:8443"},
+			rpID: "panel.internal.lan", origins: "https://panel.internal.lan:8443"},
+		{name: "shared parent domain", env: map[string]string{"RDPANEL_PUBLIC_URL": "https://rd.example.com",
+			"RDPANEL_ADMIN_URL": "https://admin.example.com", "RDPANEL_WEBAUTHN_RP_ID": "Example.com"},
+			rpID: "example.com", origins: "https://admin.example.com,https://rd.example.com"},
+		{name: "explicit origins", env: map[string]string{"RDPANEL_PUBLIC_URL": "https://rd.example.com",
+			"RDPANEL_WEBAUTHN_ORIGINS": "https://a.example.com, https://b.example.com:444",
+			"RDPANEL_WEBAUTHN_RP_ID":   "example.com"},
+			rpID: "example.com", origins: "https://a.example.com,https://b.example.com:444"},
+		{name: "ip host", env: map[string]string{"RDPANEL_PUBLIC_URL": "http://192.0.2.1:21114"}, err: "IP address"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			cfg, err := Load(env(tc.env))
+			if err != nil {
+				t.Fatal(err)
+			}
+			rpID, origins, err := cfg.WebAuthnRP()
+			if tc.err != "" {
+				if err == nil || !strings.Contains(err.Error(), tc.err) {
+					t.Fatalf("err = %v, want %q", err, tc.err)
+				}
+				return
+			}
+			if err != nil || rpID != tc.rpID || strings.Join(origins, ",") != tc.origins {
+				t.Fatalf("got %q %v %v", rpID, origins, err)
+			}
+		})
+	}
+	// Explicit settings are validated at load time.
+	for _, bad := range []map[string]string{
+		{"RDPANEL_WEBAUTHN_ORIGINS": "https://a.example.com", "RDPANEL_WEBAUTHN_RP_ID": "other.com"},
+		{"RDPANEL_WEBAUTHN_ORIGINS": "ftp://a.example.com"},
+		{"RDPANEL_WEBAUTHN_ORIGINS": "https://a.example.com", "RDPANEL_WEBAUTHN_RP_ID": "https://example.com"},
+	} {
+		if _, err := Load(env(bad)); err == nil || !strings.Contains(err.Error(), "webauthn") {
+			t.Errorf("%v: err = %v", bad, err)
+		}
+	}
+}
