@@ -505,6 +505,7 @@ export const serverDesired: S["ServerSettingsValues"] = {
   always_use_relay: false,
   must_login: true,
   tcp_keepalive: true,
+  webrtc: true,
   blacklist: ["203.0.113.50"],
   blocklist: ["198.51.100.0/24", "192.0.2.77"],
   limit_speed_mbps: 32,
@@ -515,6 +516,14 @@ export const serverDesired: S["ServerSettingsValues"] = {
 };
 export const serverApplied: S["ServerSettingsValues"] = { ...serverDesired, total_bandwidth_mbps: 512, blacklist: [] };
 
+/** Client options pushed in heartbeats (mutated by the mock PUT). */
+export const clientOptions: S["ClientOptions"] = {
+  ice_servers: "stun:stun.example.com:3478\nturn://rdpanel:example-secret@turn.example.com:3478",
+  webrtc_congestion_control: null,
+  pushed: true,
+  modified_at: "2026-10-14T09:30:00Z",
+};
+
 export const consoleCommands: S["ConsoleCommand"][] = [
   { target: "hbbs", cmd: "relay-servers", alias: "rs", args_hint: "[host:port,…]", arg_pattern: "[A-Za-z0-9.:,\\[\\]-]+", max_args: 1, description: "Show or set relay servers", mutating: true },
   { target: "hbbs", cmd: "ip-blocker", alias: "ib", args_hint: "[<ip>|<offset>] [-]", arg_pattern: "[0-9a-fA-F.:]+|-", max_args: 2, description: "Show or unblock rate-limited IPs", mutating: true },
@@ -523,6 +532,7 @@ export const consoleCommands: S["ConsoleCommand"][] = [
   { target: "hbbs", cmd: "always-use-relay", alias: "aur", args_hint: "[Y|N]", arg_pattern: "[YyNn]", max_args: 1, description: "Force relayed connections", mutating: true },
   { target: "hbbs", cmd: "must-login", alias: "ml", args_hint: "[Y|N]", arg_pattern: "[YyNn]", max_args: 1, description: "Require login to connect", mutating: true },
   { target: "hbbs", cmd: "tcp-keepalive", alias: "tk", args_hint: "[Y|N]", arg_pattern: "[YyNn]", max_args: 1, description: "Keepalive for TCP/WebSocket clients", mutating: true },
+  { target: "hbbs", cmd: "webrtc", alias: "wr", args_hint: "[Y|N]", arg_pattern: "[YyNn]", max_args: 1, description: "WebRTC signaling for RustDesk 1.5+ clients", mutating: true },
   { target: "hbbr", cmd: "usage", alias: "u", args_hint: "", max_args: 0, description: "Active relays with bandwidth", mutating: false },
   { target: "hbbr", cmd: "blacklist", alias: "b", args_hint: "[ip]", arg_pattern: "[0-9a-fA-F.:/]+", max_args: 1, description: "Throttled IPs", mutating: false },
   { target: "hbbr", cmd: "blocklist", alias: "B", args_hint: "[ip]", arg_pattern: "[0-9a-fA-F.:/]+", max_args: 1, description: "Refused IPs", mutating: false },

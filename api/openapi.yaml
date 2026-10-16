@@ -2198,6 +2198,42 @@ paths:
         "400": { $ref: "#/components/responses/ValidationFailed" }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "403": { $ref: "#/components/responses/Forbidden" }
+  /server/client-options:
+    get:
+      tags: [server]
+      operationId: getClientOptions
+      summary: Client options pushed to RustDesk clients in heartbeats (WebRTC ICE servers) (admin).
+      responses:
+        "200":
+          description: Options.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ClientOptions" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+    put:
+      tags: [server]
+      operationId: updateClientOptions
+      summary: Replace the client options; clients pick them up on their next heartbeat.
+      description: |
+        Missing fields are cleared. TURN URLs need credentials (`turn://user:pass@host:port`), as RustDesk
+        drops TURN entries without them. The audit trail records only the number of ICE servers.
+      parameters:
+        - $ref: "#/components/parameters/CsrfHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ClientOptionsInput" }
+      responses:
+        "200":
+          description: Saved options.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ClientOptions" }
+        "400": { $ref: "#/components/responses/ValidationFailed" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
   /server/settings/reapply:
     post:
       tags: [server]
@@ -4076,6 +4112,12 @@ components:
             TCP_KEEPALIVE (bropines/rustdesk-server fork): hbbs sends an empty frame every 12 s on registered
             TCP/WebSocket rendezvous connections so clients in TCP/WebSocket mode stay online. In `applied`,
             null also means the running hbbs does not support the command.
+        webrtc:
+          type: [boolean, "null"]
+          description: |
+            WEBRTC (bropines/rustdesk-server fork): hbbs forwards WebRTC signaling (SDP offer/answer, trickle ICE)
+            between RustDesk 1.5+ clients; see docs/webrtc.md. In `applied`, null also means the running hbbs does
+            not support the command.
         blacklist: { type: [array, "null"], items: { type: string }, description: hbbr throttled IPs. }
         blocklist: { type: [array, "null"], items: { type: string }, description: hbbr refused IPs. }
         limit_speed_mbps: { type: [number, "null"], description: Speed for blacklisted/downgraded relays (Mibit/s). }
@@ -4091,6 +4133,7 @@ components:
         always_use_relay: { type: boolean }
         must_login: { type: boolean }
         tcp_keepalive: { type: boolean }
+        webrtc: { type: boolean }
         blacklist: { type: array, maxItems: 10000, items: { type: string } }
         blocklist: { type: array, maxItems: 10000, items: { type: string } }
         limit_speed_mbps: { type: number, exclusiveMinimum: 0 }
@@ -4098,9 +4141,36 @@ components:
         single_bandwidth_mbps: { type: number, exclusiveMinimum: 0 }
         downgrade_threshold: { type: number, exclusiveMinimum: 0 }
         downgrade_start_check_s: { type: integer, minimum: 1 }
+    ClientOptions:
+      type: object
+      required: [ice_servers, webrtc_congestion_control, pushed, modified_at]
+      description: |
+        RustDesk client options pushed to every device in heartbeat responses (strategy `config_options`).
+        Nothing is pushed until they are saved once; after that every key is pushed, an empty value removing
+        it on the client (client default).
+      properties:
+        ice_servers:
+          type: string
+          description: |
+            `ice-servers`: STUN/TURN servers for the WebRTC transport (RustDesk 1.5+), one per line.
+            TURN entries carry credentials (`turn://user:pass@host:port`). Empty = RustDesk's default STUN.
+        webrtc_congestion_control:
+          type: [boolean, "null"]
+          description: "`allow-webrtc-congestion-control`; null = client default."
+        pushed: { type: boolean, description: True once saved (clients receive the keys). }
+        modified_at: { type: [string, "null"], format: date-time, description: Version clients echo back. }
+    ClientOptionsInput:
+      type: object
+      additionalProperties: false
+      properties:
+        ice_servers:
+          type: string
+          maxLength: 16384
+          description: stun:, stuns:, turn:// or turns:// URLs separated by commas or newlines (at most 16).
+        webrtc_congestion_control: { type: [boolean, "null"] }
     ServerSettingKey:
       type: string
-      enum: [relay_servers, always_use_relay, must_login, tcp_keepalive, blacklist, blocklist, limit_speed_mbps, total_bandwidth_mbps, single_bandwidth_mbps, downgrade_threshold, downgrade_start_check_s]
+      enum: [relay_servers, always_use_relay, must_login, tcp_keepalive, webrtc, blacklist, blocklist, limit_speed_mbps, total_bandwidth_mbps, single_bandwidth_mbps, downgrade_threshold, downgrade_start_check_s]
     ServerSettingStatus:
       type: object
       required: [key, target, in_sync]

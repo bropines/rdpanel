@@ -77,6 +77,7 @@
         "alwaysUseRelay": { "type": "boolean" },
         "mustLogin": { "type": "boolean" },
         "tcpKeepalive": { "type": "boolean" },
+        "webrtc": { "type": "boolean" },
         "env": { "$ref": "#/definitions/stringMap" }
       }
     },

@@ -68,6 +68,7 @@ func fullSettings() Settings {
 		AlwaysUseRelay:          bp(true),
 		MustLogin:               bp(true),
 		TCPKeepalive:            bp(true),
+		WebRTC:                  bp(true),
 		Blacklist:               []string{"1.1.1.1", "::ffff:2.2.2.2"},
 		Blocklist:               []string{},
 		LimitSpeedMbps:          fp(8),
@@ -81,8 +82,8 @@ func fullSettings() Settings {
 func checkApplied(t *testing.T, g *rig) {
 	t.Helper()
 	relays, aur, ml, _, _, _, _, _ := g.hs.State()
-	if strings.Join(relays, ",") != "r1.example.com:21117,r2.example.com" || !aur || !ml || !g.hs.TCPKeepalive() {
-		t.Fatalf("hbbs state relays=%v aur=%v ml=%v tk=%v", relays, aur, ml, g.hs.TCPKeepalive())
+	if strings.Join(relays, ",") != "r1.example.com:21117,r2.example.com" || !aur || !ml || !g.hs.TCPKeepalive() || !g.hs.WebRTC() {
+		t.Fatalf("hbbs state relays=%v aur=%v ml=%v tk=%v wr=%v", relays, aur, ml, g.hs.TCPKeepalive(), g.hs.WebRTC())
 	}
 	_, _, _, black, block, rates, dt, tt := g.hr.State()
 	if strings.Join(black, ",") != "1.1.1.1,2.2.2.2" || len(block) != 0 {
@@ -118,7 +119,7 @@ func TestApplyStoresAndPushes(t *testing.T) {
 		t.Fatalf("desired %+v", got)
 	}
 	ks, err := g.r.KeyStatus(ctx)
-	if err != nil || len(ks) != 11 {
+	if err != nil || len(ks) != 12 {
 		t.Fatalf("key status %v %v", ks, err)
 	}
 	for _, k := range ks {
@@ -141,7 +142,7 @@ func TestApplyStoresAndPushes(t *testing.T) {
 	if err != nil || obs.Errors != nil {
 		t.Fatalf("current %+v %v", obs, err)
 	}
-	if !*obs.Settings.AlwaysUseRelay || !*obs.Settings.TCPKeepalive || *obs.Settings.DowngradeThreshold != 0.66 || len(obs.Settings.RelayServers) != 2 {
+	if !*obs.Settings.AlwaysUseRelay || !*obs.Settings.TCPKeepalive || !*obs.Settings.WebRTC || *obs.Settings.DowngradeThreshold != 0.66 || len(obs.Settings.RelayServers) != 2 {
 		t.Fatalf("observed %+v", obs.Settings)
 	}
 
@@ -353,6 +354,61 @@ func TestTCPKeepalive(t *testing.T) {
 		t.Fatalf("legacy hbbs apply: %v", err)
 	}
 	if m, ok := KeyInSync(control.HBBS, KeyTCPKeepalive, Settings{TCPKeepalive: bp(false)}, obs.Settings); !m || ok {
+		t.Fatal("managed key with no observed value is not in sync")
+	}
+}
+
+func TestWebRTC(t *testing.T) {
+	g := newRig(t)
+	ctx := context.Background()
+	if err := g.r.Apply(ctx, Settings{WebRTC: bp(true)}, nil); err != nil {
+		t.Fatal(err)
+	}
+	if !g.hs.WebRTC() || !strings.Contains(cmds(g.hs), "webrtc Y") {
+		t.Fatalf("not applied:\n%s", cmds(g.hs))
+	}
+	desired, _ := g.r.Desired(ctx)
+	obs, err := g.r.Current(ctx)
+	if err != nil || obs.Settings.WebRTC == nil || !*obs.Settings.WebRTC {
+		t.Fatalf("current %+v %v", obs, err)
+	}
+	if m, ok := KeyInSync(control.HBBS, KeyWebRTC, desired, obs.Settings); !m || !ok {
+		t.Fatalf("in sync: managed=%v in_sync=%v", m, ok)
+	}
+
+	// hbbs restarted with WEBRTC=N between probes: drift corrected.
+	g.r.Tick(ctx)
+	g.hs.Restart()
+	if obs, _ := g.r.Current(ctx); *obs.Settings.WebRTC {
+		t.Fatal("fake restart must reset the flag")
+	} else if _, ok := KeyInSync(control.HBBS, KeyWebRTC, desired, obs.Settings); ok {
+		t.Fatal("drift must be reported")
+	}
+	g.r.Tick(ctx)
+	if !g.hs.WebRTC() || g.r.Status().HBBS.Drifts == 0 {
+		t.Fatalf("drift not corrected: wr=%v %+v", g.hs.WebRTC(), g.r.Status())
+	}
+
+	// Unmanaged: row removed, server value left alone.
+	if err := g.r.Apply(ctx, Settings{}, nil); err != nil {
+		t.Fatal(err)
+	}
+	if d, _ := g.r.Desired(ctx); d.WebRTC != nil || !g.hs.WebRTC() {
+		t.Fatal("unmanaged webrtc must not be touched")
+	}
+
+	// An hbbs without the command (upstream) answers with nothing: observed
+	// is nil, the rest of the hbbs read-back still works, and applying it
+	// reports a read-back error.
+	g.hs.SetOverride(func(cmd string) (string, bool) { return "", strings.HasPrefix(cmd, "webrtc") })
+	obs, err = g.r.Current(ctx)
+	if err != nil || obs.Errors != nil || obs.Settings.WebRTC != nil || obs.Settings.MustLogin == nil {
+		t.Fatalf("legacy hbbs current %+v %v", obs, err)
+	}
+	if err := g.r.Apply(ctx, Settings{WebRTC: bp(false)}, nil); err == nil || !strings.Contains(err.Error(), "webrtc") {
+		t.Fatalf("legacy hbbs apply: %v", err)
+	}
+	if m, ok := KeyInSync(control.HBBS, KeyWebRTC, Settings{WebRTC: bp(false)}, obs.Settings); !m || ok {
 		t.Fatal("managed key with no observed value is not in sync")
 	}
 }

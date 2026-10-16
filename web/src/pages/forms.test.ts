@@ -5,6 +5,7 @@ import { idpSchema, toInput, type IdpValues } from "@/pages/IdentityProvidersPag
 import { mfaSchema, passwordSchema } from "@/pages/LoginPage";
 import { passwordChangeSchema } from "@/pages/my/ProfilePage";
 import { formatSecret, TOTP_CODE_RE } from "@/pages/my/TotpSection";
+import { iceEntries, toInput as clientOptionsInput, validateIceServers } from "@/pages/server/ClientOptionsCard";
 import { parseConsoleArgs } from "@/pages/server/Console";
 import { diffDraft, validateDraft } from "@/pages/server/ServerSettingsForm";
 import { settingsSchema, toPatch, type SettingsValues } from "@/pages/SettingsPage";
@@ -135,6 +136,7 @@ describe("server settings form", () => {
     always_use_relay: false,
     must_login: true,
     tcp_keepalive: null,
+    webrtc: null,
     blacklist: [],
     blocklist: ["198.51.100.0/24"],
     limit_speed_mbps: 32,
@@ -148,6 +150,7 @@ describe("server settings form", () => {
     always_use_relay: false,
     must_login: true,
     tcp_keepalive: false,
+    webrtc: false,
     blacklist: "",
     blocklist: "198.51.100.0/24",
     limit_speed_mbps: "32",
@@ -170,6 +173,12 @@ describe("server settings form", () => {
     expect(diffDraft(desired, { ...draft, tcp_keepalive: true })).toEqual({ tcp_keepalive: true });
     expect(diffDraft({ ...desired, tcp_keepalive: true }, { ...draft, tcp_keepalive: true })).toEqual({});
     expect(diffDraft({ ...desired, tcp_keepalive: true }, draft)).toEqual({ tcp_keepalive: false });
+  });
+
+  it("maps the WebRTC toggle (unmanaged = off)", () => {
+    expect(diffDraft(desired, { ...draft, webrtc: true })).toEqual({ webrtc: true });
+    expect(diffDraft({ ...desired, webrtc: true }, { ...draft, webrtc: true })).toEqual({});
+    expect(diffDraft({ ...desired, webrtc: true }, draft)).toEqual({ webrtc: false });
   });
 
   it("validates hosts, IPs and positive numbers", () => {
@@ -231,5 +240,31 @@ describe("panel settings form", () => {
     expect(p.branding).toEqual({ title: "Panel", welcome_markdown: "hi", web_client_url: null });
     expect(p.auth?.client_token_lifetime_hours).toBe(4380);
     expect(p.retention?.admin_audit_days).toBe(0);
+  });
+});
+
+describe("client options (WebRTC)", () => {
+  it("splits and validates ICE servers like the server", () => {
+    expect(iceEntries(" stun:a.example.com:3478 ,\n\nturn://u:p@b.example.com:3478\r\n")).toEqual([
+      "stun:a.example.com:3478",
+      "turn://u:p@b.example.com:3478",
+    ]);
+    expect(validateIceServers("")).toBeNull();
+    expect(validateIceServers("stun:a.example.com:3478\nstuns://b.example.com\nturns://u:p%40ss@c.example.com:5349")).toBeNull();
+    expect(validateIceServers("turn:no-creds.example.com:3478")).toBe("server.clientOptions.errors.turn");
+    expect(validateIceServers("turn://user@host.example.com")).toBe("server.clientOptions.errors.turn");
+    expect(validateIceServers("http://example.com")).toBe("server.clientOptions.errors.url");
+    expect(validateIceServers(Array.from({ length: 17 }, (_, i) => `stun:s${i}.example.com`).join("\n"))).toBe(
+      "server.clientOptions.errors.tooMany",
+    );
+  });
+
+  it("maps the draft to the PUT body", () => {
+    expect(clientOptionsInput({ ice_servers: " stun:a.example.com \n", congestion: "default" })).toEqual({
+      ice_servers: "stun:a.example.com",
+      webrtc_congestion_control: null,
+    });
+    expect(clientOptionsInput({ ice_servers: "", congestion: "on" }).webrtc_congestion_control).toBe(true);
+    expect(clientOptionsInput({ ice_servers: "", congestion: "off" }).webrtc_congestion_control).toBe(false);
   });
 });

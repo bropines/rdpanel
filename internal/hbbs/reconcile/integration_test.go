@@ -45,6 +45,7 @@ func TestIntegrationReconcileRealServers(t *testing.T) {
 		AlwaysUseRelay:          bp(true),
 		MustLogin:               bp(true),
 		TCPKeepalive:            bp(true),
+		WebRTC:                  bp(true),
 		Blacklist:               []string{"192.0.2.10", "2001:db8::10"},
 		Blocklist:               []string{"198.51.100.7"},
 		LimitSpeedMbps:          fp(16),
@@ -65,6 +66,7 @@ func TestIntegrationReconcileRealServers(t *testing.T) {
 		s := obs.Settings
 		ok := slices.Equal(s.RelayServers, want.RelayServers) && *s.AlwaysUseRelay && *s.MustLogin &&
 			s.TCPKeepalive != nil && *s.TCPKeepalive &&
+			s.WebRTC != nil && *s.WebRTC &&
 			slices.Equal(s.Blacklist, []string{"192.0.2.10", "2001:db8::10"}) &&
 			slices.Equal(s.Blocklist, want.Blocklist) && *s.LimitSpeedMbps == 16 && *s.TotalBandwidthMbps == 256 &&
 			rateEqual(0.1, *s.SingleBandwidthMbps) && *s.DowngradeThreshold == 0.5 && *s.DowngradeStartCheckSecs == 900

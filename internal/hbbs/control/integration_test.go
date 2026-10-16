@@ -47,6 +47,14 @@ func TestIntegrationRealAdmin(t *testing.T) {
 			t.Fatalf("tcp-keepalive %v: %v %v (needs bropines/rustdesk-server >= 393f872)", want, got, err)
 		}
 	}
+	for _, want := range []bool{true, false} {
+		if err := c.SetWebRTC(ctx, want); err != nil {
+			t.Fatal(err)
+		}
+		if got, err := c.WebRTC(ctx); err != nil || got != want {
+			t.Fatalf("webrtc %v: %v %v (needs bropines/rustdesk-server with WebRTC signaling)", want, got, err)
+		}
+	}
 	if err := c.SetRelayServers(ctx, []string{"127.0.0.1:21117"}); err != nil {
 		t.Fatal(err)
 	}

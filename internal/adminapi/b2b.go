@@ -19,6 +19,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	"github.com/bropines/rdpanel/internal/clientopts"
 	"github.com/bropines/rdpanel/internal/hbbs/control"
 	"github.com/bropines/rdpanel/internal/hbbs/presence"
 	"github.com/bropines/rdpanel/internal/hbbs/reconcile"
@@ -66,6 +67,9 @@ func registerB2b(r chi.Router, d Deps) {
 	limit := d.ConsoleLimit
 	if limit <= 0 {
 		limit = 30
+	}
+	if d.ClientOptions == nil {
+		d.ClientOptions = clientopts.New(d.Store, d.AEAD, d.Store.Now)
 	}
 	c := &b2bCore{d: d, log: d.Log, console: newWindowLimiter(limit, time.Minute, d.Store.Now)}
 	if c.log == nil {

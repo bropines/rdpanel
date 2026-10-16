@@ -236,7 +236,7 @@ function health(): S["ServerHealth"] {
   };
 }
 
-const HBBS_KEYS = new Set(["relay_servers", "always_use_relay", "must_login", "tcp_keepalive"]);
+const HBBS_KEYS = new Set(["relay_servers", "always_use_relay", "must_login", "tcp_keepalive", "webrtc"]);
 function serverState(): S["ServerSettingsState"] {
   const keys = Object.keys(db.serverDesired) as S["ServerSettingKey"][];
   return {
@@ -1394,6 +1394,27 @@ export const handlers = [
     Object.assign(db.serverApplied, db.serverDesired);
     return ok(serverState());
   }),
+  http.get(`${B}/server/client-options`, () => {
+    const u = requireAdmin();
+    if (u instanceof Response) return u;
+    return ok(db.clientOptions);
+  }),
+  http.put(`${B}/server/client-options`, async ({ request }) => {
+    const u = requireAdmin();
+    if (u instanceof Response) return u;
+    const b = await body<S["ClientOptionsInput"]>(request);
+    const entries = (b.ice_servers ?? "").split(/[,\r\n]+/).map((x) => x.trim()).filter(Boolean);
+    if (entries.some((e) => /^turns?:/.test(e) && !/^turns?:\/\/[^\s:@/]+:[^\s@/]+@\S+$/.test(e)))
+      return err(400, "validation_failed", "invalid client options", { ice_servers: "TURN needs credentials" });
+    Object.assign(db.clientOptions, {
+      ice_servers: entries.join("\n"),
+      webrtc_congestion_control: b.webrtc_congestion_control ?? null,
+      pushed: true,
+      modified_at: new Date().toISOString(),
+    });
+    audit(u, "server.client_options.update", "client_options", "", { ice_servers: entries.length });
+    return ok(db.clientOptions);
+  }),
   http.get(`${B}/server/ip-blocker`, ({ request }) => {
     const u = requireAdmin();
     if (u instanceof Response) return u;
@@ -1455,6 +1476,7 @@ export const handlers = [
       "relay-servers": `${(db.serverApplied.relay_servers ?? []).join("\n")}\n`,
       "must-login": b.args?.length ? "" : `MUST_LOGIN: ${db.serverApplied.must_login}\n`,
       "tcp-keepalive": b.args?.length ? "" : `TCP_KEEPALIVE: ${db.serverApplied.tcp_keepalive}\n`,
+      webrtc: b.args?.length ? "" : `WEBRTC: ${db.serverApplied.webrtc}\n`,
       "always-use-relay": b.args?.length ? "" : `ALWAYS_USE_RELAY: ${db.serverApplied.always_use_relay}\n`,
       blacklist: `${(db.serverApplied.blacklist ?? []).join("\n")}\n`,
       blocklist: `${(db.serverApplied.blocklist ?? []).join("\n")}\n`,

@@ -17,7 +17,7 @@ on:
     inputs:
       server_ref:
         description: bropines/rustdesk-server ref (branch, tag or sha) for hbbs/hbbr; maintained branch is rdpanel
-        default: 8b6f490ccdb63f58252d833f52761356841f69ba # rdpanel branch @ 8b6f490 (tcp-keepalive)
+        default: 12e6a7e467e97aafc68cb3142394bcbee8b0eab7 # rdpanel branch @ 12e6a7e (upstream 1.1.17 + WebRTC signaling)
         required: true
       push:
         description: push the image to ghcr.io
@@ -36,7 +36,7 @@ env:
   SERVER_REPO: bropines/rustdesk-server
   # Pinned hbbs/hbbr source for push/tag builds; bump deliberately after
   # testing a newer commit of the bropines/rustdesk-server `rdpanel` branch.
-  SERVER_REF: ${{ inputs.server_ref || '8b6f490ccdb63f58252d833f52761356841f69ba' }}
+  SERVER_REF: ${{ inputs.server_ref || '12e6a7e467e97aafc68cb3142394bcbee8b0eab7' }}
 
 jobs:
   hbb:

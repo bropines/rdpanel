@@ -129,6 +129,7 @@ the lejianwen API/login patches + hardening and keepalive fixes).
 | [`docs/oidc.md`](docs/oidc.md) | single sign-on: Authentik, Keycloak, Pocket ID, GitHub, Google |
 | [`docs/monitoring.md`](docs/monitoring.md) | metrics, Grafana dashboard, alert rules |
 | [`docs/relay-agents.md`](docs/relay-agents.md) | extra relays on other hosts (relay agents) |
+| [`docs/webrtc.md`](docs/webrtc.md) | WebRTC for RustDesk 1.5+: hbbs signaling, ICE/TURN servers pushed to clients, coturn |
 | [`docs/migration.md`](docs/migration.md) | coming from lejianwen/rustdesk-api |
 | [`docs/schema.md`](docs/schema.md) | database schema |
 

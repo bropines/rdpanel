@@ -29,6 +29,7 @@ type FakeAdmin struct {
 	alwaysUseRelay bool
 	mustLogin      bool
 	tcpKeepalive   bool
+	webrtc         bool
 	// LegacyAURBug reproduces the upstream bug where "aur Y|N" re-parses the
 	// relay list from "Y"/"N" (which fails DNS and empties it).
 	LegacyAURBug bool
@@ -103,12 +104,19 @@ func (f *FakeAdmin) TCPKeepalive() bool {
 	return f.tcpKeepalive
 }
 
+// WebRTC reports the fake's WEBRTC flag.
+func (f *FakeAdmin) WebRTC() bool {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.webrtc
+}
+
 // Restart simulates a process restart (state back to "CLI defaults").
 func (f *FakeAdmin) Restart() {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.relays = []string{"relay.example.com"}
-	f.alwaysUseRelay, f.mustLogin, f.tcpKeepalive = false, false, false
+	f.alwaysUseRelay, f.mustLogin, f.tcpKeepalive, f.webrtc = false, false, false, false
 	f.black, f.block = map[string]bool{}, map[string]bool{}
 	f.rates = map[string]float64{"limit-speed": 32, "total-bandwidth": 1024, "single-bandwidth": 128}
 	f.dt, f.t = 0.66, 1800
@@ -231,6 +239,12 @@ func (f *FakeAdmin) check(cmd string) string {
 			return ""
 		}
 		fmt.Fprintf(&b, "TCP_KEEPALIVE: %v\n", f.tcpKeepalive)
+	case "webrtc", "wr":
+		if a, ok := arg(1); ok {
+			f.webrtc = strings.ToUpper(a) == "Y"
+			return ""
+		}
+		fmt.Fprintf(&b, "WEBRTC: %v\n", f.webrtc)
 	case "ip-blocker", "ib":
 		b.WriteString("2\n")
 		a, ok := arg(1)

@@ -337,6 +337,9 @@ func (r *Reconciler) applyHBBS(ctx context.Context, s Settings, force bool) []ke
 	if s.TCPKeepalive != nil {
 		out = append(out, applyFlag(ctx, KeyTCPKeepalive, *s.TCPKeepalive, force, ctl.TCPKeepalive, ctl.SetTCPKeepalive))
 	}
+	if s.WebRTC != nil {
+		out = append(out, applyFlag(ctx, KeyWebRTC, *s.WebRTC, force, ctl.WebRTC, ctl.SetWebRTC))
+	}
 	relaysResent := false
 	if s.AlwaysUseRelay != nil {
 		res := keyResult{key: KeyAlwaysUseRelay}
@@ -567,6 +570,14 @@ func (r *Reconciler) Current(ctx context.Context) (Observed, error) {
 		switch {
 		case err == nil:
 			s.TCPKeepalive = &tk
+		case !errors.Is(err, control.ErrBadResponse):
+			return err
+		}
+		// Same for webrtc (fork builds before the WebRTC signaling commit).
+		wr, err := ctl.WebRTC(ctx)
+		switch {
+		case err == nil:
+			s.WebRTC = &wr
 		case !errors.Is(err, control.ErrBadResponse):
 			return err
 		}

@@ -19,6 +19,7 @@ import "strconv"
 //	oauth_states.pkce_verifier_enc           "oauth_state.pkce_verifier:<state id>"
 //	totp_secrets.secret_enc                  "totp:<user id>"
 //	settings["mail.smtp"].password_enc       "settings.smtp_password:0"
+//	settings["client.options"].ice_servers_enc "settings.ice_servers:0"
 //
 // Because the AD contains the row id, a row must be inserted first (to learn
 // its id) and the ciphertext written afterwards, or the id must be known in
@@ -69,3 +70,10 @@ const ScopeSMTPPassword = "settings.smtp_password"
 
 // SMTPPasswordAD is the AD of the stored SMTP password.
 func SMTPPasswordAD() string { return AD(ScopeSMTPPassword, 0) }
+
+// ScopeICEServers seals the client ICE server list (TURN credentials) stored
+// in the panel settings (settings key "client.options"; a single value, id 0).
+const ScopeICEServers = "settings.ice_servers"
+
+// ICEServersAD is the AD of the stored client ICE server list.
+func ICEServersAD() string { return AD(ScopeICEServers, 0) }

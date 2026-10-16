@@ -1593,6 +1593,28 @@ export interface paths {
         patch: operations["updateServerSettings"];
         trace?: never;
     };
+    "/server/client-options": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Client options pushed to RustDesk clients in heartbeats (WebRTC ICE servers) (admin). */
+        get: operations["getClientOptions"];
+        /**
+         * Replace the client options; clients pick them up on their next heartbeat.
+         * @description Missing fields are cleared. TURN URLs need credentials (`turn://user:pass@host:port`), as RustDesk
+         *     drops TURN entries without them. The audit trail records only the number of ICE servers.
+         */
+        put: operations["updateClientOptions"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/server/settings/reapply": {
         parameters: {
             query?: never;
@@ -3098,6 +3120,12 @@ export interface components {
              *     null also means the running hbbs does not support the command.
              */
             tcp_keepalive?: boolean | null;
+            /**
+             * @description WEBRTC (bropines/rustdesk-server fork): hbbs forwards WebRTC signaling (SDP offer/answer, trickle ICE)
+             *     between RustDesk 1.5+ clients; see docs/webrtc.md. In `applied`, null also means the running hbbs does
+             *     not support the command.
+             */
+            webrtc?: boolean | null;
             /** @description hbbr throttled IPs. */
             blacklist?: string[] | null;
             /** @description hbbr refused IPs. */
@@ -3114,6 +3142,7 @@ export interface components {
             always_use_relay?: boolean;
             must_login?: boolean;
             tcp_keepalive?: boolean;
+            webrtc?: boolean;
             blacklist?: string[];
             blocklist?: string[];
             limit_speed_mbps?: number;
@@ -3122,8 +3151,34 @@ export interface components {
             downgrade_threshold?: number;
             downgrade_start_check_s?: number;
         };
+        /**
+         * @description RustDesk client options pushed to every device in heartbeat responses (strategy `config_options`).
+         *     Nothing is pushed until they are saved once; after that every key is pushed, an empty value removing
+         *     it on the client (client default).
+         */
+        ClientOptions: {
+            /**
+             * @description `ice-servers`: STUN/TURN servers for the WebRTC transport (RustDesk 1.5+), one per line.
+             *     TURN entries carry credentials (`turn://user:pass@host:port`). Empty = RustDesk's default STUN.
+             */
+            ice_servers: string;
+            /** @description `allow-webrtc-congestion-control`; null = client default. */
+            webrtc_congestion_control: boolean | null;
+            /** @description True once saved (clients receive the keys). */
+            pushed: boolean;
+            /**
+             * Format: date-time
+             * @description Version clients echo back.
+             */
+            modified_at: string | null;
+        };
+        ClientOptionsInput: {
+            /** @description stun:, stuns:, turn:// or turns:// URLs separated by commas or newlines (at most 16). */
+            ice_servers?: string;
+            webrtc_congestion_control?: boolean | null;
+        };
         /** @enum {string} */
-        ServerSettingKey: "relay_servers" | "always_use_relay" | "must_login" | "tcp_keepalive" | "blacklist" | "blocklist" | "limit_speed_mbps" | "total_bandwidth_mbps" | "single_bandwidth_mbps" | "downgrade_threshold" | "downgrade_start_check_s";
+        ServerSettingKey: "relay_servers" | "always_use_relay" | "must_login" | "tcp_keepalive" | "webrtc" | "blacklist" | "blocklist" | "limit_speed_mbps" | "total_bandwidth_mbps" | "single_bandwidth_mbps" | "downgrade_threshold" | "downgrade_start_check_s";
         ServerSettingStatus: {
             key: components["schemas"]["ServerSettingKey"];
             /** @enum {string} */
@@ -6623,6 +6678,58 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ServerSettingsState"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    getClientOptions: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Options. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ClientOptions"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    updateClientOptions: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Must equal the rdpanel_csrf cookie. */
+                "X-CSRF-Token": components["parameters"]["CsrfHeader"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ClientOptionsInput"];
+            };
+        };
+        responses: {
+            /** @description Saved options. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ClientOptions"];
                 };
             };
             400: components["responses"]["ValidationFailed"];

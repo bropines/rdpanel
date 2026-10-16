@@ -38,6 +38,8 @@ export const auditApi = {
 export type ServerHealth = Schemas["ServerHealth"];
 export type ServerSettingsState = Schemas["ServerSettingsState"];
 export type ServerSettingsPatch = Schemas["ServerSettingsPatch"];
+export type ClientOptions = Schemas["ClientOptions"];
+export type ClientOptionsInput = Schemas["ClientOptionsInput"];
 
 export const serverApi = {
   health: () => api.request<ServerHealth>("/server/health"),
@@ -45,6 +47,9 @@ export const serverApi = {
   updateSettings: (body: ServerSettingsPatch) =>
     api.request<ServerSettingsState>("/server/settings", { method: "PATCH", body }),
   reapply: () => api.request<ServerSettingsState>("/server/settings/reapply", { method: "POST" }),
+  clientOptions: () => api.request<ClientOptions>("/server/client-options"),
+  updateClientOptions: (body: ClientOptionsInput) =>
+    api.request<ClientOptions>("/server/client-options", { method: "PUT", body }),
   ipBlocker: (q: QueryOf<"listIpBlocker">) => api.request<Schemas["IpBlockerPage"]>("/server/ip-blocker", { query: q }),
   unblockIp: (ip: string) => api.request<void>(`/server/ip-blocker/${encodeURIComponent(ip)}`, { method: "DELETE" }),
   ipChanges: (q: QueryOf<"listIpChanges">) => api.request<Schemas["IpChangesPage"]>("/server/ip-changes", { query: q }),

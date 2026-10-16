@@ -32,6 +32,8 @@ type Settings struct {
 	MustLogin      *bool    `json:"must_login"`
 	// TCPKeepalive needs bropines/rustdesk-server >= 393f872 (tcp-keepalive).
 	TCPKeepalive *bool `json:"tcp_keepalive"`
+	// WebRTC needs bropines/rustdesk-server with the webrtc admin command.
+	WebRTC *bool `json:"webrtc"`
 	// hbbr
 	Blacklist           []string `json:"blacklist"`
 	Blocklist           []string `json:"blocklist"`
@@ -49,6 +51,7 @@ const (
 	KeyAlwaysUseRelay      = "always_use_relay"
 	KeyMustLogin           = "must_login"
 	KeyTCPKeepalive        = "tcp_keepalive"
+	KeyWebRTC              = "webrtc"
 	KeyBlacklist           = "blacklist"
 	KeyBlocklist           = "blocklist"
 	KeyLimitSpeed          = "limit_speed"
@@ -82,6 +85,8 @@ func fields() []field {
 			func(s *Settings, r json.RawMessage) error { return json.Unmarshal(r, &s.MustLogin) }},
 		{control.HBBS, KeyTCPKeepalive, func(s *Settings) any { return ptr(s.TCPKeepalive) },
 			func(s *Settings, r json.RawMessage) error { return json.Unmarshal(r, &s.TCPKeepalive) }},
+		{control.HBBS, KeyWebRTC, func(s *Settings) any { return ptr(s.WebRTC) },
+			func(s *Settings, r json.RawMessage) error { return json.Unmarshal(r, &s.WebRTC) }},
 		{control.HBBR, KeyBlacklist, func(s *Settings) any { return nilIfNil(s.Blacklist) },
 			func(s *Settings, r json.RawMessage) error { return json.Unmarshal(r, &s.Blacklist) }},
 		{control.HBBR, KeyBlocklist, func(s *Settings) any { return nilIfNil(s.Blocklist) },
