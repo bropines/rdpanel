@@ -109,6 +109,8 @@ RUN set -eu; \
     printf 'hbbs, hbbr and rustdesk-utils in this image are built from\n%s at %s\nLicense: AGPL-3.0 (see that repository).\n' \
       "$HBB_REPO" "$HBB_REF" > /usr/share/doc/rustdesk-server/SOURCE; \
     chmod 0755 /usr/local/bin/rdpanel /usr/libexec/rdpanel/* /etc/s6-overlay/s6-rc.d/*/run; \
+    # hbbs/hbbr want a machine id; key-secret creates /data/machine-id on start.
+    [ -e /etc/machine-id ] || ln -s /data/machine-id /etc/machine-id; \
     /usr/bin/rdpanel version; /usr/bin/hbbs --version
 
 LABEL org.opencontainers.image.title="rdpanel" \
