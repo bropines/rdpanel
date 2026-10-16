@@ -90,6 +90,22 @@ Client tokens and panel sessions. The plain token is never stored.
 A token is active when `revoked_at IS NULL` and every non-NULL expiry is in the future
 (`store.AuthTokens.GetActive`). The janitor deletes rows inactive for more than 24 h.
 
+### `api_tokens`
+Personal API tokens for the admin API (`Authorization: Bearer rdp_...`, see
+[`api.md`](api.md)). The plain token is never stored.
+
+| column | notes |
+|---|---|
+| user_id | → users, CASCADE; the token acts as this user with their current role |
+| name | 1–64 chars, shown in the UI |
+| prefix | first 10 characters (`rdp_` + 6) for recognising the token |
+| token_sha256 | unique lookup key |
+| scope | `read` (GET/HEAD only) / `write` (full rights of the owner) |
+| expires_at | NULL = never |
+| created_at | |
+| last_used_at, last_used_ip | updated at most once a minute |
+| revoked_at | revocation by the owner or an admin |
+
 ### `identity_providers`
 OAuth/OIDC providers (legacy `oauths`).
 

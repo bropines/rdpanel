@@ -126,6 +126,7 @@ the lejianwen API/login patches + hardening and keepalive fixes).
 | [`docs/deploy.md`](docs/deploy.md) | full Docker guide: reverse proxy, split public/internal hosts, passkeys, e-mail, WebSocket clients, image tags, building the image |
 | [`docs/configuration.md`](docs/configuration.md) | every `RDPANEL_*` setting with its YAML key and default |
 | [`deploy/helm/rdpanel`](deploy/helm/rdpanel) | Kubernetes (Helm chart) |
+| [`docs/api.md`](docs/api.md) | admin API for scripts: personal API tokens, curl examples |
 | [`docs/oidc.md`](docs/oidc.md) | single sign-on: Authentik, Keycloak, Pocket ID, GitHub, Google |
 | [`docs/monitoring.md`](docs/monitoring.md) | metrics, Grafana dashboard, alert rules |
 | [`docs/relay-agents.md`](docs/relay-agents.md) | extra relays on other hosts (relay agents) |
