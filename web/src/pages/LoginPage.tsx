@@ -1,13 +1,13 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { getRouteApi, useNavigate } from "@tanstack/react-router";
-import { ArrowLeft, KeyRound, Loader2, MonitorCog } from "lucide-react";
+import { ArrowLeft, Fingerprint, KeyRound, Loader2, MonitorCog } from "lucide-react";
 import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { useTranslation } from "react-i18next";
 import { z } from "zod";
 
-import { auth, meQueryKey, navigateExternal, type AuthProvider, type Me } from "@/api/auth";
+import { auth, meQueryKey, navigateExternal, type AuthProvider, type Me, type MfaMethod } from "@/api/auth";
 import { dashboardApi } from "@/api/system";
 import { LanguageSwitcher } from "@/components/layout/LanguageSwitcher";
 import { ThemeToggle } from "@/components/layout/ThemeToggle";
@@ -17,6 +17,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/misc";
 import { safeNext } from "@/lib/redirect";
+import { passkeysSupported, webauthnErrorKey } from "@/lib/webauthn";
 import { loginErrorKey, oidcErrorKey } from "@/pages/login-errors";
 
 const route = getRouteApi("/login");
@@ -59,9 +60,13 @@ export function LoginPage() {
   const next = safeNext(search.next);
   const [step, setStep] = useState<"password" | "mfa">(search.mfa ? "mfa" : "password");
   const [error, setError] = useState<string | null>(search.error ? oidcErrorKey(search.error) : null);
+  // Second factors offered by /auth/login; unknown after an OIDC redirect.
+  const [mfaMethods, setMfaMethods] = useState<MfaMethod[] | undefined>(undefined);
 
   const branding = useQuery({ queryKey: ["branding"], queryFn: () => dashboardApi.branding(), staleTime: 300_000 });
-  const providers = useQuery({ queryKey: ["auth", "providers"], queryFn: () => auth.providers(), staleTime: 300_000 });
+  const options = useQuery({ queryKey: ["auth", "providers", "login-options"], queryFn: () => auth.loginOptions(), staleTime: 300_000 });
+  const canPasskey = !!options.data?.passkey && passkeysSupported();
+  const passkeyError = (err: unknown) => setError(webauthnErrorKey(err) ?? loginErrorKey(err));
 
   const done = (me: Me) => {
     qc.setQueryData(meQueryKey, me);
@@ -79,6 +84,7 @@ export function LoginPage() {
     onSuccess: (res) => {
       setError(null);
       if (res.kind === "mfa") {
+        setMfaMethods(res.methods);
         setStep("mfa");
         return;
       }
@@ -102,8 +108,12 @@ export function LoginPage() {
     },
   });
 
+  const passkeyLogin = useMutation({ mutationFn: () => auth.passkeyLogin(), onSuccess: done, onError: passkeyError });
+  const passkeyMfa = useMutation({ mutationFn: () => auth.passkeyMfa(), onSuccess: done, onError: passkeyError });
+
   const title = branding.data?.title || t("app.title");
-  const oidc: AuthProvider[] = providers.data ?? [];
+  const oidc: AuthProvider[] = options.data?.providers ?? [];
+  const mfaPasskey = canPasskey && (mfaMethods === undefined || mfaMethods.includes("passkey"));
   const pwErrors = pwForm.formState.errors;
 
   return (
@@ -155,13 +165,28 @@ export function LoginPage() {
                   {login.isPending && <Loader2 className="animate-spin" />}
                   {login.isPending ? t("login.submitting") : t("login.submit")}
                 </Button>
-                {oidc.length > 0 && (
+                {(oidc.length > 0 || canPasskey) && (
                   <>
                     <div className="flex w-full items-center gap-3 text-xs text-muted-foreground">
                       <Separator className="flex-1" />
                       {t("login.or")}
                       <Separator className="flex-1" />
                     </div>
+                    {canPasskey && (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="w-full"
+                        disabled={passkeyLogin.isPending}
+                        onClick={() => {
+                          setError(null);
+                          passkeyLogin.mutate();
+                        }}
+                      >
+                        {passkeyLogin.isPending ? <Loader2 className="animate-spin" /> : <Fingerprint />}
+                        {t("login.passkey")}
+                      </Button>
+                    )}
                     {oidc.map((p) => (
                       <Button
                         key={p.slug}
@@ -206,6 +231,21 @@ export function LoginPage() {
                   {mfa.isPending && <Loader2 className="animate-spin" />}
                   {t("login.verify")}
                 </Button>
+                {mfaPasskey && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="w-full"
+                    disabled={passkeyMfa.isPending}
+                    onClick={() => {
+                      setError(null);
+                      passkeyMfa.mutate();
+                    }}
+                  >
+                    {passkeyMfa.isPending ? <Loader2 className="animate-spin" /> : <Fingerprint />}
+                    {t("login.usePasskey")}
+                  </Button>
+                )}
                 <Button
                   type="button"
                   variant="ghost"

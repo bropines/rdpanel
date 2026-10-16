@@ -22,8 +22,8 @@ command, without re-login.
 - **Admin panel:** devices with live online status from hbbs (pushed over SSE), users and
   groups, unified address books with sharing and coloured tags, audit logs, identity
   providers, hbbs/hbbr control. English and Russian, light and dark themes, mobile layout.
-- **Sign-in:** password, TOTP 2FA with recovery codes, OIDC (GitHub, Google, any OIDC
-  provider) for both the panel and the RustDesk client. The public client API and the
+- **Sign-in:** password, TOTP 2FA with recovery codes, passkeys (WebAuthn) for the panel,
+  OIDC (GitHub, Google, any OIDC provider) for both the panel and the RustDesk client. The public client API and the
   admin panel can live on different hosts (e.g. panel only on a VPN/tailnet).
 - **Server control:** relay servers, always-use-relay, must-login, opt-in keepalive for
   TCP/WebSocket clients, IP blocker, block/blacklists, bandwidth. A reconciler stores the
@@ -137,6 +137,7 @@ Environment variables override the optional YAML file named by `RDPANEL_CONFIG`
 | `RDPANEL_CONFIG` | — | path to a YAML config file |
 | `RDPANEL_LISTEN` (`listen`) | `:21114` | HTTP bind address (production: `127.0.0.1:31114` behind a reverse proxy) |
 | `RDPANEL_PUBLIC_URL` (`public_url`) | — | external base URL, e.g. `https://desk.example.com`; used for OIDC callbacks, enables HSTS when https |
+| `RDPANEL_ADMIN_URL` (`admin_url`) | = public URL | base URL of the panel (SPA + `/api/v1/*`) when it is served from another (e.g. internal) host |
 | `RDPANEL_DATA_DIR` (`data_dir`) | `/data` | data directory |
 | `RDPANEL_DB_PATH` (`db_path`) | `<data>/panel.db` | SQLite database |
 | `RDPANEL_SECRET_KEY` (`secret_key`) | — | base64 32-byte key for secrets at rest; otherwise read/generated in the key file |
@@ -147,6 +148,8 @@ Environment variables override the optional YAML file named by `RDPANEL_CONFIG`
 | `RDPANEL_JWT_LIFETIME` (`auth.jwt_lifetime`) | = token lifetime | fixed JWT `exp` (what hbbs enforces; hbbs cannot see revocation) |
 | `RDPANEL_SESSION_IDLE` (`auth.session_idle`) | `12h` | panel session idle timeout |
 | `RDPANEL_SESSION_ABSOLUTE` (`auth.session_absolute`) | `168h` | panel session absolute lifetime |
+| `RDPANEL_WEBAUTHN_RP_ID` (`webauthn.rp_id`) | host of the admin URL | passkey relying party id: the panel host or a parent domain of every origin (passkeys are bound to it — changing it invalidates registered passkeys) |
+| `RDPANEL_WEBAUTHN_ORIGINS` (`webauthn.origins`) | admin URL origin (+ public URL origin when within the RP id) | comma-separated origins (`scheme://host[:port]`) the panel is opened from; passkeys are off when neither this nor a URL is set, or the host is an IP address |
 | `RDPANEL_TRUSTED_PROXIES` (`http.trusted_proxies`) | `127.0.0.0/8,::1/128` | IPs/CIDRs whose forwarding headers are trusted |
 | `RDPANEL_REAL_IP_HEADER` (`http.real_ip_header`) | `X-Forwarded-For` | or `X-Real-IP`, `CF-Connecting-IP` |
 | `RDPANEL_METRICS_ALLOW` (`http.metrics_allow`) | `127.0.0.0/8,::1/128` | client IPs allowed to read `/metrics` |

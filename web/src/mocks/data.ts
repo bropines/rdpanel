@@ -372,7 +372,7 @@ export const alarms: S["AlarmAudit"][] = Array.from({ length: 7 }, (_, i) => {
 export const logins: S["LoginEvent"][] = Array.from({ length: 70 }, (_, i) => {
   const failed = rand() < 0.15;
   const u = pick(users);
-  const method = pick(["password", "password", "password", "oidc", "webauth"] as const);
+  const method = pick(["password", "password", "password", "passkey", "oidc", "webauth"] as const);
   const kind = pick(["web", "client", "client"] as const);
   return {
     id: 70 - i,

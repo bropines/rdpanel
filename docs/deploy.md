@@ -128,6 +128,7 @@ DB) succeeds.
 | `RDPANEL_DATA_DIR` | panel, key-secret | `/data/panel` | panel.db, secret.key, jwt.key |
 | `RDPANEL_DB_PATH`, `RDPANEL_SECRET_KEY`, `RDPANEL_SECRET_KEY_FILE`, `RDPANEL_JWT_KEY_FILE` | panel | derived from data dir | storage and keys |
 | `RDPANEL_TOKEN_LIFETIME`, `RDPANEL_JWT_LIFETIME`, `RDPANEL_SESSION_IDLE`, `RDPANEL_SESSION_ABSOLUTE` | panel | `4380h`, = token, `12h`, `168h` | token/session lifetimes |
+| `RDPANEL_WEBAUTHN_RP_ID`, `RDPANEL_WEBAUTHN_ORIGINS` | panel | admin URL host / origin | passkey relying party (see [Passkeys](#passkeys)) |
 | `RDPANEL_TRUSTED_PROXIES`, `RDPANEL_REAL_IP_HEADER` | panel | loopback, `X-Forwarded-For` | client-IP resolution |
 | `RDPANEL_METRICS_ALLOW` | panel | loopback | who may read `/metrics` |
 | `RDPANEL_METRICS_PER_DEVICE` | panel | `false` | per-device presence series (see [monitoring](monitoring.md)) |
@@ -253,6 +254,39 @@ server {
 #   proxy_buffering off;                              # /api/v1/events (SSE)
 #   proxy_read_timeout 1h;
 ```
+
+### Passkeys
+
+Users can add passkeys (Touch ID, Windows Hello, phones, security keys) under
+**Profile & security** and then use **Sign in with a passkey** (usernameless,
+with user verification — it counts as two factors) or use a passkey instead of
+the TOTP code after the password/OIDC step. Admins see and revoke a user's
+passkeys in the user drawer; additions, removals and sign-ins are audited.
+
+WebAuthn binds every passkey to a *relying party id* (a host name) and checks
+the page origin. The panel derives both from where the SPA is served:
+
+- RP id = host of `RDPANEL_ADMIN_URL` (fallback `RDPANEL_PUBLIC_URL`);
+- allowed origin = that URL's origin (plus the public URL's origin when its host
+  is within the RP id).
+
+With the split-host layout above, passkeys belong to the internal admin host
+(`desk-admin.internal.example.com`); nothing passkey-related touches the public
+host. To share passkeys between several panel hosts, set a common parent domain
+and list every origin:
+
+```sh
+RDPANEL_WEBAUTHN_RP_ID=internal.example.com
+RDPANEL_WEBAUTHN_ORIGINS=https://desk-admin.internal.example.com,https://panel.internal.example.com
+```
+
+Browsers only allow WebAuthn over https (or `http://localhost`) and never for an
+IP address; a panel reached as `http://10.0.0.5:21114` has passkeys disabled
+(logged at start-up). Changing the RP id later makes existing passkeys unusable
+(users re-add them). RustDesk desktop/mobile clients cannot do WebAuthn; to use
+passkeys there, sign in through an OIDC provider that supports them (e.g. Pocket
+ID, Authentik, Keycloak) — the panel's OIDC support covers both panel and client
+logins.
 
 `/metrics` is answered only when the resolved client IP **and** every address in
 any forwarding header (`X-Forwarded-For`, `X-Real-IP`, `Forwarded`, …) are in

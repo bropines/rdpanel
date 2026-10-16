@@ -8,6 +8,9 @@ export function loginErrorKey(err: unknown): string {
     if (err.code === "password_login_disabled") return "login.passwordDisabled";
     if (err.code === "oidc_not_configured") return "login.oidcNotConfigured";
     if (err.code === "provider_unavailable") return "login.providerUnavailable";
+    if (err.code === "passkey_failed") return "login.passkeyFailed";
+    if (err.code === "passkeys_unavailable") return "login.passkeysUnavailable";
+    if (err.code === "no_passkeys") return "login.noPasskeys";
     if (err.status === 401) return "login.invalidCredentials";
   }
   return "login.failed";

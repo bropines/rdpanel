@@ -14,8 +14,13 @@
  *   GET    /me/security/identities                                  → {items: UserIdentity[]}
  *   DELETE /me/security/identities/{id}                             → 204
  *   POST   /me/security/identities/link/{slug} {next}               → {url}
+ *   GET    /me/security/passkeys                                    → {items: Passkey[]}
+ *   POST   /me/security/passkeys/register/{begin,finish}            → Passkey (begin needs re-auth)
+ *   PATCH  /me/security/passkeys/{id} {name}                        → Passkey
+ *   DELETE /me/security/passkeys/{id}                               → 204
  */
 import { api, type ApiClient, type Schemas } from "@/api/client";
+import { createPasskey, type JsonObject } from "@/lib/webauthn";
 
 export type Session = Schemas["Session"];
 export type LinkedIdentity = Schemas["UserIdentity"];
@@ -24,6 +29,7 @@ export type RecoveryCodes = Schemas["RecoveryCodes"];
 export type ProfileUpdate = Schemas["ProfileUpdate"];
 export type PasswordChange = Schemas["ChangePasswordRequest"];
 export type ReauthRequest = Schemas["ReauthRequest"];
+export type Passkey = Schemas["Passkey"];
 
 const S = "/me/security";
 
@@ -49,6 +55,15 @@ export function securityApi(client: ApiClient = api) {
           body: next ? { next } : {},
         })
       ).url,
+    passkeys: () => client.request<{ items: Passkey[] }>(`${S}/passkeys`),
+    /** Re-authenticates, runs navigator.credentials.create() and stores the passkey. */
+    async addPasskey(reauth: ReauthRequest, name: string): Promise<Passkey> {
+      const c = await client.request<Schemas["PasskeyCeremony"]>(`${S}/passkeys/register/begin`, { method: "POST", body: reauth });
+      const credential = await createPasskey(c.options as JsonObject);
+      return client.request<Passkey>(`${S}/passkeys/register/finish`, { method: "POST", body: { ceremony_id: c.ceremony_id, name, credential } });
+    },
+    renamePasskey: (id: number, name: string) => client.request<Passkey>(`${S}/passkeys/${id}`, { method: "PATCH", body: { name } }),
+    deletePasskey: (id: number) => client.request<void>(`${S}/passkeys/${id}`, { method: "DELETE" }),
   };
 }
 
