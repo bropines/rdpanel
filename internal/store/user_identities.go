@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/bropines/rustdesk-panel/internal/db"
+	"github.com/bropines/rdpanel/internal/db"
 )
 
 // UserIdentity is a row of user_identities: a local user linked to an IdP subject.

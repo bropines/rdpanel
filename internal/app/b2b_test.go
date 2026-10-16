@@ -6,11 +6,11 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/bropines/rustdesk-panel/internal/adminapi"
-	"github.com/bropines/rustdesk-panel/internal/db"
-	"github.com/bropines/rustdesk-panel/internal/hbbs/control"
-	"github.com/bropines/rustdesk-panel/internal/hbbs/hbbstest"
-	"github.com/bropines/rustdesk-panel/internal/store"
+	"github.com/bropines/rdpanel/internal/adminapi"
+	"github.com/bropines/rdpanel/internal/db"
+	"github.com/bropines/rdpanel/internal/hbbs/control"
+	"github.com/bropines/rdpanel/internal/hbbs/hbbstest"
+	"github.com/bropines/rdpanel/internal/store"
 )
 
 func TestCollectPunchRequests(t *testing.T) {

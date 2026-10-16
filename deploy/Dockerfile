@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1.7
 #
-# rustdesk-panel all-in-one image: hbbs + hbbr (bropines/rustdesk-server, AGPL-3.0)
+# RD Panel all-in-one image: hbbs + hbbr (bropines/rustdesk-server, AGPL-3.0)
 # and rdpanel (this repo, MIT) supervised by s6-overlay v3 on Alpine.
 #
 # Build context: the repository root.
@@ -59,7 +59,7 @@ COPY web/embed.go ./web/embed.go
 COPY --from=web /src/web/dist ./web/dist
 RUN --mount=type=cache,target=/go/pkg/mod \
     --mount=type=cache,target=/root/.cache/go-build \
-    PKG=github.com/bropines/rustdesk-panel; \
+    PKG=github.com/bropines/rdpanel; \
     GOOS=$TARGETOS GOARCH=$TARGETARCH go build \
       -ldflags "-s -w -X $PKG/internal/buildinfo.Version=$VERSION -X $PKG/internal/buildinfo.Commit=$COMMIT -X $PKG/internal/buildinfo.Date=$DATE -X $PKG/internal/buildinfo.HBBRepo=$HBB_REPO -X $PKG/internal/buildinfo.HBBRef=$HBB_REF" \
       -o /out/rdpanel ./cmd/rdpanel
@@ -109,9 +109,9 @@ RUN set -eu; \
     chmod 0755 /usr/local/bin/rdpanel /usr/libexec/rdpanel/* /etc/s6-overlay/s6-rc.d/*/run; \
     /usr/bin/rdpanel version; /usr/bin/hbbs --version
 
-LABEL org.opencontainers.image.title="rustdesk-panel" \
-      org.opencontainers.image.description="RustDesk hbbs/hbbr + rdpanel API server and admin panel (s6-overlay)" \
-      org.opencontainers.image.source="https://github.com/bropines/rustdesk-panel" \
+LABEL org.opencontainers.image.title="rdpanel" \
+      org.opencontainers.image.description="RD Panel: rdpanel API server and admin panel with hbbs/hbbr, for RustDesk clients (s6-overlay). Not affiliated with RustDesk." \
+      org.opencontainers.image.source="https://github.com/bropines/rdpanel" \
       org.opencontainers.image.licenses="MIT AND AGPL-3.0-only" \
       org.opencontainers.image.version="${VERSION}" \
       io.github.bropines.rustdesk-server.ref="${HBB_REF}"

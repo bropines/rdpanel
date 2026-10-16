@@ -16,10 +16,10 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/testutil"
 
-	"github.com/bropines/rustdesk-panel/internal/db"
-	"github.com/bropines/rustdesk-panel/internal/events"
-	"github.com/bropines/rustdesk-panel/internal/hbbs/wire"
-	"github.com/bropines/rustdesk-panel/internal/store"
+	"github.com/bropines/rdpanel/internal/db"
+	"github.com/bropines/rdpanel/internal/events"
+	"github.com/bropines/rdpanel/internal/hbbs/wire"
+	"github.com/bropines/rdpanel/internal/store"
 )
 
 // fakeHBBS speaks the hbbs rendezvous TCP protocol as far as the panel uses it

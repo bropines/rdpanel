@@ -6,9 +6,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/bropines/rustdesk-panel/internal/buildinfo"
-	"github.com/bropines/rustdesk-panel/internal/store"
-	"github.com/bropines/rustdesk-panel/internal/updatecheck"
+	"github.com/bropines/rdpanel/internal/buildinfo"
+	"github.com/bropines/rdpanel/internal/store"
+	"github.com/bropines/rdpanel/internal/updatecheck"
 )
 
 type fakeUpdates struct{ res updatecheck.Result }
@@ -26,7 +26,7 @@ func TestAbout(t *testing.T) {
 	setBuildVars(t, "v0.1.0", "https://github.com/bropines/rustdesk-server", "8b6f490")
 	checked := time.Date(2026, 10, 15, 11, 0, 0, 0, time.UTC)
 	e := newB2Env(t, b2opts{updates: fakeUpdates{updatecheck.Result{CheckedAt: checked,
-		Latest: &updatecheck.Release{Version: "v0.2.0", URL: "https://github.com/bropines/rustdesk-panel/releases/tag/v0.2.0",
+		Latest: &updatecheck.Release{Version: "v0.2.0", URL: "https://github.com/bropines/rdpanel/releases/tag/v0.2.0",
 			PublishedAt: checked.Add(-time.Hour)}}}})
 	admin, _ := e.as("root", store.RoleAdmin)
 	user, _ := e.as("bob", store.RoleUser)

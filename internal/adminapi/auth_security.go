@@ -12,16 +12,16 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"github.com/bropines/rustdesk-panel/internal/auth"
-	"github.com/bropines/rustdesk-panel/internal/httpx"
-	"github.com/bropines/rustdesk-panel/internal/store"
+	"github.com/bropines/rdpanel/internal/auth"
+	"github.com/bropines/rdpanel/internal/httpx"
+	"github.com/bropines/rdpanel/internal/store"
 )
 
 // MinPasswordChars is the minimum length of a password set from the panel.
 const MinPasswordChars = 8
 
 // defaultTOTPIssuer labels the otpauth URI when no branding title is set.
-const defaultTOTPIssuer = "RustDesk Panel"
+const defaultTOTPIssuer = "RD Panel"
 
 // registerSecurity mounts the "my security" routes. They are reachable while
 // a forced 2FA enrolment is pending (requireSession, not RequireUser).

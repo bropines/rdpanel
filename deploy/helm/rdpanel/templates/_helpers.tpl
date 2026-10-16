@@ -1,17 +1,28 @@
 {{/* vim: set filetype=mustache: */}}
 
-{{- define "rustdesk-panel.name" -}}
-{{- default .Chart.Name .Values.nameOverride | trunc 63 | trimSuffix "-" -}}
+{{/*
+Base name for resource names and the app.kubernetes.io/name selector label.
+It is deliberately NOT .Chart.Name: the chart was published as "rustdesk-panel"
+up to 0.1.x, and StatefulSet selectors and volumeClaimTemplates are immutable,
+so releases installed from the old chart must keep rendering the same names
+after an upgrade to the "rdpanel" chart. New installs may set nameOverride.
+*/}}
+{{- define "rdpanel.baseName" -}}
+{{- default "rustdesk-panel" .Values.nameOverride -}}
+{{- end -}}
+
+{{- define "rdpanel.name" -}}
+{{- include "rdpanel.baseName" . | trunc 63 | trimSuffix "-" -}}
 {{- end -}}
 
 {{/*
 Full name. Kept to 50 chars so suffixed names (-rendezvous-tcp, -headless) stay <= 63.
 */}}
-{{- define "rustdesk-panel.fullname" -}}
+{{- define "rdpanel.fullname" -}}
 {{- if .Values.fullnameOverride -}}
 {{- .Values.fullnameOverride | trunc 50 | trimSuffix "-" -}}
 {{- else -}}
-{{- $name := default .Chart.Name .Values.nameOverride -}}
+{{- $name := include "rdpanel.baseName" . -}}
 {{- if contains $name .Release.Name -}}
 {{- .Release.Name | trunc 50 | trimSuffix "-" -}}
 {{- else -}}
@@ -20,18 +31,18 @@ Full name. Kept to 50 chars so suffixed names (-rendezvous-tcp, -headless) stay 
 {{- end -}}
 {{- end -}}
 
-{{- define "rustdesk-panel.chart" -}}
+{{- define "rdpanel.chart" -}}
 {{- printf "%s-%s" .Chart.Name .Chart.Version | replace "+" "_" | trunc 63 | trimSuffix "-" -}}
 {{- end -}}
 
-{{- define "rustdesk-panel.selectorLabels" -}}
-app.kubernetes.io/name: {{ include "rustdesk-panel.name" . }}
+{{- define "rdpanel.selectorLabels" -}}
+app.kubernetes.io/name: {{ include "rdpanel.name" . }}
 app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end -}}
 
-{{- define "rustdesk-panel.labels" -}}
-helm.sh/chart: {{ include "rustdesk-panel.chart" . }}
-{{ include "rustdesk-panel.selectorLabels" . }}
+{{- define "rdpanel.labels" -}}
+helm.sh/chart: {{ include "rdpanel.chart" . }}
+{{ include "rdpanel.selectorLabels" . }}
 app.kubernetes.io/version: {{ .Chart.AppVersion | quote }}
 app.kubernetes.io/managed-by: {{ .Release.Service }}
 app.kubernetes.io/part-of: rustdesk
@@ -41,7 +52,7 @@ app.kubernetes.io/part-of: rustdesk
 {{- end -}}
 
 {{/* metadata.annotations block content (commonAnnotations merged with extra dict passed as .extra) */}}
-{{- define "rustdesk-panel.annotations" -}}
+{{- define "rdpanel.annotations" -}}
 {{- $a := merge (dict) (.extra | default dict) (.root.Values.commonAnnotations | default dict) -}}
 {{- if $a -}}
 annotations:
@@ -49,15 +60,15 @@ annotations:
 {{- end }}
 {{- end -}}
 
-{{- define "rustdesk-panel.serviceAccountName" -}}
+{{- define "rdpanel.serviceAccountName" -}}
 {{- if .Values.serviceAccount.create -}}
-{{- default (include "rustdesk-panel.fullname" .) .Values.serviceAccount.name -}}
+{{- default (include "rdpanel.fullname" .) .Values.serviceAccount.name -}}
 {{- else -}}
 {{- default "default" .Values.serviceAccount.name -}}
 {{- end -}}
 {{- end -}}
 
-{{- define "rustdesk-panel.image" -}}
+{{- define "rdpanel.image" -}}
 {{- if .Values.image.digest -}}
 {{- printf "%s@%s" .Values.image.repository .Values.image.digest -}}
 {{- else -}}
@@ -66,50 +77,50 @@ annotations:
 {{- end -}}
 
 {{/* Panel HTTP port, derived from panel.listen (":21114", "127.0.0.1:31114", "[::]:21114"). */}}
-{{- define "rustdesk-panel.httpPort" -}}
+{{- define "rdpanel.httpPort" -}}
 {{- regexReplaceAll "^.*:" (toString .Values.panel.listen) "" -}}
 {{- end -}}
 
-{{- define "rustdesk-panel.secretName" -}}
-{{- default (include "rustdesk-panel.fullname" .) .Values.secrets.existingSecret -}}
+{{- define "rdpanel.secretName" -}}
+{{- default (include "rdpanel.fullname" .) .Values.secrets.existingSecret -}}
 {{- end -}}
 
-{{- define "rustdesk-panel.serverKeysSecretName" -}}
-{{- default (printf "%s-server-keys" (include "rustdesk-panel.fullname" .)) .Values.serverKeys.existingSecret -}}
+{{- define "rdpanel.serverKeysSecretName" -}}
+{{- default (printf "%s-server-keys" (include "rdpanel.fullname" .)) .Values.serverKeys.existingSecret -}}
 {{- end -}}
 
-{{- define "rustdesk-panel.websocketServiceEnabled" -}}
+{{- define "rdpanel.websocketServiceEnabled" -}}
 {{- if or .Values.websocket.service.enabled .Values.websocket.ingress.enabled (and .Values.httpRoute.enabled .Values.httpRoute.websocketRules) -}}
 true
 {{- end -}}
 {{- end -}}
 
-{{- define "rustdesk-panel.dataClaimName" -}}
+{{- define "rdpanel.dataClaimName" -}}
 {{- if .Values.persistence.existingClaim -}}
 {{- .Values.persistence.existingClaim -}}
 {{- else -}}
-{{- printf "data-%s-0" (include "rustdesk-panel.fullname" .) -}}
+{{- printf "data-%s-0" (include "rdpanel.fullname" .) -}}
 {{- end -}}
 {{- end -}}
 
 {{/* Env vars shared by the server container and the migration job. */}}
-{{- define "rustdesk-panel.env" -}}
+{{- define "rdpanel.env" -}}
 - name: RUSTDESK_API_JWT_KEY
   valueFrom:
     secretKeyRef:
-      name: {{ include "rustdesk-panel.secretName" . }}
+      name: {{ include "rdpanel.secretName" . }}
       key: {{ .Values.secrets.jwtKeyKey }}
 {{- if .Values.secrets.setSecretKey }}
 - name: RDPANEL_SECRET_KEY
   valueFrom:
     secretKeyRef:
-      name: {{ include "rustdesk-panel.secretName" . }}
+      name: {{ include "rdpanel.secretName" . }}
       key: {{ .Values.secrets.secretKeyKey }}
 {{- end }}
 {{- end -}}
 
 {{/* Generated probe handler. */}}
-{{- define "rustdesk-panel.probeHandler" -}}
+{{- define "rdpanel.probeHandler" -}}
 {{- if eq .Values.probes.type "exec" }}
 exec:
   command:
@@ -119,7 +130,7 @@ exec:
     - /dev/null
     - -T
     - "3"
-    - http://127.0.0.1:{{ include "rustdesk-panel.httpPort" . }}{{ .Values.probes.path }}
+    - http://127.0.0.1:{{ include "rdpanel.httpPort" . }}{{ .Values.probes.path }}
 {{- else }}
 httpGet:
   path: {{ .Values.probes.path }}
@@ -127,9 +138,9 @@ httpGet:
 {{- end }}
 {{- end -}}
 
-{{- define "rustdesk-panel.probe" -}}
+{{- define "rdpanel.probe" -}}
 {{- $p := .probe -}}
-{{ include "rustdesk-panel.probeHandler" .root | trim }}
+{{ include "rdpanel.probeHandler" .root | trim }}
 {{- range $k := list "initialDelaySeconds" "periodSeconds" "timeoutSeconds" "failureThreshold" "successThreshold" }}
 {{- if hasKey $p $k }}
 {{ $k }}: {{ index $p $k }}

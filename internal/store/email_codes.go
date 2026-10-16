@@ -5,7 +5,7 @@ import (
 	"database/sql"
 	"time"
 
-	"github.com/bropines/rustdesk-panel/internal/db"
+	"github.com/bropines/rdpanel/internal/db"
 )
 
 // Email code purposes (email_codes.purpose).

@@ -18,10 +18,10 @@ import (
 	"github.com/go-webauthn/webauthn/protocol/webauthncbor"
 	"github.com/go-webauthn/webauthn/protocol/webauthncose"
 
-	"github.com/bropines/rustdesk-panel/internal/auth"
-	"github.com/bropines/rustdesk-panel/internal/config"
-	"github.com/bropines/rustdesk-panel/internal/oidc/oidctest"
-	"github.com/bropines/rustdesk-panel/internal/store"
+	"github.com/bropines/rdpanel/internal/auth"
+	"github.com/bropines/rdpanel/internal/config"
+	"github.com/bropines/rdpanel/internal/oidc/oidctest"
+	"github.com/bropines/rdpanel/internal/store"
 )
 
 // vauth is a minimal software authenticator (ES256, "none" attestation)

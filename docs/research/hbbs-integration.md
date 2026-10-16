@@ -362,7 +362,7 @@ Example regex: `Authentication failed from \[?(?:::ffff:)?<HOST>\]?:\d+ for peer
 
 ### 5.4 Proposed workflow: one multi-arch image, `GITHUB_TOKEN` only
 
-Put this workflow in the **panel repo** (`bropines/rustdesk-panel`). It checks out the public server fork as a second repo, so there are no cross-repo secrets and no monorepo. It builds both architectures natively, without QEMU for the Rust build, and then runs a single buildx multi-platform build. Keep a copy of `docker/rootfs` in the panel repo under `deploy/s6/` with `api` renamed to `panel`.
+Put this workflow in the **panel repo** (`bropines/rdpanel`). It checks out the public server fork as a second repo, so there are no cross-repo secrets and no monorepo. It builds both architectures natively, without QEMU for the Rust build, and then runs a single buildx multi-platform build. Keep a copy of `docker/rootfs` in the panel repo under `deploy/s6/` with `api` renamed to `panel`.
 
 `.github/workflows/image.yml`:
 
@@ -377,7 +377,7 @@ permissions:
   contents: read
   packages: write
 env:
-  IMAGE: ghcr.io/bropines/rustdesk-panel        # pick the final <name>
+  IMAGE: ghcr.io/bropines/rdpanel        # pick the final <name>
   SERVER_REPO: bropines/rustdesk-server
   SERVER_REF: merge-upstream-1.1.16
 

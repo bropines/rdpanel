@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/bropines/rustdesk-panel/internal/store"
+	"github.com/bropines/rdpanel/internal/store"
 )
 
 func TestDeploy(t *testing.T) {

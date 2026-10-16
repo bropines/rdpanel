@@ -11,8 +11,8 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"github.com/bropines/rustdesk-panel/internal/metrics"
-	"github.com/bropines/rustdesk-panel/internal/store"
+	"github.com/bropines/rdpanel/internal/metrics"
+	"github.com/bropines/rdpanel/internal/store"
 )
 
 // openAuditMaxAge bounds how far back an "authorized"/"close" event looks for

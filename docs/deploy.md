@@ -1,7 +1,7 @@
-# Deploying rustdesk-panel
+# Deploying RD Panel
 
 The release artifact is one multi-arch container image,
-`ghcr.io/bropines/rustdesk-panel` (linux/amd64, linux/arm64), that runs three
+`ghcr.io/bropines/rdpanel` (linux/amd64, linux/arm64), that runs three
 services under [s6-overlay](https://github.com/just-containers/s6-overlay) v3:
 
 | Service | Binary | Ports | Source |
@@ -20,8 +20,15 @@ loopback connections (see `docs/research/hbbs-integration.md` §1.5).
 | `X.Y.Z`, `X.Y`, `latest` | release tag `vX.Y.Z` (pre-release tags such as `v1.0.0-rc.1` only get `X.Y.Z-rc.1`) |
 | `edge`, `sha-<short>` | every push to `main` |
 
+Releases up to 0.1.x were published as `ghcr.io/bropines/rustdesk-panel` (the
+project's former name). Those tags stay available there, but new releases are only
+published as `ghcr.io/bropines/rdpanel`: switch the `image:` in your compose file or
+Helm values when you upgrade. The Helm chart was renamed the same way
+(`oci://ghcr.io/bropines/charts/rustdesk-panel` → `oci://ghcr.io/bropines/charts/rdpanel`);
+see the chart README for the in-place upgrade.
+
 Each image carries build provenance and an SBOM (buildx attestations) plus a
-GitHub build-provenance attestation (`gh attestation verify oci://ghcr.io/bropines/rustdesk-panel:<tag> -R bropines/rustdesk-panel`).
+GitHub build-provenance attestation (`gh attestation verify oci://ghcr.io/bropines/rdpanel:<tag> -R bropines/rdpanel`).
 The exact hbbs/hbbr source commit is in the `io.github.bropines.rustdesk-server.ref`
 label and in `/usr/share/doc/rustdesk-server/SOURCE` inside the image.
 
@@ -29,8 +36,8 @@ label and in `/usr/share/doc/rustdesk-server/SOURCE` inside the image.
 
 ```sh
 mkdir -p /opt/rustdesk && cd /opt/rustdesk
-curl -fsSLO https://raw.githubusercontent.com/bropines/rustdesk-panel/main/deploy/compose.example.yml
-curl -fsSL  https://raw.githubusercontent.com/bropines/rustdesk-panel/main/deploy/rdpanel.env.example -o rdpanel.env
+curl -fsSLO https://raw.githubusercontent.com/bropines/rdpanel/main/deploy/compose.example.yml
+curl -fsSL  https://raw.githubusercontent.com/bropines/rdpanel/main/deploy/rdpanel.env.example -o rdpanel.env
 mv compose.example.yml compose.yml
 chmod 600 rdpanel.env && $EDITOR rdpanel.env      # at least RELAY and RDPANEL_PUBLIC_URL
 docker compose up -d
@@ -152,7 +159,7 @@ also see uptime, the database schema version, the platform and live hbbs/hbbr
 status.
 
 To say whether a newer release exists, `rdpanel` asks
-`https://api.github.com/repos/bropines/rustdesk-panel/releases/latest` when
+`https://api.github.com/repos/bropines/rdpanel/releases/latest` when
 the page is opened, at most once per 6 hours (a failed check is retried after
 30 minutes, 5 s timeout; the last good answer is kept). Nothing else depends on
 it: without internet access the page just says the check failed. Set
@@ -327,7 +334,7 @@ RDPANEL_SMTP_PORT=587                 # default by encryption: 587 / 465 / 25
 RDPANEL_SMTP_ENCRYPTION=starttls      # starttls | tls | none
 RDPANEL_SMTP_USERNAME=panel@example.com
 RDPANEL_SMTP_PASSWORD_FILE=/run/secrets/smtp_password   # or RDPANEL_SMTP_PASSWORD
-RDPANEL_SMTP_FROM="RustDesk Panel <panel@example.com>"
+RDPANEL_SMTP_FROM="RD Panel <panel@example.com>"
 ```
 
 `none` sends credentials in clear text — use it only for a relay on a trusted
@@ -458,8 +465,8 @@ Requirements: Docker with buildx, a checkout of the server fork with
 submodules (`HBB_SRC`, default `~/build/rustdesk-server`).
 
 ```sh
-make image                                  # -> rustdesk-panel:local for the host arch
-make image HBB_SRC=/path/to/rustdesk-server IMAGE=rustdesk-panel:test
+make image                                  # -> rdpanel:local for the host arch
+make image HBB_SRC=/path/to/rustdesk-server IMAGE=rdpanel:test
 make hbb                                    # only (re)build deploy/bin/<arch>/hbb*
 ```
 

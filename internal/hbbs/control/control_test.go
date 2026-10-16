@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/bropines/rustdesk-panel/internal/hbbs/hbbstest"
+	"github.com/bropines/rdpanel/internal/hbbs/hbbstest"
 )
 
 type memAudit struct {

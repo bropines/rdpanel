@@ -1,5 +1,5 @@
 apiVersion: v2
-name: rustdesk-panel
+name: rdpanel
 description: >-
   Self-hosted RustDesk server stack in one pod: hbbs (rendezvous), hbbr (relay)
   and rdpanel (RustDesk API server + admin panel).
@@ -8,9 +8,9 @@ version: 0.1.0
 appVersion: "0.1.0"
 kubeVersion: ">=1.25.0-0"
 license: MIT
-home: https://github.com/bropines/rustdesk-panel
+home: https://github.com/bropines/rdpanel
 sources:
-  - https://github.com/bropines/rustdesk-panel
+  - https://github.com/bropines/rdpanel
   - https://github.com/bropines/rustdesk-server
 maintainers:
   - name: bropines

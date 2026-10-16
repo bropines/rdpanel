@@ -10,8 +10,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/bropines/rustdesk-panel/internal/crypto"
-	"github.com/bropines/rustdesk-panel/internal/db"
+	"github.com/bropines/rdpanel/internal/crypto"
+	"github.com/bropines/rdpanel/internal/db"
 )
 
 func newSecretStore(t *testing.T) (*Store, *testClock) {

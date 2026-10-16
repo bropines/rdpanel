@@ -20,11 +20,11 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/prometheus/client_golang/prometheus"
 
-	"github.com/bropines/rustdesk-panel/internal/auth"
-	"github.com/bropines/rustdesk-panel/internal/config"
-	"github.com/bropines/rustdesk-panel/internal/crypto"
-	"github.com/bropines/rustdesk-panel/internal/metrics"
-	"github.com/bropines/rustdesk-panel/internal/store"
+	"github.com/bropines/rdpanel/internal/auth"
+	"github.com/bropines/rdpanel/internal/config"
+	"github.com/bropines/rdpanel/internal/crypto"
+	"github.com/bropines/rdpanel/internal/metrics"
+	"github.com/bropines/rdpanel/internal/store"
 )
 
 // Settings keys (JSON values in the settings table) read by the client API.

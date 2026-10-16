@@ -5,9 +5,9 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/bropines/rustdesk-panel/internal/adminapi"
-	"github.com/bropines/rustdesk-panel/internal/hbbs/presence"
-	"github.com/bropines/rustdesk-panel/internal/hbbs/reconcile"
+	"github.com/bropines/rdpanel/internal/adminapi"
+	"github.com/bropines/rdpanel/internal/hbbs/presence"
+	"github.com/bropines/rdpanel/internal/hbbs/reconcile"
 )
 
 // presenceAdapter exposes *presence.Poller as adminapi.PresenceReader.

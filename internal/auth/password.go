@@ -15,7 +15,7 @@ import (
 	"golang.org/x/crypto/argon2"
 	"golang.org/x/crypto/bcrypt"
 
-	"github.com/bropines/rustdesk-panel/internal/crypto"
+	"github.com/bropines/rdpanel/internal/crypto"
 )
 
 // Algo identifies a stored password hash format. Values match users.password_algo.

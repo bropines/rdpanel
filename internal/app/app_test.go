@@ -16,8 +16,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/bropines/rustdesk-panel/internal/config"
-	"github.com/bropines/rustdesk-panel/internal/store"
+	"github.com/bropines/rdpanel/internal/config"
+	"github.com/bropines/rdpanel/internal/store"
 )
 
 func testEnv(t *testing.T, extra map[string]string) (config.LookupFunc, string) {

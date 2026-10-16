@@ -10,10 +10,10 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"github.com/bropines/rustdesk-panel/internal/crypto"
-	"github.com/bropines/rustdesk-panel/internal/httpx"
-	"github.com/bropines/rustdesk-panel/internal/metrics"
-	"github.com/bropines/rustdesk-panel/internal/store"
+	"github.com/bropines/rdpanel/internal/crypto"
+	"github.com/bropines/rdpanel/internal/httpx"
+	"github.com/bropines/rdpanel/internal/metrics"
+	"github.com/bropines/rdpanel/internal/store"
 )
 
 // Exact wire strings of the RustDesk client contract (docs/research/client-api.md §9).

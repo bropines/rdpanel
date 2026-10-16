@@ -9,8 +9,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/bropines/rustdesk-panel/internal/crypto"
-	"github.com/bropines/rustdesk-panel/internal/store"
+	"github.com/bropines/rdpanel/internal/crypto"
+	"github.com/bropines/rdpanel/internal/store"
 )
 
 func loginBody(user, pw string) string {

@@ -9,7 +9,7 @@ package metrics
 import (
 	"github.com/prometheus/client_golang/prometheus"
 
-	"github.com/bropines/rustdesk-panel/internal/buildinfo"
+	"github.com/bropines/rdpanel/internal/buildinfo"
 )
 
 // Surfaces (where a login happened).

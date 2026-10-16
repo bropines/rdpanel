@@ -33,11 +33,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/bropines/rustdesk-panel/internal/auth"
-	"github.com/bropines/rustdesk-panel/internal/crypto"
-	"github.com/bropines/rustdesk-panel/internal/loginlog"
-	"github.com/bropines/rustdesk-panel/internal/metrics"
-	"github.com/bropines/rustdesk-panel/internal/store"
+	"github.com/bropines/rdpanel/internal/auth"
+	"github.com/bropines/rdpanel/internal/crypto"
+	"github.com/bropines/rdpanel/internal/loginlog"
+	"github.com/bropines/rdpanel/internal/metrics"
+	"github.com/bropines/rdpanel/internal/store"
 )
 
 // DefaultStateTTL is the lifetime of a pending OAuth flow.

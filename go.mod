@@ -1,4 +1,4 @@
-module github.com/bropines/rustdesk-panel
+module github.com/bropines/rdpanel
 
 go 1.23.0
 

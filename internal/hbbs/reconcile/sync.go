@@ -1,6 +1,6 @@
 package reconcile
 
-import "github.com/bropines/rustdesk-panel/internal/hbbs/control"
+import "github.com/bropines/rdpanel/internal/hbbs/control"
 
 // KeyInSync reports whether key (one of the Key* constants of target) is
 // managed in desired and, if so, whether observed matches it with the same

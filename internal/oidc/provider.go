@@ -18,8 +18,8 @@ import (
 
 	"github.com/golang-jwt/jwt/v5"
 
-	"github.com/bropines/rustdesk-panel/internal/crypto"
-	"github.com/bropines/rustdesk-panel/internal/store"
+	"github.com/bropines/rdpanel/internal/crypto"
+	"github.com/bropines/rdpanel/internal/store"
 )
 
 // GoogleIssuer is the fixed issuer of kind "google" providers.

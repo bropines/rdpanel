@@ -7,7 +7,7 @@ import (
 	"errors"
 	"time"
 
-	"github.com/bropines/rustdesk-panel/internal/db"
+	"github.com/bropines/rdpanel/internal/db"
 )
 
 // Panel settings keys managed by PATCH /settings (values are JSON). The

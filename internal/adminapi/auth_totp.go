@@ -5,9 +5,9 @@ import (
 	"errors"
 	"strings"
 
-	"github.com/bropines/rustdesk-panel/internal/auth"
-	"github.com/bropines/rustdesk-panel/internal/crypto"
-	"github.com/bropines/rustdesk-panel/internal/store"
+	"github.com/bropines/rdpanel/internal/auth"
+	"github.com/bropines/rdpanel/internal/crypto"
+	"github.com/bropines/rdpanel/internal/store"
 )
 
 // TOTPService verifies and manages TOTP second factors and recovery codes.

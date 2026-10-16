@@ -1,8 +1,8 @@
 {{- if gt (int .Values.replicaCount) 1 }}
 {{- fail "replicaCount must be 0 or 1: hbbs state, SQLite and the server key pair cannot be shared between pods" }}
 {{- end }}
-{{- $fullname := include "rustdesk-panel.fullname" . }}
-{{- $httpPort := include "rustdesk-panel.httpPort" . | int }}
+{{- $fullname := include "rdpanel.fullname" . }}
+{{- $httpPort := include "rdpanel.httpPort" . | int }}
 {{- $useVCT := and .Values.persistence.enabled (not .Values.persistence.existingClaim) }}
 apiVersion: apps/v1
 kind: StatefulSet
@@ -10,8 +10,8 @@ metadata:
   name: {{ $fullname }}
   namespace: {{ .Release.Namespace }}
   labels:
-    {{- include "rustdesk-panel.labels" . | nindent 4 }}
-  {{- with include "rustdesk-panel.annotations" (dict "root" .) }}{{ . | nindent 2 }}{{ end }}
+    {{- include "rdpanel.labels" . | nindent 4 }}
+  {{- with include "rdpanel.annotations" (dict "root" .) }}{{ . | nindent 2 }}{{ end }}
 spec:
   # Fixed: 0 or 1. See values.yaml `replicaCount`.
   replicas: {{ .Values.replicaCount }}
@@ -27,11 +27,11 @@ spec:
   {{- end }}
   selector:
     matchLabels:
-      {{- include "rustdesk-panel.selectorLabels" . | nindent 6 }}
+      {{- include "rdpanel.selectorLabels" . | nindent 6 }}
   template:
     metadata:
       labels:
-        {{- include "rustdesk-panel.selectorLabels" . | nindent 8 }}
+        {{- include "rdpanel.selectorLabels" . | nindent 8 }}
         {{- with .Values.podLabels }}
         {{- toYaml . | nindent 8 }}
         {{- end }}
@@ -41,7 +41,7 @@ spec:
         {{- toYaml . | nindent 8 }}
         {{- end }}
     spec:
-      serviceAccountName: {{ include "rustdesk-panel.serviceAccountName" . }}
+      serviceAccountName: {{ include "rdpanel.serviceAccountName" . }}
       automountServiceAccountToken: {{ .Values.serviceAccount.automountServiceAccountToken }}
       enableServiceLinks: false
       {{- with .Values.imagePullSecrets }}
@@ -96,7 +96,7 @@ spec:
       {{- end }}
       containers:
         - name: rustdesk
-          image: {{ include "rustdesk-panel.image" . }}
+          image: {{ include "rdpanel.image" . }}
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           {{- with .Values.command }}
           command:
@@ -140,18 +140,18 @@ spec:
             {{- tpl (toYaml .) $ | nindent 12 }}
             {{- end }}
           env:
-            {{- include "rustdesk-panel.env" . | nindent 12 }}
+            {{- include "rdpanel.env" . | nindent 12 }}
             {{- if .Values.serverKeys.enabled }}
             # Consumed by the image's key-secret oneshot: written to /data/id_ed25519{,.pub}.
             - name: KEY_PRIV
               valueFrom:
                 secretKeyRef:
-                  name: {{ include "rustdesk-panel.serverKeysSecretName" . }}
+                  name: {{ include "rdpanel.serverKeysSecretName" . }}
                   key: {{ .Values.serverKeys.privateKeyKey }}
             - name: KEY_PUB
               valueFrom:
                 secretKeyRef:
-                  name: {{ include "rustdesk-panel.serverKeysSecretName" . }}
+                  name: {{ include "rdpanel.serverKeysSecretName" . }}
                   key: {{ .Values.serverKeys.publicKeyKey }}
             {{- end }}
             {{- with .Values.extraEnv }}
@@ -162,21 +162,21 @@ spec:
             {{- toYaml .Values.customStartupProbe | nindent 12 }}
           {{- else if .Values.probes.startup.enabled }}
           startupProbe:
-            {{- include "rustdesk-panel.probe" (dict "root" . "probe" (omit .Values.probes.startup "enabled")) | nindent 12 }}
+            {{- include "rdpanel.probe" (dict "root" . "probe" (omit .Values.probes.startup "enabled")) | nindent 12 }}
           {{- end }}
           {{- if .Values.customLivenessProbe }}
           livenessProbe:
             {{- toYaml .Values.customLivenessProbe | nindent 12 }}
           {{- else if .Values.probes.liveness.enabled }}
           livenessProbe:
-            {{- include "rustdesk-panel.probe" (dict "root" . "probe" (omit .Values.probes.liveness "enabled")) | nindent 12 }}
+            {{- include "rdpanel.probe" (dict "root" . "probe" (omit .Values.probes.liveness "enabled")) | nindent 12 }}
           {{- end }}
           {{- if .Values.customReadinessProbe }}
           readinessProbe:
             {{- toYaml .Values.customReadinessProbe | nindent 12 }}
           {{- else if .Values.probes.readiness.enabled }}
           readinessProbe:
-            {{- include "rustdesk-panel.probe" (dict "root" . "probe" (omit .Values.probes.readiness "enabled")) | nindent 12 }}
+            {{- include "rdpanel.probe" (dict "root" . "probe" (omit .Values.probes.readiness "enabled")) | nindent 12 }}
           {{- end }}
           {{- with .Values.lifecycle }}
           lifecycle:
@@ -219,7 +219,7 @@ spec:
       metadata:
         name: data
         labels:
-          {{- include "rustdesk-panel.selectorLabels" . | nindent 10 }}
+          {{- include "rdpanel.selectorLabels" . | nindent 10 }}
           {{- with .Values.persistence.labels }}
           {{- toYaml . | nindent 10 }}
           {{- end }}

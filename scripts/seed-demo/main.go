@@ -32,7 +32,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/bropines/rustdesk-panel/internal/hbbs/wire"
+	"github.com/bropines/rdpanel/internal/hbbs/wire"
 )
 
 type device struct {

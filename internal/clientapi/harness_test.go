@@ -19,12 +19,12 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"github.com/bropines/rustdesk-panel/internal/auth"
-	"github.com/bropines/rustdesk-panel/internal/config"
-	"github.com/bropines/rustdesk-panel/internal/crypto"
-	"github.com/bropines/rustdesk-panel/internal/db"
-	"github.com/bropines/rustdesk-panel/internal/httpx"
-	"github.com/bropines/rustdesk-panel/internal/store"
+	"github.com/bropines/rdpanel/internal/auth"
+	"github.com/bropines/rdpanel/internal/config"
+	"github.com/bropines/rdpanel/internal/crypto"
+	"github.com/bropines/rdpanel/internal/db"
+	"github.com/bropines/rdpanel/internal/httpx"
+	"github.com/bropines/rdpanel/internal/store"
 )
 
 var update = flag.Bool("update", false, "rewrite golden files in testdata/")

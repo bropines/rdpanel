@@ -61,7 +61,7 @@ export function RecoveryCodes({ codes, onDone }: { codes: string[]; onDone: () =
           <Copy />
           {t("common.copy")}
         </Button>
-        <Button type="button" variant="outline" size="sm" onClick={() => saveBlob(new Blob([`${text}\n`], { type: "text/plain" }), "rustdesk-panel-recovery-codes.txt")}>
+        <Button type="button" variant="outline" size="sm" onClick={() => saveBlob(new Blob([`${text}\n`], { type: "text/plain" }), "rdpanel-recovery-codes.txt")}>
           <Download />
           {t("security.download")}
         </Button>

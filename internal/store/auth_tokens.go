@@ -5,7 +5,7 @@ import (
 	"database/sql"
 	"time"
 
-	"github.com/bropines/rustdesk-panel/internal/db"
+	"github.com/bropines/rdpanel/internal/db"
 )
 
 // TokenKind distinguishes client tokens from panel sessions.

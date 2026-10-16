@@ -10,7 +10,7 @@ panel:
   metricsAllow: [127.0.0.0/8, 10.244.0.0/16]
 
 secrets:
-  existingSecret: rustdesk-panel-keys
+  existingSecret: rdpanel-keys
 
 serverKeys:
   enabled: true

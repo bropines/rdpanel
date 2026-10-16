@@ -9,7 +9,7 @@ import (
 	"database/sql"
 	"time"
 
-	"github.com/bropines/rustdesk-panel/internal/db"
+	"github.com/bropines/rdpanel/internal/db"
 )
 
 // Method values of login_events.method.

@@ -30,7 +30,7 @@ ingress:
         - path: /
           pathType: Prefix
   tls:
-    - secretName: rustdesk-panel-tls
+    - secretName: rdpanel-tls
       hosts: [rustdesk.example.com]
 
 websocket:
@@ -43,7 +43,7 @@ websocket:
     hosts:
       - host: rustdesk.example.com
     tls:
-      - secretName: rustdesk-panel-tls
+      - secretName: rdpanel-tls
         hosts: [rustdesk.example.com]
 
 httpRoute:

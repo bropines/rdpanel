@@ -13,15 +13,15 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/prometheus/client_golang/prometheus"
 
-	"github.com/bropines/rustdesk-panel/internal/auth"
-	"github.com/bropines/rustdesk-panel/internal/config"
-	"github.com/bropines/rustdesk-panel/internal/crypto"
-	"github.com/bropines/rustdesk-panel/internal/loginlog"
-	"github.com/bropines/rustdesk-panel/internal/mailauth"
-	"github.com/bropines/rustdesk-panel/internal/metrics"
-	"github.com/bropines/rustdesk-panel/internal/oidc"
-	"github.com/bropines/rustdesk-panel/internal/store"
-	"github.com/bropines/rustdesk-panel/internal/updatecheck"
+	"github.com/bropines/rdpanel/internal/auth"
+	"github.com/bropines/rdpanel/internal/config"
+	"github.com/bropines/rdpanel/internal/crypto"
+	"github.com/bropines/rdpanel/internal/loginlog"
+	"github.com/bropines/rdpanel/internal/mailauth"
+	"github.com/bropines/rdpanel/internal/metrics"
+	"github.com/bropines/rdpanel/internal/oidc"
+	"github.com/bropines/rdpanel/internal/store"
+	"github.com/bropines/rdpanel/internal/updatecheck"
 )
 
 // Session cookie names shared with the web client (web/src/api/client.ts).

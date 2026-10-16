@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 
-	"github.com/bropines/rustdesk-panel/internal/store"
+	"github.com/bropines/rdpanel/internal/store"
 )
 
 // legacyBlob is the legacy address book (AbBlob). "data" in the HTTP body and

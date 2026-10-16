@@ -46,7 +46,7 @@ type Config struct {
 	SecretKey Secret `yaml:"secret_key"`
 	// SecretKeyFile is the AEAD key file. Default: <DataDir>/secret.key.
 	SecretKeyFile string `yaml:"secret_key_file"`
-	// UpdateCheck lets the About page look up the latest rustdesk-panel
+	// UpdateCheck lets the About page look up the latest RD Panel
 	// release on GitHub (server-side, cached for 6 h; never blocks anything).
 	UpdateCheck bool `yaml:"update_check"`
 
@@ -77,7 +77,7 @@ type SMTPConfig struct {
 	Password Secret `yaml:"password"`
 	// PasswordFile is read when Password is empty (Docker/Kubernetes secrets).
 	PasswordFile string `yaml:"password_file"`
-	// From is the sender address, e.g. "RustDesk Panel <panel@example.com>".
+	// From is the sender address, e.g. "RD Panel <panel@example.com>".
 	From string `yaml:"from"`
 	// Encryption is none, starttls (default) or tls (implicit TLS, "SMTPS").
 	Encryption         string `yaml:"encryption"`

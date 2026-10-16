@@ -34,15 +34,15 @@ split=true:  "<fullname>-rendezvous-tcp" and "<fullname>-rendezvous-udp".
 apiVersion: v1
 kind: Service
 metadata:
-  name: {{ include "rustdesk-panel.fullname" $root }}{{ $g.suffix }}
+  name: {{ include "rdpanel.fullname" $root }}{{ $g.suffix }}
   namespace: {{ $root.Release.Namespace }}
   labels:
-    {{- include "rustdesk-panel.labels" $root | nindent 4 }}
+    {{- include "rdpanel.labels" $root | nindent 4 }}
     app.kubernetes.io/component: rendezvous
     {{- with $s.labels }}
     {{- toYaml . | nindent 4 }}
     {{- end }}
-  {{- with include "rustdesk-panel.annotations" (dict "root" $root "extra" (merge (dict) ($g.ann | default dict) ($s.annotations | default dict))) }}{{ . | nindent 2 }}{{ end }}
+  {{- with include "rdpanel.annotations" (dict "root" $root "extra" (merge (dict) ($g.ann | default dict) ($s.annotations | default dict))) }}{{ . | nindent 2 }}{{ end }}
 spec:
   type: {{ $s.type }}
   {{- if ne $s.type "ClusterIP" }}
@@ -72,7 +72,7 @@ spec:
     {{- toYaml . | nindent 4 }}
   {{- end }}
   selector:
-    {{- include "rustdesk-panel.selectorLabels" $root | nindent 4 }}
+    {{- include "rdpanel.selectorLabels" $root | nindent 4 }}
   ports:
     {{- range $ports }}
     - name: {{ .name }}

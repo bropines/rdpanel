@@ -9,9 +9,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/bropines/rustdesk-panel/internal/buildinfo"
-	"github.com/bropines/rustdesk-panel/internal/httpx"
-	"github.com/bropines/rustdesk-panel/internal/store"
+	"github.com/bropines/rdpanel/internal/buildinfo"
+	"github.com/bropines/rdpanel/internal/httpx"
+	"github.com/bropines/rdpanel/internal/store"
 )
 
 // Plain-text sysinfo answers, compared byte-for-byte by the client.

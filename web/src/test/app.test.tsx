@@ -186,7 +186,7 @@ describe("about page", () => {
     expect(screen.getByTestId("update-status")).toHaveTextContent("Version v0.2.0 is available.");
     expect(screen.getByText("Runtime")).toBeInTheDocument();
     expect(screen.getByText("version 7 (latest 7)")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /GitHub repository/ })).toHaveAttribute("href", "https://github.com/bropines/rustdesk-panel");
+    expect(screen.getByRole("link", { name: /GitHub repository/ })).toHaveAttribute("href", "https://github.com/bropines/rdpanel");
     expect(screen.getByTestId("sidebar-version")).toHaveTextContent("Version v0.1.0");
   });
 

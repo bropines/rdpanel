@@ -6,9 +6,9 @@ import (
 	"math"
 	"net/http"
 
-	"github.com/bropines/rustdesk-panel/internal/adminapi"
-	"github.com/bropines/rustdesk-panel/internal/events"
-	"github.com/bropines/rustdesk-panel/internal/store"
+	"github.com/bropines/rdpanel/internal/adminapi"
+	"github.com/bropines/rdpanel/internal/events"
+	"github.com/bropines/rdpanel/internal/store"
 )
 
 var errNoSession = errors.New("no active panel session")

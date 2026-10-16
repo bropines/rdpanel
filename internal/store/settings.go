@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/bropines/rustdesk-panel/internal/db"
+	"github.com/bropines/rdpanel/internal/db"
 )
 
 // Well-known settings keys. Values are JSON.

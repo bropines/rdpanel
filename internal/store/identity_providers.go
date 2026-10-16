@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/bropines/rustdesk-panel/internal/db"
+	"github.com/bropines/rdpanel/internal/db"
 )
 
 // ProviderKind is the type of an identity provider.

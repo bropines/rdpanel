@@ -9,12 +9,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/bropines/rustdesk-panel/internal/config"
-	"github.com/bropines/rustdesk-panel/internal/crypto"
-	"github.com/bropines/rustdesk-panel/internal/db"
-	"github.com/bropines/rustdesk-panel/internal/mail"
-	"github.com/bropines/rustdesk-panel/internal/mailauth"
-	"github.com/bropines/rustdesk-panel/internal/store"
+	"github.com/bropines/rdpanel/internal/config"
+	"github.com/bropines/rdpanel/internal/crypto"
+	"github.com/bropines/rdpanel/internal/db"
+	"github.com/bropines/rdpanel/internal/mail"
+	"github.com/bropines/rdpanel/internal/mailauth"
+	"github.com/bropines/rdpanel/internal/store"
 )
 
 type outbox struct {

@@ -9,10 +9,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/bropines/rustdesk-panel/internal/config"
-	"github.com/bropines/rustdesk-panel/internal/mail/mailtest"
-	"github.com/bropines/rustdesk-panel/internal/mailauth"
-	"github.com/bropines/rustdesk-panel/internal/store"
+	"github.com/bropines/rdpanel/internal/config"
+	"github.com/bropines/rdpanel/internal/mail/mailtest"
+	"github.com/bropines/rdpanel/internal/mailauth"
+	"github.com/bropines/rdpanel/internal/store"
 )
 
 // withMail configures the panel-managed SMTP server through the admin API

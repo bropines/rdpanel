@@ -25,10 +25,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/bropines/rustdesk-panel/internal/config"
-	"github.com/bropines/rustdesk-panel/internal/crypto"
-	rdmail "github.com/bropines/rustdesk-panel/internal/mail"
-	"github.com/bropines/rustdesk-panel/internal/store"
+	"github.com/bropines/rdpanel/internal/config"
+	"github.com/bropines/rdpanel/internal/crypto"
+	rdmail "github.com/bropines/rdpanel/internal/mail"
+	"github.com/bropines/rdpanel/internal/store"
 )
 
 // Tuning.
@@ -58,7 +58,7 @@ const (
 )
 
 // defaultTitle mirrors adminapi.DefaultBrandingTitle (no import cycle).
-const defaultTitle = "RustDesk Panel"
+const defaultTitle = "RD Panel"
 
 // Source tells where the effective SMTP configuration comes from.
 type Source string

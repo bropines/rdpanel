@@ -9,8 +9,8 @@ import (
 	"log/slog"
 	"strings"
 
-	"github.com/bropines/rustdesk-panel/internal/buildinfo"
-	"github.com/bropines/rustdesk-panel/internal/config"
+	"github.com/bropines/rdpanel/internal/buildinfo"
+	"github.com/bropines/rdpanel/internal/config"
 )
 
 // Stdio bundles the process streams so the CLI is testable.

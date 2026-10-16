@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/bropines/rustdesk-panel/internal/events"
+	"github.com/bropines/rdpanel/internal/events"
 )
 
 func TestHBBSWiring(t *testing.T) {

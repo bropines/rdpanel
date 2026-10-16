@@ -5,7 +5,7 @@ import (
 	"database/sql"
 	"time"
 
-	"github.com/bropines/rustdesk-panel/internal/db"
+	"github.com/bropines/rdpanel/internal/db"
 )
 
 // OAuthAction is what a pending OAuth flow will do once the IdP answers.

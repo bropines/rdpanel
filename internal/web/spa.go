@@ -77,9 +77,9 @@ func (s *SPA) serveIndex(w http.ResponseWriter, r *http.Request) {
 
 const placeholder = `<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>rustdesk-panel</title></head>
+<title>RD Panel</title></head>
 <body style="font-family:system-ui,sans-serif;max-width:40rem;margin:4rem auto;padding:0 1rem">
-<h1>rustdesk-panel</h1>
+<h1>RD Panel</h1>
 <p>The API server is running, but this binary was built without the web UI.</p>
 <p>Build it with <code>make web build</code> (or <code>cd web &amp;&amp; npm ci &amp;&amp; npm run build</code>, then rebuild the Go binary).</p>
 </body></html>

@@ -6,9 +6,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/bropines/rustdesk-panel/internal/config"
-	"github.com/bropines/rustdesk-panel/internal/mail"
-	"github.com/bropines/rustdesk-panel/internal/mail/mailtest"
+	"github.com/bropines/rdpanel/internal/config"
+	"github.com/bropines/rdpanel/internal/mail"
+	"github.com/bropines/rdpanel/internal/mail/mailtest"
 )
 
 func TestSendModes(t *testing.T) {

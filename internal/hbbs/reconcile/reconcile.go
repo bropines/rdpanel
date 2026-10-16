@@ -18,8 +18,8 @@ import (
 
 	"github.com/prometheus/client_golang/prometheus"
 
-	"github.com/bropines/rustdesk-panel/internal/events"
-	"github.com/bropines/rustdesk-panel/internal/hbbs/control"
+	"github.com/bropines/rdpanel/internal/events"
+	"github.com/bropines/rdpanel/internal/hbbs/control"
 )
 
 // DefaultInterval is the probe / drift-check period.

@@ -1,5 +1,5 @@
 // Package legacy imports a lejianwen/rustdesk-api v2.7 SQLite database
-// (`rustdeskapi.db`) into the rustdesk-panel schema.
+// (`rustdeskapi.db`) into the RD Panel schema.
 //
 // The source file is opened read-only and immutable; the whole import runs in
 // one transaction on the target database and follows the mapping of
@@ -21,8 +21,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/bropines/rustdesk-panel/internal/crypto"
-	"github.com/bropines/rustdesk-panel/internal/db"
+	"github.com/bropines/rdpanel/internal/crypto"
+	"github.com/bropines/rdpanel/internal/db"
 )
 
 // ExpectedVersion is the legacy `versions.version` this importer was written

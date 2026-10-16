@@ -4,7 +4,7 @@ import (
 	"encoding/base32"
 	"strings"
 
-	"github.com/bropines/rustdesk-panel/internal/crypto"
+	"github.com/bropines/rdpanel/internal/crypto"
 )
 
 // RecoveryCodeCount is the number of codes issued per enrolment.

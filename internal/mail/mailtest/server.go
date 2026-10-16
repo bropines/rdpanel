@@ -22,7 +22,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/bropines/rustdesk-panel/internal/config"
+	"github.com/bropines/rdpanel/internal/config"
 )
 
 // Message is one accepted message.

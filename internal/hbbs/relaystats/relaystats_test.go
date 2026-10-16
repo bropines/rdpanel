@@ -8,7 +8,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/testutil"
 
-	"github.com/bropines/rustdesk-panel/internal/hbbs/control"
+	"github.com/bropines/rdpanel/internal/hbbs/control"
 )
 
 type fakeSource struct {

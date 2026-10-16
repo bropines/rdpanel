@@ -16,16 +16,16 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"github.com/bropines/rustdesk-panel/internal/auth"
-	"github.com/bropines/rustdesk-panel/internal/config"
-	"github.com/bropines/rustdesk-panel/internal/crypto"
-	"github.com/bropines/rustdesk-panel/internal/db"
-	"github.com/bropines/rustdesk-panel/internal/events"
-	"github.com/bropines/rustdesk-panel/internal/hbbs/control"
-	"github.com/bropines/rustdesk-panel/internal/hbbs/hbbstest"
-	"github.com/bropines/rustdesk-panel/internal/hbbs/presence"
-	"github.com/bropines/rustdesk-panel/internal/hbbs/reconcile"
-	"github.com/bropines/rustdesk-panel/internal/store"
+	"github.com/bropines/rdpanel/internal/auth"
+	"github.com/bropines/rdpanel/internal/config"
+	"github.com/bropines/rdpanel/internal/crypto"
+	"github.com/bropines/rdpanel/internal/db"
+	"github.com/bropines/rdpanel/internal/events"
+	"github.com/bropines/rdpanel/internal/hbbs/control"
+	"github.com/bropines/rdpanel/internal/hbbs/hbbstest"
+	"github.com/bropines/rdpanel/internal/hbbs/presence"
+	"github.com/bropines/rdpanel/internal/hbbs/reconcile"
+	"github.com/bropines/rdpanel/internal/store"
 )
 
 // b2bFakePresence is a PresenceSource with settable state.

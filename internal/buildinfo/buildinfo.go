@@ -1,8 +1,8 @@
 // Package buildinfo exposes version metadata injected at link time:
 //
-//	go build -ldflags "-X github.com/bropines/rustdesk-panel/internal/buildinfo.Version=v1.2.3 \
-//	  -X github.com/bropines/rustdesk-panel/internal/buildinfo.Commit=abc123 \
-//	  -X github.com/bropines/rustdesk-panel/internal/buildinfo.Date=2026-10-15T00:00:00Z"
+//	go build -ldflags "-X github.com/bropines/rdpanel/internal/buildinfo.Version=v1.2.3 \
+//	  -X github.com/bropines/rdpanel/internal/buildinfo.Commit=abc123 \
+//	  -X github.com/bropines/rdpanel/internal/buildinfo.Date=2026-10-15T00:00:00Z"
 //
 // The container image also sets HBBRepo and HBBRef to the source of the bundled
 // hbbs/hbbr binaries (deploy/Dockerfile build args HBB_REPO and HBB_REF).

@@ -7,7 +7,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/testutil"
 
-	"github.com/bropines/rustdesk-panel/internal/metrics"
+	"github.com/bropines/rdpanel/internal/metrics"
 )
 
 func TestLoginAndAuditMetrics(t *testing.T) {

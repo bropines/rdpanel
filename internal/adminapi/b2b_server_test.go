@@ -8,9 +8,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/bropines/rustdesk-panel/internal/hbbs/control"
-	"github.com/bropines/rustdesk-panel/internal/hbbs/presence"
-	"github.com/bropines/rustdesk-panel/internal/store"
+	"github.com/bropines/rdpanel/internal/hbbs/control"
+	"github.com/bropines/rdpanel/internal/hbbs/presence"
+	"github.com/bropines/rdpanel/internal/store"
 )
 
 func TestServerWithoutHBBS(t *testing.T) {

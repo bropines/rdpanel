@@ -82,7 +82,10 @@ instead.
 ## Alerts
 
 [`alerts.yaml`](../deploy/monitoring/prometheus/alerts.yaml) (group
-`rustdesk-panel`, all selectors use `job="rustdesk-panel"`):
+`rustdesk-panel`, all selectors use `job="rustdesk-panel"`). The job, group and
+`RustDeskPanel*` alert names, and the dashboard uid below, predate the rename to
+RD Panel and are kept so existing scrape configs, Alertmanager routes, silences
+and dashboard links keep working:
 
 | alert | severity | fires when |
 |---|---|---|

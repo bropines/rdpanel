@@ -7,7 +7,7 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/bropines/rustdesk-panel/internal/app"
+	"github.com/bropines/rdpanel/internal/app"
 )
 
 func main() {

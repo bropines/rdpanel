@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/bropines/rustdesk-panel/internal/store"
+	"github.com/bropines/rdpanel/internal/store"
 )
 
 func TestAddressBookPersonal(t *testing.T) {

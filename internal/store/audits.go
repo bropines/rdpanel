@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/bropines/rustdesk-panel/internal/db"
+	"github.com/bropines/rdpanel/internal/db"
 )
 
 // ConnectionAudit is a row of connection_audits (POST /api/audit/conn).

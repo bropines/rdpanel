@@ -14,12 +14,12 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 
-	"github.com/bropines/rustdesk-panel/internal/adminapi"
-	"github.com/bropines/rustdesk-panel/internal/clientapi"
-	"github.com/bropines/rustdesk-panel/internal/events"
-	"github.com/bropines/rustdesk-panel/internal/httpx"
-	"github.com/bropines/rustdesk-panel/internal/oidc"
-	"github.com/bropines/rustdesk-panel/internal/web"
+	"github.com/bropines/rdpanel/internal/adminapi"
+	"github.com/bropines/rdpanel/internal/clientapi"
+	"github.com/bropines/rdpanel/internal/events"
+	"github.com/bropines/rdpanel/internal/httpx"
+	"github.com/bropines/rdpanel/internal/oidc"
+	"github.com/bropines/rdpanel/internal/web"
 )
 
 // shutdownTimeout bounds graceful shutdown of in-flight requests.

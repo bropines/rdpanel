@@ -26,7 +26,7 @@ import { formatDateTime, formatUptime } from "@/lib/format";
 import { useMe } from "@/lib/session";
 import { HealthRow } from "@/pages/DashboardPage";
 
-const PANEL_REPO = "https://github.com/bropines/rustdesk-panel";
+const PANEL_REPO = "https://github.com/bropines/rdpanel";
 const SERVER_FORK = "https://github.com/bropines/rustdesk-server";
 const UPSTREAM = "https://github.com/rustdesk/rustdesk";
 

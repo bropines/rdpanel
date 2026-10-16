@@ -3,7 +3,7 @@ package auth
 import (
 	"strings"
 
-	"github.com/bropines/rustdesk-panel/internal/crypto"
+	"github.com/bropines/rdpanel/internal/crypto"
 )
 
 // sessionTokenBytes is the entropy of opaque tokens (256 bits).

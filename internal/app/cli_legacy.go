@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/bropines/rustdesk-panel/internal/config"
-	"github.com/bropines/rustdesk-panel/internal/crypto"
-	"github.com/bropines/rustdesk-panel/internal/legacy"
+	"github.com/bropines/rdpanel/internal/config"
+	"github.com/bropines/rdpanel/internal/crypto"
+	"github.com/bropines/rdpanel/internal/legacy"
 )
 
 // cmdMigrateLegacy implements `rdpanel migrate-legacy`.

@@ -3,13 +3,13 @@ package app
 import (
 	"log/slog"
 
-	"github.com/bropines/rustdesk-panel/internal/adminapi"
+	"github.com/bropines/rdpanel/internal/adminapi"
 
-	"github.com/bropines/rustdesk-panel/internal/events"
-	"github.com/bropines/rustdesk-panel/internal/hbbs/control"
-	"github.com/bropines/rustdesk-panel/internal/hbbs/presence"
-	"github.com/bropines/rustdesk-panel/internal/hbbs/reconcile"
-	"github.com/bropines/rustdesk-panel/internal/hbbs/relaystats"
+	"github.com/bropines/rdpanel/internal/events"
+	"github.com/bropines/rdpanel/internal/hbbs/control"
+	"github.com/bropines/rdpanel/internal/hbbs/presence"
+	"github.com/bropines/rdpanel/internal/hbbs/reconcile"
+	"github.com/bropines/rdpanel/internal/hbbs/relaystats"
 )
 
 // HBBS groups the hbbs/hbbr integration. Fields are nil when the integration

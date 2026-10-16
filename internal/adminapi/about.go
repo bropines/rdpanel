@@ -8,13 +8,13 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"github.com/bropines/rustdesk-panel/internal/buildinfo"
-	"github.com/bropines/rustdesk-panel/internal/httpx"
-	"github.com/bropines/rustdesk-panel/internal/updatecheck"
+	"github.com/bropines/rdpanel/internal/buildinfo"
+	"github.com/bropines/rdpanel/internal/httpx"
+	"github.com/bropines/rdpanel/internal/updatecheck"
 )
 
 // AppName is the product name shown on the About page.
-const AppName = "rustdesk-panel"
+const AppName = "RD Panel"
 
 // aboutHBBDTO is components.schemas.AboutHbb.
 type aboutHBBDTO struct {

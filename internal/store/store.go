@@ -16,8 +16,8 @@ import (
 	"database/sql"
 	"time"
 
-	"github.com/bropines/rustdesk-panel/internal/crypto"
-	"github.com/bropines/rustdesk-panel/internal/db"
+	"github.com/bropines/rdpanel/internal/crypto"
+	"github.com/bropines/rdpanel/internal/db"
 )
 
 // Store groups the repositories. A Store obtained from Tx is bound to that

@@ -2,11 +2,11 @@
 apiVersion: policy/v1
 kind: PodDisruptionBudget
 metadata:
-  name: {{ include "rustdesk-panel.fullname" . }}
+  name: {{ include "rdpanel.fullname" . }}
   namespace: {{ .Release.Namespace }}
   labels:
-    {{- include "rustdesk-panel.labels" . | nindent 4 }}
-  {{- with include "rustdesk-panel.annotations" (dict "root" .) }}{{ . | nindent 2 }}{{ end }}
+    {{- include "rdpanel.labels" . | nindent 4 }}
+  {{- with include "rdpanel.annotations" (dict "root" .) }}{{ . | nindent 2 }}{{ end }}
 spec:
   {{- if not (kindIs "invalid" .Values.podDisruptionBudget.minAvailable) }}
   minAvailable: {{ .Values.podDisruptionBudget.minAvailable }}
@@ -15,5 +15,5 @@ spec:
   {{- end }}
   selector:
     matchLabels:
-      {{- include "rustdesk-panel.selectorLabels" . | nindent 6 }}
+      {{- include "rdpanel.selectorLabels" . | nindent 6 }}
 {{- end }}

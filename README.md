@@ -1,8 +1,14 @@
-# rustdesk-panel
+# RD Panel
 
-[![release](https://img.shields.io/github/v/release/bropines/rustdesk-panel?sort=semver)](https://github.com/bropines/rustdesk-panel/releases/latest)
-[![ci](https://github.com/bropines/rustdesk-panel/actions/workflows/ci.yml/badge.svg)](https://github.com/bropines/rustdesk-panel/actions/workflows/ci.yml)
-[![image](https://github.com/bropines/rustdesk-panel/actions/workflows/image.yml/badge.svg)](https://github.com/bropines/rustdesk-panel/pkgs/container/rustdesk-panel)
+**RD Panel — API server and admin panel for RustDesk.** Compatible with official RustDesk
+clients. Formerly `rustdesk-panel`.
+
+> Not affiliated with or endorsed by RustDesk / Purslane Ltd. "RustDesk" is used only to
+> describe compatibility.
+
+[![release](https://img.shields.io/github/v/release/bropines/rdpanel?sort=semver)](https://github.com/bropines/rdpanel/releases/latest)
+[![ci](https://github.com/bropines/rdpanel/actions/workflows/ci.yml/badge.svg)](https://github.com/bropines/rdpanel/actions/workflows/ci.yml)
+[![image](https://github.com/bropines/rdpanel/actions/workflows/image.yml/badge.svg)](https://github.com/bropines/rdpanel/pkgs/container/rdpanel)
 [![license](https://img.shields.io/badge/license-MIT%20%2B%20AGPL--3.0%20(hbbs%2Fhbbr)-blue)](#license)
 
 A self-hosted **API server + admin panel for [RustDesk](https://rustdesk.com)**: Go backend,
@@ -72,8 +78,8 @@ command, without re-login.
 
 ```sh
 mkdir -p /opt/rustdesk && cd /opt/rustdesk
-curl -fsSL https://raw.githubusercontent.com/bropines/rustdesk-panel/main/deploy/compose.example.yml -o compose.yml
-curl -fsSL https://raw.githubusercontent.com/bropines/rustdesk-panel/main/deploy/rdpanel.env.example -o rdpanel.env
+curl -fsSL https://raw.githubusercontent.com/bropines/rdpanel/main/deploy/compose.example.yml -o compose.yml
+curl -fsSL https://raw.githubusercontent.com/bropines/rdpanel/main/deploy/rdpanel.env.example -o rdpanel.env
 chmod 600 rdpanel.env && $EDITOR rdpanel.env        # at least RELAY and RDPANEL_PUBLIC_URL
 docker compose up -d
 docker compose exec rustdesk rdpanel user create --admin admin
@@ -84,12 +90,12 @@ Put a TLS reverse proxy in front of the panel, then configure clients with ID se
 
 - **Full guide:** [`docs/deploy.md`](docs/deploy.md) (reverse proxy, split public/internal
   hosts, WebSocket clients, image tags, building).
-- **Kubernetes:** Helm chart in [`deploy/helm/rustdesk-panel`](deploy/helm/rustdesk-panel).
+- **Kubernetes:** Helm chart in [`deploy/helm/rdpanel`](deploy/helm/rdpanel).
 - **Coming from lejianwen/rustdesk-api:** [`docs/migration.md`](docs/migration.md). Keep the
   same `RUSTDESK_API_JWT_KEY` and hbbs key pair, then
   `rdpanel migrate-legacy --from rustdeskapi.db --dry-run`.
 
-Image: `ghcr.io/bropines/rustdesk-panel` — `:X.Y.Z`, `:X.Y`, `:latest` for releases,
+Image: `ghcr.io/bropines/rdpanel` — `:X.Y.Z`, `:X.Y`, `:latest` for releases,
 `:edge` for `main`. hbbs/hbbr are built from
 [bropines/rustdesk-server](https://github.com/bropines/rustdesk-server) (upstream 1.1.16 +
 the lejianwen API/login patches + hardening and keepalive fixes).
@@ -172,7 +178,7 @@ Environment variables override the optional YAML file named by `RDPANEL_CONFIG`
 | `RDPANEL_SMTP_PORT` (`smtp.port`) | 587 / 465 / 25 | default follows the encryption |
 | `RDPANEL_SMTP_ENCRYPTION` (`smtp.encryption`) | `starttls` | `starttls`, `tls` (implicit TLS, SMTPS) or `none` |
 | `RDPANEL_SMTP_USERNAME`, `RDPANEL_SMTP_PASSWORD` (`smtp.username`, `smtp.password`) | empty | AUTH PLAIN or LOGIN; `RDPANEL_SMTP_PASSWORD_FILE` (`smtp.password_file`) reads the password from a file |
-| `RDPANEL_SMTP_FROM` (`smtp.from`) | — | sender, e.g. `RustDesk Panel <panel@example.com>` (required with a host) |
+| `RDPANEL_SMTP_FROM` (`smtp.from`) | — | sender, e.g. `RD Panel <panel@example.com>` (required with a host) |
 | `RDPANEL_SMTP_INSECURE_SKIP_VERIFY` (`smtp.insecure_skip_verify`) | `false` | accept any TLS certificate (self-signed relays only) |
 
 Example YAML:
@@ -219,9 +225,9 @@ The database schema is documented in [`docs/schema.md`](docs/schema.md).
 
 ## Links
 
-- Releases: <https://github.com/bropines/rustdesk-panel/releases>
-- Container image: <https://github.com/bropines/rustdesk-panel/pkgs/container/rustdesk-panel>
-- Issues: <https://github.com/bropines/rustdesk-panel/issues>
+- Releases: <https://github.com/bropines/rdpanel/releases>
+- Container image: <https://github.com/bropines/rdpanel/pkgs/container/rdpanel>
+- Issues: <https://github.com/bropines/rdpanel/issues>
 - hbbs/hbbr fork: <https://github.com/bropines/rustdesk-server>
 - RustDesk: <https://github.com/rustdesk/rustdesk>, <https://github.com/rustdesk/rustdesk-server>
 - Prior art: [lejianwen/rustdesk-api](https://github.com/lejianwen/rustdesk-api),
@@ -231,5 +237,5 @@ The database schema is documented in [`docs/schema.md`](docs/schema.md).
 
 The panel is MIT — see [LICENSE](LICENSE) and [NOTICE](NOTICE). The hbbs/hbbr binaries
 bundled in the container image are AGPL-3.0 (source:
-[bropines/rustdesk-server](https://github.com/bropines/rustdesk-server)). Not affiliated
-with RustDesk.
+[bropines/rustdesk-server](https://github.com/bropines/rustdesk-server)). RD Panel is an
+independent project, not affiliated with or endorsed by RustDesk / Purslane Ltd.

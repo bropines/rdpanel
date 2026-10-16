@@ -1,6 +1,6 @@
 # AGENTS.md
 
-Guide for AI coding agents and contributors working on **rustdesk-panel**: a Go API
+Guide for AI coding agents and contributors working on **RD Panel** (`rdpanel`): a Go API
 server + React admin panel for RustDesk, shipped in one s6 image with hbbs/hbbr built
 from [bropines/rustdesk-server](https://github.com/bropines/rustdesk-server).
 Product spec: [`SPEC.md`](SPEC.md). User-facing docs: [`README.md`](README.md),
@@ -68,11 +68,17 @@ scripts/e2e-server.sh && (cd web && npm run e2e:real)   # Playwright against a r
 - **Config:** new settings get an `RDPANEL_*` env var plus YAML key, a row in the README
   config table and in `docs/deploy.md`, and an entry in `deploy/rdpanel.env.example`
   when operators are likely to set it.
+- **Naming:** the product is **RD Panel** (slug `rdpanel`). Use "RustDesk" only
+  descriptively ("for RustDesk", "RustDesk clients"), never as our product name.
+  Some identifiers keep the former name `rustdesk-panel` on purpose and must not be
+  renamed: the Helm chart's resource base name (existing releases' StatefulSet
+  selectors and PVCs), the Grafana dashboard uid/tag, the Prometheus job and
+  `RustDeskPanel*` alert names, and the legacy-import UUID namespace.
 - Before finishing: `make lint` and `make test` green (staticcheck included).
 
 ## Git
 
 - Commit author: `bropines <bropines@gmail.com>`.
 - Conventional-style subjects: `feat(scope): …`, `fix(scope): …`, `docs: …`, `ci: …`.
-- Releases: tag `vX.Y.Z` on `main`; CI publishes `ghcr.io/bropines/rustdesk-panel:X.Y.Z`,
+- Releases: tag `vX.Y.Z` on `main`; CI publishes `ghcr.io/bropines/rdpanel:X.Y.Z`,
   `:X.Y`, `:latest` and the Helm chart.

@@ -45,7 +45,7 @@ p{margin:0 0 20px;color:var(--muted)}
   <p>{{.Body}}</p>
   <a class="btn" href="rustdesk://">{{.Button}}</a>
   <p class="hint">{{.Hint}}</p>
-  <div class="brand">RustDesk</div>
+  <div class="brand">RD Panel</div>
 </main>
 </body>
 </html>

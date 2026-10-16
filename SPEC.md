@@ -1,4 +1,4 @@
-# rustdesk-panel — specification
+# RD Panel — specification
 
 A self-hosted **API server + admin panel** for RustDesk, wire-compatible with official RustDesk
 clients (1.3.x–1.4.x) and with the hbbs/hbbr fork at
@@ -49,7 +49,7 @@ Non-goals (v1)
        data volume: /data  → panel.db (SQLite WAL), secret.key, hbbs key + db_v2.sqlite3
 ```
 
-### Backend (Go 1.23, module `github.com/bropines/rustdesk-panel`)
+### Backend (Go 1.23, module `github.com/bropines/rdpanel`)
 - `CGO_ENABLED=0`, SQLite via `modernc.org/sqlite`, WAL, `foreign_keys=ON`, `busy_timeout=5000`.
 - Router: `github.com/go-chi/chi/v5`. No global singletons: an `app.App` struct with injected deps; `context.Context` everywhere.
 - DB access: `database/sql` + small typed repositories (no ORM). Migrations: embedded SQL files, applied by
@@ -178,7 +178,7 @@ user_thirds 3, login_logs 73, audit_conns 1086, audit_files 54.
   `ENCRYPTED_ONLY`, `MUST_LOGIN`, `ALWAYS_USE_RELAY`, `RUSTDESK_API_JWT_KEY`, `RDPANEL_*`.
 - `.github/workflows/ci.yml`: go vet + test (race), web typecheck + lint + test + build, govulncheck.
 - `.github/workflows/image.yml`: on tag/main → build hbbs/hbbr (cross, amd64+arm64) from the server repo ref,
-  build web+panel, buildx multi-arch → `ghcr.io/bropines/rustdesk-panel:{version,latest}` using `GITHUB_TOKEN` only.
+  build web+panel, buildx multi-arch → `ghcr.io/bropines/rdpanel:{version,latest}` using `GITHUB_TOKEN` only.
 - Production: compose with `network_mode: host`, panel bound to `127.0.0.1:31114` (Angie vhost
   `desk-api.example.com` already proxies there), data dirs `hbbs-data` + new `panel-data`.
 

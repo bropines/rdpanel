@@ -1,4 +1,4 @@
-# rustdesk-panel build targets. Requires Go 1.23 and Node 20.19+ (npm).
+# RD Panel (rdpanel) build targets. Requires Go 1.23 and Node 20.19+ (npm).
 #
 #   make web      build the SPA into web/dist (embedded by the Go binary)
 #   make build    build bin/rdpanel (static, CGO disabled)
@@ -13,7 +13,7 @@
 GO        ?= go
 NPM       ?= npm
 BIN       ?= bin/rdpanel
-PKG       := github.com/bropines/rustdesk-panel
+PKG       := github.com/bropines/rdpanel
 VERSION   ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
 COMMIT    ?= $(shell git rev-parse --short=12 HEAD 2>/dev/null)
 DATE      ?= $(shell date -u +%Y-%m-%dT%H:%M:%SZ)
@@ -27,7 +27,7 @@ GOVULNCHECK_VERSION ?= v1.1.4
 # Container image (see docs/deploy.md). HBB_SRC is a checkout of
 # github.com/bropines/rustdesk-server with submodules.
 DOCKER     ?= docker
-IMAGE      ?= rustdesk-panel:local
+IMAGE      ?= rdpanel:local
 HBB_SRC    ?= $(HOME)/build/rustdesk-server
 IMAGE_ARCH ?= $(shell uname -m | sed -e 's/x86_64/amd64/' -e 's/aarch64/arm64/')
 HBB_BIN    := deploy/bin/$(IMAGE_ARCH)

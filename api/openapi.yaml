@@ -1,6 +1,6 @@
 openapi: 3.1.0
 info:
-  title: rustdesk-panel admin API
+  title: RD Panel admin API
   version: 0.1.0
   summary: Panel JSON API consumed by the embedded React SPA.
   description: |
@@ -3258,7 +3258,7 @@ components:
       type: object
       required: [name, version, hbb, update, server]
       properties:
-        name: { type: string, description: Product name (rustdesk-panel). }
+        name: { type: string, description: Product name (RD Panel). }
         version: { $ref: "#/components/schemas/VersionInfo" }
         hbb: { $ref: "#/components/schemas/AboutHbb" }
         update: { $ref: "#/components/schemas/UpdateCheck" }

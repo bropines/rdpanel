@@ -1,6 +1,6 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "title": "rustdesk-panel values",
+  "title": "rdpanel values",
   "type": "object",
   "additionalProperties": false,
   "definitions": {

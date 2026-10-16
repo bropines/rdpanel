@@ -60,7 +60,7 @@ const emailSettings: S["EmailSettings"] = {
   port: 587,
   username: "panel@example.com",
   password_set: true,
-  from: "RustDesk Panel <panel@example.com>",
+  from: "RD Panel <panel@example.com>",
   encryption: "starttls",
   insecure_skip_verify: false,
   default_locale: "en",
@@ -539,7 +539,7 @@ export const handlers = [
     const exclude = [...passkeyOwners].filter(([, o]) => o.userId === u.id).map(([id]) => ({ type: "public-key", id }));
     return ok(
       passkeyCeremony({
-        rp: { id: rpId(), name: "RustDesk Panel" },
+        rp: { id: rpId(), name: "RD Panel" },
         user: { id: btoa(`mock-user-${u.id}`).replace(/=+$/, ""), name: u.username, displayName: u.display_name || u.username },
         pubKeyCredParams: [
           { type: "public-key", alg: -7 },
@@ -631,13 +631,13 @@ export const handlers = [
     const admin = u.role === "admin";
     const started = new Date(Date.now() - (3 * 86400 + 4 * 3600 + 17 * 60) * 1000);
     return ok({
-      name: "rustdesk-panel",
+      name: "RD Panel",
       version: { panel: "v0.1.0", commit: "6045ece0b1a2", build_date: "2026-10-15T09:30:00Z", go: "go1.27.1" },
       hbb: { repo: "https://github.com/bropines/rustdesk-server", ref: "8b6f4907c1d2e3f4a5b6c7d8e9f0a1b2c3d4e5f6" },
       update: {
         status: "update_available",
         latest: "v0.2.0",
-        latest_url: "https://github.com/bropines/rustdesk-panel/releases/tag/v0.2.0",
+        latest_url: "https://github.com/bropines/rdpanel/releases/tag/v0.2.0",
         published_at: "2026-10-12T15:00:00Z",
         checked_at: new Date(Date.now() - 40 * 60_000).toISOString(),
         error: null,

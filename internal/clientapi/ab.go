@@ -12,7 +12,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"github.com/bropines/rustdesk-panel/internal/store"
+	"github.com/bropines/rdpanel/internal/store"
 )
 
 // abPeer is a peer as the client reads it (peer_model.dart). password/hash are

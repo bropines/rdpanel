@@ -32,7 +32,7 @@ concurrency:
   cancel-in-progress: ${{ github.ref_type != 'tag' }}
 
 env:
-  IMAGE: ghcr.io/bropines/rustdesk-panel
+  IMAGE: ghcr.io/bropines/rdpanel
   SERVER_REPO: bropines/rustdesk-server
   # Pinned hbbs/hbbr source for push/tag builds; bump deliberately after
   # testing a newer bropines/rustdesk-server commit.
@@ -139,7 +139,7 @@ jobs:
             type=edge,branch=main
             type=sha,enable=${{ github.ref_type != 'tag' }}
           labels: |
-            org.opencontainers.image.title=rustdesk-panel
+            org.opencontainers.image.title=rdpanel
             org.opencontainers.image.licenses=MIT AND AGPL-3.0-only
             io.github.bropines.rustdesk-server.ref=${{ needs.hbb.outputs.server_sha }}
           annotations: |

@@ -1,4 +1,4 @@
-// Package updatecheck looks up the latest rustdesk-panel release on GitHub for
+// Package updatecheck looks up the latest RD Panel release on GitHub for
 // the About page. Answers are cached (6 h by default; failures are retried
 // after 30 min while the last good answer is kept), so the panel calls the
 // GitHub API at most a few times a day no matter how often the page is opened.
@@ -19,7 +19,7 @@ import (
 )
 
 // DefaultURL is the GitHub "latest release" endpoint of this project.
-const DefaultURL = "https://api.github.com/repos/bropines/rustdesk-panel/releases/latest"
+const DefaultURL = "https://api.github.com/repos/bropines/rdpanel/releases/latest"
 
 // Defaults of a Checker.
 const (

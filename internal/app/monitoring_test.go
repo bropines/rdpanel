@@ -14,8 +14,8 @@ import (
 // monitoringFiles are the shipped Prometheus rules and Grafana dashboard; the
 // Helm chart carries byte-identical copies under files/.
 var monitoringFiles = map[string]string{
-	"../../deploy/monitoring/prometheus/alerts.yaml":      "../../deploy/helm/rustdesk-panel/files/alerts.yaml",
-	"../../deploy/monitoring/grafana/rustdesk-panel.json": "../../deploy/helm/rustdesk-panel/files/rustdesk-panel.json",
+	"../../deploy/monitoring/prometheus/alerts.yaml":      "../../deploy/helm/rdpanel/files/alerts.yaml",
+	"../../deploy/monitoring/grafana/rustdesk-panel.json": "../../deploy/helm/rdpanel/files/rustdesk-panel.json",
 }
 
 // vecsWithoutChildren are label-vector metrics that only appear in /metrics

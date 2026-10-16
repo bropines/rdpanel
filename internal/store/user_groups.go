@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/bropines/rustdesk-panel/internal/db"
+	"github.com/bropines/rdpanel/internal/db"
 )
 
 // GroupVisibility controls what members of a user group see in the client.

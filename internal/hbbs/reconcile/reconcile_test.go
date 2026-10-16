@@ -12,10 +12,10 @@ import (
 
 	"github.com/prometheus/client_golang/prometheus"
 
-	"github.com/bropines/rustdesk-panel/internal/db"
-	"github.com/bropines/rustdesk-panel/internal/events"
-	"github.com/bropines/rustdesk-panel/internal/hbbs/control"
-	"github.com/bropines/rustdesk-panel/internal/hbbs/hbbstest"
+	"github.com/bropines/rdpanel/internal/db"
+	"github.com/bropines/rdpanel/internal/events"
+	"github.com/bropines/rdpanel/internal/hbbs/control"
+	"github.com/bropines/rdpanel/internal/hbbs/hbbstest"
 )
 
 type rig struct {

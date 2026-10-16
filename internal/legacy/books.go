@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"unicode/utf8"
 
-	"github.com/bropines/rustdesk-panel/internal/crypto"
+	"github.com/bropines/rdpanel/internal/crypto"
 )
 
 type peerRow struct {

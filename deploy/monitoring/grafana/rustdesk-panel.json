@@ -1,5 +1,5 @@
 {
-  "title": "RustDesk Panel",
+  "title": "RD Panel",
   "uid": "rustdesk-panel",
   "description": "rdpanel + hbbs/hbbr: health, presence, logins, HTTP, relay and reconciler. Source: deploy/monitoring/grafana/rustdesk-panel.json",
   "tags": [

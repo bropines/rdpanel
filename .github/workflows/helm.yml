@@ -19,7 +19,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  CHART: deploy/helm/rustdesk-panel
+  CHART: deploy/helm/rdpanel
   HELM_VERSION: v3.16.4
   KUBECONFORM_VERSION: v0.6.7
 

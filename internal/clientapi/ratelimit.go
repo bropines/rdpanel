@@ -5,7 +5,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/bropines/rustdesk-panel/internal/httpx"
+	"github.com/bropines/rdpanel/internal/httpx"
 )
 
 // rateLimiter is an in-memory per-key token bucket for the unauthenticated

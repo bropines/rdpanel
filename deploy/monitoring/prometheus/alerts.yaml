@@ -1,4 +1,4 @@
-# Prometheus alerting rules for rustdesk-panel (rdpanel + hbbs/hbbr).
+# Prometheus alerting rules for RD Panel (rdpanel + hbbs/hbbr).
 #
 # Load with `rule_files: [alerts.yaml]` (see ../compose.yml) and check with
 #   promtool check rules alerts.yaml
@@ -6,7 +6,7 @@
 # The rules assume the scrape job is called "rustdesk-panel". With another job
 # name, replace job="rustdesk-panel" below. The Helm chart renders the same
 # rules as a PrometheusRule (prometheusRule.enabled) with the job set to the
-# panel Service name; keep deploy/helm/rustdesk-panel/files/alerts.yaml a
+# panel Service name; keep deploy/helm/rdpanel/files/alerts.yaml a
 # byte-for-byte copy of this file (a Go test checks it).
 #
 # Thresholds are starting points: tune them to the size of your fleet.
@@ -32,7 +32,7 @@ groups:
         labels:
           severity: warning
         annotations:
-          summary: No rustdesk-panel scrape target
+          summary: No RD Panel scrape target
           description: >-
             Prometheus has no target for job="rustdesk-panel" (service discovery
             or the ServiceMonitor no longer finds the panel).

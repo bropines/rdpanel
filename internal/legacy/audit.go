@@ -5,7 +5,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"github.com/bropines/rustdesk-panel/internal/crypto"
+	"github.com/bropines/rdpanel/internal/crypto"
 )
 
 // login_logs -> login_events. user_token_id holds a user id (legacy bug), so

@@ -401,7 +401,7 @@ const ACTIONS: [string, string, () => string, Record<string, unknown>][] = [
   ["user.password_reset", "user", () => pick(users).username, { revoke_sessions: true }],
   ["address_book.share", "address_book", () => pick(books).name, { permission: "read" }],
   ["server.settings", "server", () => "hbbr", { total_bandwidth_mbps: 1024 }],
-  ["settings.update", "settings", () => "branding", { title: "RustDesk Panel" }],
+  ["settings.update", "settings", () => "branding", { title: "RD Panel" }],
   ["identity_provider.update", "identity_provider", () => "github", { enabled: true }],
 ];
 export const adminAudit: S["AdminAuditEvent"][] = Array.from({ length: 45 }, (_, i) => {
@@ -482,7 +482,7 @@ export const providers: IdentityProvider[] = [
     slug: "keycloak",
     kind: "oidc",
     display_name: "Company SSO",
-    client_id: "rustdesk-panel",
+    client_id: "rdpanel",
     has_client_secret: false,
     issuer: "https://sso.example.com/realms/main",
     scopes: ["openid", "email", "profile"],
@@ -566,7 +566,7 @@ export const panelSettings: S["PanelSettings"] = {
   public_url: "https://desk.example.com",
   admin_url: "https://desk-admin.example.com",
   branding: {
-    title: "RustDesk Panel",
+    title: "RD Panel",
     welcome_markdown:
       "Welcome back, **{{username}}**!\n\n- Download clients: [rustdesk.com](https://rustdesk.com/)\n- ID server: `desk.example.com`, key in the *Server* page\n- Questions? Write to `#it-support`.",
     has_logo: false,

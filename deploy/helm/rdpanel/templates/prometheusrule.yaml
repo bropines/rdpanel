@@ -1,20 +1,20 @@
 {{- if .Values.prometheusRule.enabled }}
 {{- $r := .Values.prometheusRule }}
-{{- $job := $r.job | default (include "rustdesk-panel.fullname" .) }}
+{{- $job := $r.job | default (include "rdpanel.fullname" .) }}
 # Rules from files/alerts.yaml (a copy of deploy/monitoring/prometheus/alerts.yaml)
 # with job="rustdesk-panel" replaced by the scrape job: with the chart's
 # ServiceMonitor that is the panel Service name.
 apiVersion: monitoring.coreos.com/v1
 kind: PrometheusRule
 metadata:
-  name: {{ include "rustdesk-panel.fullname" . }}
+  name: {{ include "rdpanel.fullname" . }}
   namespace: {{ $r.namespace | default .Release.Namespace }}
   labels:
-    {{- include "rustdesk-panel.labels" . | nindent 4 }}
+    {{- include "rdpanel.labels" . | nindent 4 }}
     {{- with $r.labels }}
     {{- toYaml . | nindent 4 }}
     {{- end }}
-  {{- with include "rustdesk-panel.annotations" (dict "root" . "extra" $r.annotations) }}{{ . | nindent 2 }}{{ end }}
+  {{- with include "rdpanel.annotations" (dict "root" . "extra" $r.annotations) }}{{ . | nindent 2 }}{{ end }}
 spec:
   {{- $rules := .Files.Get "files/alerts.yaml" | replace "job=\"rustdesk-panel\"" (printf "job=%q" $job) | fromYaml }}
   groups:

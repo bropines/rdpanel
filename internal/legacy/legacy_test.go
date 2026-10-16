@@ -15,9 +15,9 @@ import (
 
 	"golang.org/x/crypto/bcrypt"
 
-	"github.com/bropines/rustdesk-panel/internal/auth"
-	"github.com/bropines/rustdesk-panel/internal/crypto"
-	"github.com/bropines/rustdesk-panel/internal/db"
+	"github.com/bropines/rdpanel/internal/auth"
+	"github.com/bropines/rdpanel/internal/crypto"
+	"github.com/bropines/rdpanel/internal/db"
 )
 
 var testNow = time.Date(2026, 10, 15, 12, 0, 0, 0, time.UTC)

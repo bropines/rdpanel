@@ -14,12 +14,12 @@
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: {{ include "rustdesk-panel.fullname" . }}-migrate-{{ .Release.Revision }}
+  name: {{ include "rdpanel.fullname" . }}-migrate-{{ .Release.Revision }}
   namespace: {{ .Release.Namespace }}
   labels:
-    {{- include "rustdesk-panel.labels" . | nindent 4 }}
+    {{- include "rdpanel.labels" . | nindent 4 }}
     app.kubernetes.io/component: migration
-  {{- with include "rustdesk-panel.annotations" (dict "root" . "extra" $m.annotations) }}{{ . | nindent 2 }}{{ end }}
+  {{- with include "rdpanel.annotations" (dict "root" . "extra" $m.annotations) }}{{ . | nindent 2 }}{{ end }}
 spec:
   backoffLimit: {{ $m.backoffLimit }}
   {{- with $m.activeDeadlineSeconds }}
@@ -31,12 +31,12 @@ spec:
   template:
     metadata:
       labels:
-        app.kubernetes.io/name: {{ include "rustdesk-panel.name" . }}-migration
+        app.kubernetes.io/name: {{ include "rdpanel.name" . }}-migration
         app.kubernetes.io/instance: {{ .Release.Name }}
         app.kubernetes.io/component: migration
     spec:
       restartPolicy: Never
-      serviceAccountName: {{ include "rustdesk-panel.serviceAccountName" . }}
+      serviceAccountName: {{ include "rdpanel.serviceAccountName" . }}
       automountServiceAccountToken: false
       enableServiceLinks: false
       {{- with .Values.imagePullSecrets }}
@@ -61,7 +61,7 @@ spec:
       {{- end }}
       containers:
         - name: migrate
-          image: {{ include "rustdesk-panel.image" . }}
+          image: {{ include "rdpanel.image" . }}
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           command:
             {{- toYaml $m.command | nindent 12 }}
@@ -76,12 +76,12 @@ spec:
           {{- end }}
           envFrom:
             - configMapRef:
-                name: {{ include "rustdesk-panel.fullname" . }}
+                name: {{ include "rdpanel.fullname" . }}
             {{- with .Values.extraEnvFrom }}
             {{- tpl (toYaml .) $ | nindent 12 }}
             {{- end }}
           env:
-            {{- include "rustdesk-panel.env" . | nindent 12 }}
+            {{- include "rdpanel.env" . | nindent 12 }}
             {{- with .Values.extraEnv }}
             {{- tpl (toYaml .) $ | nindent 12 }}
             {{- end }}
@@ -104,7 +104,7 @@ spec:
       volumes:
         - name: data
           persistentVolumeClaim:
-            claimName: {{ include "rustdesk-panel.dataClaimName" . }}
+            claimName: {{ include "rdpanel.dataClaimName" . }}
         - name: legacy
           {{- if $m.legacy.existingClaim }}
           persistentVolumeClaim:

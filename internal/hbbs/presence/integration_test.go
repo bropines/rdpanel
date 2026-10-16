@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/bropines/rustdesk-panel/internal/hbbs/wire"
+	"github.com/bropines/rdpanel/internal/hbbs/wire"
 )
 
 // TestIntegrationRealHBBS runs against a real hbbs when RDPANEL_IT_HBBS is set

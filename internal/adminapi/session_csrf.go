@@ -3,8 +3,8 @@ package adminapi
 import (
 	"net/http"
 
-	"github.com/bropines/rustdesk-panel/internal/crypto"
-	"github.com/bropines/rustdesk-panel/internal/httpx"
+	"github.com/bropines/rdpanel/internal/crypto"
+	"github.com/bropines/rdpanel/internal/httpx"
 )
 
 // csrfTokenLen is the length of a CSRF token (32 random bytes, base64url).

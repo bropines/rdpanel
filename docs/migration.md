@@ -2,7 +2,7 @@
 
 `rdpanel migrate-legacy` imports the SQLite database of
 [lejianwen/rustdesk-api](https://github.com/lejianwen/rustdesk-api) v2.7 (`data/rustdeskapi.db`,
-schema version 265) into a fresh rustdesk-panel database. The mapping is specified in
+schema version 265) into a fresh RD Panel database. The mapping is specified in
 `docs/research/legacy-model-and-migration.md` §7.4. This page is the operator guide.
 
 ```
@@ -124,7 +124,7 @@ and leaves no other data behind. A second run is refused while a completed impor
 
 The legacy side is never modified. To roll back:
 
-1. Stop rustdesk-panel.
+1. Stop RD Panel.
 2. `docker start rustdesk-api` (the container you stopped in step 1, still on the original `data/`).
 3. Restore `rustdeskapi.db` from the backup if anything else touched it.
 

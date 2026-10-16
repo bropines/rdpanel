@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/bropines/rustdesk-panel/internal/db"
+	"github.com/bropines/rdpanel/internal/db"
 )
 
 // Device is a row of devices (one per RustDesk ID), with the owner's username

@@ -1,6 +1,6 @@
-{{- $fullname := include "rustdesk-panel.fullname" . -}}
+{{- $fullname := include "rdpanel.fullname" . -}}
 {{- $ns := .Release.Namespace -}}
-rustdesk-panel {{ .Chart.AppVersion }} (chart {{ .Chart.Version }}) — release "{{ .Release.Name }}" in namespace "{{ $ns }}".
+RD Panel {{ .Chart.AppVersion }} (chart {{ .Chart.Version }}) — release "{{ .Release.Name }}" in namespace "{{ $ns }}".
 {{- if eq (int .Values.replicaCount) 0 }}
 
 *** replicaCount=0: the server is STOPPED. ***
@@ -21,7 +21,7 @@ When it has completed, start the server again:
 {{- else if .Values.httpRoute.enabled }}
    HTTPRoute {{ $fullname }} -> hostnames: {{ join ", " .Values.httpRoute.hostnames }}
 {{- else if .Values.hostNetwork }}
-   http://<node-address>:{{ include "rustdesk-panel.httpPort" . }}/  (hostNetwork; put a TLS reverse proxy in front)
+   http://<node-address>:{{ include "rdpanel.httpPort" . }}/  (hostNetwork; put a TLS reverse proxy in front)
 {{- else if .Values.service.enabled }}
    kubectl -n {{ $ns }} port-forward svc/{{ $fullname }} {{ .Values.service.port }}:{{ .Values.service.port }}
    then open http://127.0.0.1:{{ .Values.service.port }}/
@@ -74,7 +74,7 @@ When it has completed, start the server again:
 {{- else }}
    Secret "{{ $fullname }}" holds RUSTDESK_API_JWT_KEY and RDPANEL_SECRET_KEY{{ if .Values.secrets.keep }} (kept on uninstall){{ end }}.
    BACK THEM UP:
-     kubectl -n {{ $ns }} get secret {{ $fullname }} -o yaml > rustdesk-panel-secret.yaml
+     kubectl -n {{ $ns }} get secret {{ $fullname }} -o yaml > rdpanel-secret.yaml
    Losing secret-key makes encrypted data (address-book passwords, TOTP, OIDC secrets) unreadable;
    changing jwt-key logs every client out.
 {{- end }}

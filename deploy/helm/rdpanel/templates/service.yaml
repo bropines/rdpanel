@@ -1,4 +1,4 @@
-{{- $fullname := include "rustdesk-panel.fullname" . }}
+{{- $fullname := include "rdpanel.fullname" . }}
 # Headless governing Service for the StatefulSet (stable DNS <fullname>-0.<fullname>-headless).
 apiVersion: v1
 kind: Service
@@ -6,17 +6,17 @@ metadata:
   name: {{ $fullname }}-headless
   namespace: {{ .Release.Namespace }}
   labels:
-    {{- include "rustdesk-panel.labels" . | nindent 4 }}
-  {{- with include "rustdesk-panel.annotations" (dict "root" .) }}{{ . | nindent 2 }}{{ end }}
+    {{- include "rdpanel.labels" . | nindent 4 }}
+  {{- with include "rdpanel.annotations" (dict "root" .) }}{{ . | nindent 2 }}{{ end }}
 spec:
   type: ClusterIP
   clusterIP: None
   publishNotReadyAddresses: true
   selector:
-    {{- include "rustdesk-panel.selectorLabels" . | nindent 4 }}
+    {{- include "rdpanel.selectorLabels" . | nindent 4 }}
   ports:
     - name: http
-      port: {{ include "rustdesk-panel.httpPort" . }}
+      port: {{ include "rdpanel.httpPort" . }}
       targetPort: http
       protocol: TCP
 {{- if .Values.service.enabled }}
@@ -29,12 +29,12 @@ metadata:
   name: {{ $fullname }}
   namespace: {{ .Release.Namespace }}
   labels:
-    {{- include "rustdesk-panel.labels" . | nindent 4 }}
+    {{- include "rdpanel.labels" . | nindent 4 }}
     app.kubernetes.io/component: panel
     {{- with $s.labels }}
     {{- toYaml . | nindent 4 }}
     {{- end }}
-  {{- with include "rustdesk-panel.annotations" (dict "root" . "extra" $s.annotations) }}{{ . | nindent 2 }}{{ end }}
+  {{- with include "rdpanel.annotations" (dict "root" . "extra" $s.annotations) }}{{ . | nindent 2 }}{{ end }}
 spec:
   type: {{ $s.type }}
   {{- if and (eq $s.type "LoadBalancer") $s.loadBalancerIP }}
@@ -58,7 +58,7 @@ spec:
     {{- toYaml . | nindent 4 }}
   {{- end }}
   selector:
-    {{- include "rustdesk-panel.selectorLabels" . | nindent 4 }}
+    {{- include "rdpanel.selectorLabels" . | nindent 4 }}
   ports:
     - name: http
       port: {{ $s.port }}
@@ -68,7 +68,7 @@ spec:
       nodePort: {{ $s.nodePort }}
       {{- end }}
 {{- end }}
-{{- if include "rustdesk-panel.websocketServiceEnabled" . }}
+{{- if include "rdpanel.websocketServiceEnabled" . }}
 ---
 # hbbs/hbbr WebSocket ports for the Ingress / HTTPRoute backends only (ClusterIP).
 apiVersion: v1
@@ -77,13 +77,13 @@ metadata:
   name: {{ $fullname }}-ws
   namespace: {{ .Release.Namespace }}
   labels:
-    {{- include "rustdesk-panel.labels" . | nindent 4 }}
+    {{- include "rdpanel.labels" . | nindent 4 }}
     app.kubernetes.io/component: websocket
-  {{- with include "rustdesk-panel.annotations" (dict "root" . "extra" .Values.websocket.service.annotations) }}{{ . | nindent 2 }}{{ end }}
+  {{- with include "rdpanel.annotations" (dict "root" . "extra" .Values.websocket.service.annotations) }}{{ . | nindent 2 }}{{ end }}
 spec:
   type: ClusterIP
   selector:
-    {{- include "rustdesk-panel.selectorLabels" . | nindent 4 }}
+    {{- include "rdpanel.selectorLabels" . | nindent 4 }}
   ports:
     - name: hbbs-ws
       port: {{ .Values.ports.rendezvousWs }}

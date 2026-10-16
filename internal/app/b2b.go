@@ -5,9 +5,9 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/bropines/rustdesk-panel/internal/adminapi"
-	"github.com/bropines/rustdesk-panel/internal/hbbs/control"
-	"github.com/bropines/rustdesk-panel/internal/store"
+	"github.com/bropines/rdpanel/internal/adminapi"
+	"github.com/bropines/rdpanel/internal/hbbs/control"
+	"github.com/bropines/rdpanel/internal/store"
 )
 
 // Stream B2b wiring: hbbs collaborators of the admin API, audit retention and

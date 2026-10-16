@@ -197,6 +197,8 @@ func passwordAlgo(hash string) (algo string, known bool) {
 
 // uuidNamespace is the UUIDv5 namespace for ids derived from legacy rows:
 // UUIDv5(NameSpaceURL, "https://github.com/bropines/rustdesk-panel/legacy").
+// The URL is the project's former repository name and must stay as is: changing
+// it would change every derived id and break re-imports.
 var uuidNamespace = uuidV5(mustParseUUID("6ba7b811-9dad-11d1-80b4-00c04fd430c8"),
 	"https://github.com/bropines/rustdesk-panel/legacy")
 

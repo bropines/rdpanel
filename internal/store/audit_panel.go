@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/bropines/rustdesk-panel/internal/db"
+	"github.com/bropines/rdpanel/internal/db"
 )
 
 // Panel (admin API) audit queries: offset-paged, filtered, with totals.

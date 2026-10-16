@@ -1,5 +1,5 @@
 {{- if .Values.httpRoute.enabled }}
-{{- $fullname := include "rustdesk-panel.fullname" . }}
+{{- $fullname := include "rdpanel.fullname" . }}
 {{- $r := .Values.httpRoute }}
 {{- if not .Values.service.enabled }}
 {{- fail "httpRoute.enabled requires service.enabled" }}
@@ -13,11 +13,11 @@ metadata:
   name: {{ $fullname }}
   namespace: {{ .Release.Namespace }}
   labels:
-    {{- include "rustdesk-panel.labels" . | nindent 4 }}
+    {{- include "rdpanel.labels" . | nindent 4 }}
     {{- with $r.labels }}
     {{- toYaml . | nindent 4 }}
     {{- end }}
-  {{- with include "rustdesk-panel.annotations" (dict "root" . "extra" $r.annotations) }}{{ . | nindent 2 }}{{ end }}
+  {{- with include "rdpanel.annotations" (dict "root" . "extra" $r.annotations) }}{{ . | nindent 2 }}{{ end }}
 spec:
   parentRefs:
     {{- tpl (toYaml $r.parentRefs) $ | nindent 4 }}

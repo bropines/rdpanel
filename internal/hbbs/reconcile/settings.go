@@ -18,8 +18,8 @@ import (
 	"math"
 	"time"
 
-	"github.com/bropines/rustdesk-panel/internal/db"
-	"github.com/bropines/rustdesk-panel/internal/hbbs/control"
+	"github.com/bropines/rdpanel/internal/db"
+	"github.com/bropines/rdpanel/internal/hbbs/control"
 )
 
 // Settings is the desired (or observed) hbbs/hbbr runtime state. A nil field

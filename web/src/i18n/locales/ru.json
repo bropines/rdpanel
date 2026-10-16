@@ -1,6 +1,6 @@
 {
   "app": {
-    "title": "RustDesk Panel",
+    "title": "RD Panel",
     "skipToContent": "Перейти к содержимому"
   },
   "nav": {
@@ -306,9 +306,9 @@
     },
     "licenses": {
       "title": "Лицензии",
-      "panel": "rustdesk-panel",
+      "panel": "RD Panel",
       "hbb": "hbbs / hbbr",
-      "note": "hbbs и hbbr — свободное ПО под AGPL-3.0; ссылка на их точные исходники приведена выше. Проект не связан с RustDesk."
+      "note": "hbbs и hbbr — свободное ПО под AGPL-3.0; ссылка на их точные исходники приведена выше. RD Panel не связан с RustDesk / Purslane Ltd. и не одобрен ими."
     },
     "sidebarVersion": "Версия {{version}}"
   },

@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/bropines/rustdesk-panel/internal/store"
+	"github.com/bropines/rdpanel/internal/store"
 )
 
 func countRows(t *testing.T, e *env, table string) int {

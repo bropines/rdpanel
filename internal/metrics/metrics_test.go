@@ -7,7 +7,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/testutil"
 
-	"github.com/bropines/rustdesk-panel/internal/buildinfo"
+	"github.com/bropines/rdpanel/internal/buildinfo"
 )
 
 func TestNilPanelIsNoop(t *testing.T) {

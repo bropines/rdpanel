@@ -2425,7 +2425,7 @@ export interface components {
             go?: string;
         };
         About: {
-            /** @description Product name (rustdesk-panel). */
+            /** @description Product name (RD Panel). */
             name: string;
             version: components["schemas"]["VersionInfo"];
             hbb: components["schemas"]["AboutHbb"];

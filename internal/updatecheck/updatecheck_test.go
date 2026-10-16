@@ -48,7 +48,7 @@ func TestCheckerCachesAndTolerantOfFailures(t *testing.T) {
 			http.Error(w, "rate limited", http.StatusForbidden)
 			return
 		}
-		_, _ = w.Write([]byte(`{"tag_name":"v0.3.0","html_url":"https://github.com/bropines/rustdesk-panel/releases/tag/v0.3.0","published_at":"2026-10-01T10:00:00Z"}`))
+		_, _ = w.Write([]byte(`{"tag_name":"v0.3.0","html_url":"https://github.com/bropines/rdpanel/releases/tag/v0.3.0","published_at":"2026-10-01T10:00:00Z"}`))
 	}))
 	defer srv.Close()
 	clk := &clock{t: time.Date(2026, 10, 16, 0, 0, 0, 0, time.UTC)}

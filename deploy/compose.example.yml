@@ -12,7 +12,7 @@
 # before exposing those two).
 services:
   rustdesk:
-    image: ghcr.io/bropines/rustdesk-panel:latest
+    image: ghcr.io/bropines/rdpanel:latest
     container_name: rustdesk
     network_mode: host
     restart: unless-stopped
@@ -44,7 +44,7 @@ services:
 #
 # services:
 #   rustdesk:
-#     image: ghcr.io/bropines/rustdesk-panel:1
+#     image: ghcr.io/bropines/rdpanel:1
 #     container_name: rustdesk
 #     network_mode: host
 #     restart: unless-stopped

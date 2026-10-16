@@ -12,21 +12,21 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/collectors"
 
-	"github.com/bropines/rustdesk-panel/internal/adminapi"
-	"github.com/bropines/rustdesk-panel/internal/auth"
-	"github.com/bropines/rustdesk-panel/internal/buildinfo"
-	"github.com/bropines/rustdesk-panel/internal/clientapi"
-	"github.com/bropines/rustdesk-panel/internal/config"
-	"github.com/bropines/rustdesk-panel/internal/crypto"
-	"github.com/bropines/rustdesk-panel/internal/db"
-	"github.com/bropines/rustdesk-panel/internal/events"
-	"github.com/bropines/rustdesk-panel/internal/httpx"
-	"github.com/bropines/rustdesk-panel/internal/mailauth"
-	"github.com/bropines/rustdesk-panel/internal/metrics"
-	"github.com/bropines/rustdesk-panel/internal/store"
-	"github.com/bropines/rustdesk-panel/internal/updatecheck"
-	"github.com/bropines/rustdesk-panel/internal/web"
-	webdist "github.com/bropines/rustdesk-panel/web"
+	"github.com/bropines/rdpanel/internal/adminapi"
+	"github.com/bropines/rdpanel/internal/auth"
+	"github.com/bropines/rdpanel/internal/buildinfo"
+	"github.com/bropines/rdpanel/internal/clientapi"
+	"github.com/bropines/rdpanel/internal/config"
+	"github.com/bropines/rdpanel/internal/crypto"
+	"github.com/bropines/rdpanel/internal/db"
+	"github.com/bropines/rdpanel/internal/events"
+	"github.com/bropines/rdpanel/internal/httpx"
+	"github.com/bropines/rdpanel/internal/mailauth"
+	"github.com/bropines/rdpanel/internal/metrics"
+	"github.com/bropines/rdpanel/internal/store"
+	"github.com/bropines/rdpanel/internal/updatecheck"
+	"github.com/bropines/rdpanel/internal/web"
+	webdist "github.com/bropines/rdpanel/web"
 )
 
 // jwtKeyBytes is the size of a generated JWT key when RUSTDESK_API_JWT_KEY is unset.
@@ -76,7 +76,7 @@ type App struct {
 func New(ctx context.Context, cfg *config.Config, log *slog.Logger) (*App, error) {
 	a := &App{Config: cfg, Log: log, Hasher: auth.NewHasher(), StartedAt: time.Now()}
 	if cfg.UpdateCheck {
-		a.Updates = updatecheck.New("rdpanel/" + buildinfo.Version + " (+https://github.com/bropines/rustdesk-panel)")
+		a.Updates = updatecheck.New("rdpanel/" + buildinfo.Version + " (+https://github.com/bropines/rdpanel)")
 	}
 	var err error
 	if a.DB, err = openDB(ctx, cfg, log); err != nil {

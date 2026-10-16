@@ -1,7 +1,7 @@
-# rustdesk-panel Helm chart
+# rdpanel Helm chart (RD Panel)
 
 Runs the whole self-hosted RustDesk server stack as **one pod** from the image
-`ghcr.io/bropines/rustdesk-panel` (s6-overlay):
+`ghcr.io/bropines/rdpanel` (s6-overlay):
 
 | process | role | ports |
 |---|---|---|
@@ -30,12 +30,12 @@ and ordered, non-overlapping restarts, so two pods never write the same SQLite f
 ## Install
 
 ```sh
-helm install rustdesk oci://ghcr.io/bropines/charts/rustdesk-panel --version 0.1.0 \
+helm install rustdesk oci://ghcr.io/bropines/charts/rdpanel --version <version> \
   -n rustdesk --create-namespace \
   --set server.relay=rustdesk.example.com:21117 \
   --set panel.publicURL=https://rustdesk.example.com
 # or from a checkout:
-helm install rustdesk deploy/helm/rustdesk-panel -n rustdesk --create-namespace -f my-values.yaml
+helm install rustdesk deploy/helm/rdpanel -n rustdesk --create-namespace -f my-values.yaml
 ```
 
 Then:
@@ -48,6 +48,32 @@ kubectl -n rustdesk exec rustdesk-rustdesk-panel-0 -- cat /data/id_ed25519.pub  
 RustDesk client settings: **ID server** is the rendezvous address (LoadBalancer
 IP/DNS or node address), **Relay server** is `server.relay`, **API server** is
 `panel.publicURL`, and **Key** is the public key shown above.
+
+## Upgrading from the `rustdesk-panel` chart (≤ 0.1.x)
+
+Up to 0.1.x the chart was called `rustdesk-panel` and published as
+`oci://ghcr.io/bropines/charts/rustdesk-panel`, with the image
+`ghcr.io/bropines/rustdesk-panel`. The project is now **RD Panel**: chart
+`rdpanel`, image `ghcr.io/bropines/rdpanel`.
+
+Resource names, the `app.kubernetes.io/name` selector label and the PVC name
+still use the historical base name `rustdesk-panel` (unless `nameOverride` is
+set), so an existing release upgrades in place: the StatefulSet, its immutable
+selector and `volumeClaimTemplates`, the PVC `data-<fullname>-0`, Services and
+Secrets keep their names. Only the `helm.sh/chart` label changes, which rolls
+the pod once.
+
+```sh
+helm upgrade rustdesk oci://ghcr.io/bropines/charts/rdpanel --version <version> \
+  -n rustdesk --reuse-values
+```
+
+- If your values pin `image.repository: ghcr.io/bropines/rustdesk-panel`, change
+  it to `ghcr.io/bropines/rdpanel` (or drop it to use the chart default); the
+  old repository gets no new releases.
+- Do not set `nameOverride` on an existing release: it renames every resource
+  and the StatefulSet selector, which Kubernetes rejects. New installs may set
+  `nameOverride: rdpanel` to get `rdpanel` in resource names.
 
 ## Networking modes
 
@@ -226,7 +252,7 @@ The full list with comments is in [`values.yaml`](values.yaml). These are the ma
 
 | key | default | description |
 |---|---|---|
-| `image.repository` / `tag` / `digest` | `ghcr.io/bropines/rustdesk-panel` / appVersion / — | image |
+| `image.repository` / `tag` / `digest` | `ghcr.io/bropines/rdpanel` / appVersion / — | image |
 | `replicaCount` | `1` | `0` or `1` only |
 | `server.relay` | `""` | `RELAY`, the public relay `host:21117` given to clients |
 | `server.encryptedOnly` | `true` | `ENCRYPTED_ONLY=1` |
@@ -285,9 +311,9 @@ The full list with comments is in [`values.yaml`](values.yaml). These are the ma
 ## Development / validation
 
 ```sh
-helm lint --strict deploy/helm/rustdesk-panel
-for f in deploy/helm/rustdesk-panel/ci/*.yaml; do helm lint --strict deploy/helm/rustdesk-panel -f $f; done
-helm template rd deploy/helm/rustdesk-panel | kubeconform -strict -summary -kubernetes-version 1.30.0 \
+helm lint --strict deploy/helm/rdpanel
+for f in deploy/helm/rdpanel/ci/*.yaml; do helm lint --strict deploy/helm/rdpanel -f $f; done
+helm template rd deploy/helm/rdpanel | kubeconform -strict -summary -kubernetes-version 1.30.0 \
   -schema-location default \
   -schema-location 'https://raw.githubusercontent.com/datreeio/CRDs-catalog/main/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json' -
 ```
@@ -300,13 +326,13 @@ The chart is published as an OCI artifact to `ghcr.io/bropines/charts`:
 
 ```sh
 # 1. Bump Chart.yaml `version` (chart) and `appVersion` (image tag), commit, tag chart-v<version>.
-helm package deploy/helm/rustdesk-panel -d dist/
+helm package deploy/helm/rdpanel -d dist/
 echo "$GITHUB_TOKEN" | helm registry login ghcr.io -u bropines --password-stdin
-helm push dist/rustdesk-panel-<version>.tgz oci://ghcr.io/bropines/charts
-# 2. Make the package public once: GitHub → Packages → charts/rustdesk-panel → settings.
+helm push dist/rdpanel-<version>.tgz oci://ghcr.io/bropines/charts
+# 2. Make the package public once: GitHub → Packages → charts/rdpanel → settings.
 # 3. Users install with:
-helm install rustdesk oci://ghcr.io/bropines/charts/rustdesk-panel --version <version>
+helm install rustdesk oci://ghcr.io/bropines/charts/rdpanel --version <version>
 ```
 
 In GitHub Actions the same steps work with `permissions: packages: write` and
-`secrets.GITHUB_TOKEN`. Optionally sign with `cosign sign ghcr.io/bropines/charts/rustdesk-panel:<version>`.
+`secrets.GITHUB_TOKEN`. Optionally sign with `cosign sign ghcr.io/bropines/charts/rdpanel:<version>`.
