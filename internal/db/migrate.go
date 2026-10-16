@@ -56,3 +56,16 @@ func (d *DB) SchemaVersion(ctx context.Context) (int64, error) {
 	}
 	return p.GetDBVersion(ctx)
 }
+
+// LatestSchemaVersion returns the newest embedded migration version.
+func (d *DB) LatestSchemaVersion() (int64, error) {
+	p, err := d.provider()
+	if err != nil {
+		return 0, err
+	}
+	var latest int64
+	for _, s := range p.ListSources() {
+		latest = max(latest, s.Version)
+	}
+	return latest, nil
+}

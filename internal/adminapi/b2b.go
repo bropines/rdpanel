@@ -74,6 +74,7 @@ func registerB2b(r chi.Router, d Deps) {
 	c.registerBooks(r)
 	c.registerAudit(r)
 	c.registerServer(r)
+	c.registerAbout(r)
 }
 
 // recordAudit appends an admin_audit row for the request's user. details must

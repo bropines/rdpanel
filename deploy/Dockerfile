@@ -45,6 +45,10 @@ ARG TARGETARCH
 ARG VERSION=dev
 ARG COMMIT=unknown
 ARG DATE=unknown
+# Source of the bundled hbbs/hbbr, shown on the panel's About page (same values
+# as the final stage's AGPL SOURCE note).
+ARG HBB_REPO=https://github.com/bropines/rustdesk-server
+ARG HBB_REF=unknown
 ENV GOTOOLCHAIN=local CGO_ENABLED=0 GOFLAGS=-trimpath
 WORKDIR /src
 COPY go.mod go.sum ./
@@ -57,7 +61,7 @@ RUN --mount=type=cache,target=/go/pkg/mod \
     --mount=type=cache,target=/root/.cache/go-build \
     PKG=github.com/bropines/rustdesk-panel; \
     GOOS=$TARGETOS GOARCH=$TARGETARCH go build \
-      -ldflags "-s -w -X $PKG/internal/buildinfo.Version=$VERSION -X $PKG/internal/buildinfo.Commit=$COMMIT -X $PKG/internal/buildinfo.Date=$DATE" \
+      -ldflags "-s -w -X $PKG/internal/buildinfo.Version=$VERSION -X $PKG/internal/buildinfo.Commit=$COMMIT -X $PKG/internal/buildinfo.Date=$DATE -X $PKG/internal/buildinfo.HBBRepo=$HBB_REPO -X $PKG/internal/buildinfo.HBBRef=$HBB_REF" \
       -o /out/rdpanel ./cmd/rdpanel
 
 # ---------------------------------------------------------------- s6-overlay
