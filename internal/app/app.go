@@ -16,6 +16,7 @@ import (
 	"github.com/bropines/rdpanel/internal/auth"
 	"github.com/bropines/rdpanel/internal/buildinfo"
 	"github.com/bropines/rdpanel/internal/clientapi"
+	"github.com/bropines/rdpanel/internal/clientopts"
 	"github.com/bropines/rdpanel/internal/config"
 	"github.com/bropines/rdpanel/internal/crypto"
 	"github.com/bropines/rdpanel/internal/db"
@@ -55,6 +56,9 @@ type App struct {
 	// Kicks queues admin "disconnect" requests delivered by client heartbeats;
 	// shared by the client API (Take) and the admin API (Kick).
 	Kicks *clientapi.MemKickQueue
+	// ClientOptions are pushed to clients in heartbeat strategies; shared by
+	// the client API (StrategyFor) and the admin API (/server/client-options).
+	ClientOptions *clientopts.Service
 	// TOTP verifies second factors; it implements clientapi's TOTPVerifier
 	// (Enrolled/Verify) for the client /api/login tfa step.
 	TOTP *adminapi.TOTPService
@@ -89,6 +93,7 @@ func New(ctx context.Context, cfg *config.Config, log *slog.Logger) (*App, error
 	a.Store = store.New(a.DB, store.WithSecrets(a.AEAD))
 	a.Limiter = auth.NewBackoff(auth.DefaultBackoffConfig, nil)
 	a.Kicks = clientapi.NewMemKickQueue(0, nil)
+	a.ClientOptions = clientopts.New(a.Store, a.AEAD, nil)
 	a.TOTP = adminapi.NewTOTPService(a.Store, a.AEAD)
 	a.Mail = mailauth.New(mailauth.Options{Store: a.Store, AEAD: a.AEAD, Config: cfg, Log: log.With("component", "mail")})
 	a.Registry = prometheus.NewRegistry()

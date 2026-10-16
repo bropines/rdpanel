@@ -42,6 +42,8 @@ func (c *b2bCore) registerServer(r chi.Router) {
 		r.Get("/server/settings", c.handleGetServerSettings)
 		r.Patch("/server/settings", c.handlePatchServerSettings)
 		r.Post("/server/settings/reapply", c.handleReapplyServerSettings)
+		r.Get("/server/client-options", c.handleGetClientOptions)
+		r.Put("/server/client-options", c.handlePutClientOptions)
 		r.Get("/server/ip-blocker", c.handleIPBlocker)
 		r.Delete("/server/ip-blocker/{ip}", c.handleUnblockIP)
 		r.Get("/server/ip-changes", c.handleIPChanges)
@@ -200,6 +202,7 @@ type serverSettingsValuesDTO struct {
 	AlwaysUseRelay       *bool    `json:"always_use_relay"`
 	MustLogin            *bool    `json:"must_login"`
 	TCPKeepalive         *bool    `json:"tcp_keepalive"`
+	WebRTC               *bool    `json:"webrtc"`
 	Blacklist            []string `json:"blacklist"`
 	Blocklist            []string `json:"blocklist"`
 	LimitSpeedMbps       *float64 `json:"limit_speed_mbps"`
@@ -211,7 +214,7 @@ type serverSettingsValuesDTO struct {
 
 func newSettingsValuesDTO(s reconcile.Settings) serverSettingsValuesDTO {
 	return serverSettingsValuesDTO{RelayServers: s.RelayServers, AlwaysUseRelay: s.AlwaysUseRelay,
-		MustLogin: s.MustLogin, TCPKeepalive: s.TCPKeepalive, Blacklist: s.Blacklist, Blocklist: s.Blocklist, LimitSpeedMbps: s.LimitSpeedMbps,
+		MustLogin: s.MustLogin, TCPKeepalive: s.TCPKeepalive, WebRTC: s.WebRTC, Blacklist: s.Blacklist, Blocklist: s.Blocklist, LimitSpeedMbps: s.LimitSpeedMbps,
 		TotalBandwidthMbps: s.TotalBandwidthMbps, SingleBandwidthMbps: s.SingleBandwidthMbps,
 		DowngradeThreshold: s.DowngradeThreshold, DowngradeStartCheckS: s.DowngradeStartCheckSecs}
 }
@@ -248,6 +251,7 @@ var settingKeys = []settingKey{
 	{"always_use_relay", control.HBBS, reconcile.KeyAlwaysUseRelay},
 	{"must_login", control.HBBS, reconcile.KeyMustLogin},
 	{"tcp_keepalive", control.HBBS, reconcile.KeyTCPKeepalive},
+	{"webrtc", control.HBBS, reconcile.KeyWebRTC},
 	{"blacklist", control.HBBR, reconcile.KeyBlacklist},
 	{"blocklist", control.HBBR, reconcile.KeyBlocklist},
 	{"limit_speed_mbps", control.HBBR, reconcile.KeyLimitSpeed},
@@ -352,6 +356,11 @@ func applySettingsPatch(s *reconcile.Settings, patch map[string]json.RawMessage)
 			s.TCPKeepalive = nil
 			if !null {
 				err = json.Unmarshal(raw, &s.TCPKeepalive)
+			}
+		case "webrtc":
+			s.WebRTC = nil
+			if !null {
+				err = json.Unmarshal(raw, &s.WebRTC)
 			}
 		case "blacklist", "blocklist":
 			dst := &s.Blacklist
@@ -659,6 +668,7 @@ var consoleCommands = map[string]consoleMeta{
 	"hbbs/test-geo":              {"Relay hbbs would pick for one or two IPs (advances its rotation).", 2, ipArg, false},
 	"hbbs/must-login":            {"Show or set MUST_LOGIN (Y/N). Prefer the server settings page.", 1, ynArg, true},
 	"hbbs/tcp-keepalive":         {"Show or set TCP_KEEPALIVE (Y/N): keepalives for TCP/WebSocket clients. Prefer the server settings page.", 1, ynArg, true},
+	"hbbs/webrtc":                {"Show or set WEBRTC (Y/N): WebRTC signaling for RustDesk 1.5+ clients. Prefer the server settings page.", 1, ynArg, true},
 	"hbbr/h":                     {"Show the hbbr help text.", 0, noArgPat, false},
 	"hbbr/blacklist-add":         {"Throttle IPs to limit-speed (ip|ip|...).", 1, ipsArg, true},
 	"hbbr/blacklist-remove":      {"Remove throttled IPs (ip|ip|... or all).", 1, `^([0-9A-Fa-f:.|]+|all)$`, true},

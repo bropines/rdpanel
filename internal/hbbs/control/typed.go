@@ -124,6 +124,22 @@ func (c *Client) SetTCPKeepalive(ctx context.Context, on bool) error {
 	return err
 }
 
+// WebRTC reads WEBRTC (bropines/rustdesk-server fork): whether hbbs forwards
+// WebRTC signaling (SDP offer/answer, trickle ICE) between RustDesk 1.5+ clients.
+func (c *Client) WebRTC(ctx context.Context) (bool, error) {
+	out, err := c.Exec(ctx, HBBS, "webrtc")
+	if err != nil {
+		return false, err
+	}
+	return parseFlag(out, "WEBRTC")
+}
+
+// SetWebRTC sets WEBRTC; it applies to the next punch request.
+func (c *Client) SetWebRTC(ctx context.Context, on bool) error {
+	_, err := c.Exec(ctx, HBBS, "webrtc", yn(on))
+	return err
+}
+
 // IPBlockerEntry is one row of hbbs' registration rate limiter.
 type IPBlockerEntry struct {
 	IP string `json:"ip"`

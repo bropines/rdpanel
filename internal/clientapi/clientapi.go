@@ -96,7 +96,8 @@ type Strategy struct {
 }
 
 // StrategyProvider returns the strategy that applies to a device, or nil.
-// Not implemented in v1; the heartbeat sends no strategy when unset.
+// The app wires internal/clientopts (server-wide client options such as the
+// WebRTC ICE servers); the heartbeat sends no strategy when unset.
 type StrategyProvider interface {
 	StrategyFor(ctx context.Context, d *store.Device) (*Strategy, error)
 }

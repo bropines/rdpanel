@@ -5,7 +5,8 @@
 # Env: RELAY          -> -r <relay servers>, comma separated host[:port]
 #      ENCRYPTED_ONLY -> 1 adds `-k _` (only clients that know the key)
 #      KEY            -> read by hbbs itself when ENCRYPTED_ONLY is not 1
-#      ALWAYS_USE_RELAY, MUST_LOGIN, TCP_KEEPALIVE, RUSTDESK_API_JWT_KEY, RUST_LOG
+#      ALWAYS_USE_RELAY, MUST_LOGIN, TCP_KEEPALIVE, WEBRTC, RUSTDESK_API_JWT_KEY,
+#      RUST_LOG
 #                     -> read by hbbs itself from the environment (with-contenv
 #                        and as-service-user keep the container env)
 exec 2>&1

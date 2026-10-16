@@ -11,6 +11,7 @@ import { Skeleton, Tabs, TabsContent, TabsList, TabsTrigger } from "@/components
 import { useTableSearch } from "@/lib/use-table";
 import { cn } from "@/lib/utils";
 import { Console } from "@/pages/server/Console";
+import { ClientOptionsCard } from "@/pages/server/ClientOptionsCard";
 import { ServerSettingsForm } from "@/pages/server/ServerSettingsForm";
 import { Viewers } from "@/pages/server/Viewers";
 
@@ -113,7 +114,14 @@ export function ServerPage() {
             {t("server.tabs.console")}
           </TabsTrigger>
         </TabsList>
-        <TabsContent value="settings">{tab === "settings" && <ServerSettingsForm />}</TabsContent>
+        <TabsContent value="settings">
+          {tab === "settings" && (
+            <div className="space-y-4">
+              <ServerSettingsForm />
+              <ClientOptionsCard />
+            </div>
+          )}
+        </TabsContent>
         <TabsContent value="viewers">{tab === "viewers" && <Viewers />}</TabsContent>
         <TabsContent value="console">{tab === "console" && <Console />}</TabsContent>
       </Tabs>

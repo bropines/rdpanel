@@ -27,6 +27,8 @@ func KeyInSync(target control.Target, key string, desired, observed Settings) (m
 			return true, *observed.MustLogin == *desired.MustLogin
 		case KeyTCPKeepalive:
 			return true, *observed.TCPKeepalive == *desired.TCPKeepalive
+		case KeyWebRTC:
+			return true, *observed.WebRTC == *desired.WebRTC
 		case KeyBlacklist:
 			return true, sameSet(observed.Blacklist, desired.Blacklist)
 		case KeyBlocklist:

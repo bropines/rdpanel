@@ -15,6 +15,7 @@ data:
   ALWAYS_USE_RELAY: {{ ternary "Y" "N" .Values.server.alwaysUseRelay | quote }}
   MUST_LOGIN: {{ ternary "Y" "N" .Values.server.mustLogin | quote }}
   TCP_KEEPALIVE: {{ ternary "Y" "N" .Values.server.tcpKeepalive | quote }}
+  WEBRTC: {{ ternary "Y" "N" .Values.server.webrtc | quote }}
   {{- range $k, $v := .Values.server.env }}
   {{ $k }}: {{ tpl (toString $v) $ | quote }}
   {{- end }}

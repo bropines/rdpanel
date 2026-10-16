@@ -117,6 +117,21 @@ func TestHBBSTyped(t *testing.T) {
 	if err := c.SetTCPKeepalive(ctx, false); err != nil || hs.TCPKeepalive() {
 		t.Fatalf("tk off: %v", err)
 	}
+	if v, err := c.WebRTC(ctx); err != nil || v {
+		t.Fatalf("wr default %v %v", v, err)
+	}
+	if err := c.SetWebRTC(ctx, true); err != nil {
+		t.Fatal(err)
+	}
+	if v, err := c.WebRTC(ctx); err != nil || !v || !hs.WebRTC() {
+		t.Fatalf("wr %v %v", v, err)
+	}
+	if got := hs.Commands(); got[len(got)-2] != "webrtc Y" || got[len(got)-1] != "webrtc" {
+		t.Fatalf("wire %q", got)
+	}
+	if err := c.SetWebRTC(ctx, false); err != nil || hs.WebRTC() {
+		t.Fatalf("wr off: %v", err)
+	}
 
 	page, err := c.IPBlocker(ctx, 0)
 	if err != nil || page.Total != 2 || len(page.Entries) != 2 {
@@ -284,6 +299,9 @@ func TestAllowListAndValidation(t *testing.T) {
 		{HBBS, "ml Y extra", ErrInvalidArgs},
 		{HBBS, "tk maybe", ErrInvalidArgs},
 		{HBBS, "tcp-keepalive Y N", ErrInvalidArgs},
+		{HBBS, "wr maybe", ErrInvalidArgs},
+		{HBBS, "webrtc Y N", ErrInvalidArgs},
+		{HBBR, "wr", ErrNotAllowed},
 		{HBBR, "tk", ErrNotAllowed},
 		{HBBS, "h now", ErrInvalidArgs},
 		{HBBS, "ib 1.2.3.4 +", ErrInvalidArgs},
@@ -320,13 +338,17 @@ func TestAllowListAndValidation(t *testing.T) {
 	if _, err := c.ExecLine(ctx, HBBS, "tk y"); err != nil {
 		t.Fatal(err)
 	}
+	if _, err := c.ExecLine(ctx, HBBS, "wr y"); err != nil {
+		t.Fatal(err)
+	}
 	if _, err := c.ExecLine(ctx, HBBR, "B ::ffff:1.2.3.4"); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := c.ExecLine(ctx, HBBR, "b"); err != nil {
 		t.Fatal(err)
 	}
-	if hs.Commands()[0] != "must-login Y" || hs.Commands()[1] != "tcp-keepalive Y" || !hs.TCPKeepalive() || hr.Commands()[0] != "blocklist 1.2.3.4" || hr.Commands()[1] != "blacklist" {
+	if hs.Commands()[0] != "must-login Y" || hs.Commands()[1] != "tcp-keepalive Y" || !hs.TCPKeepalive() ||
+		hs.Commands()[2] != "webrtc Y" || !hs.WebRTC() || hr.Commands()[0] != "blocklist 1.2.3.4" || hr.Commands()[1] != "blacklist" {
 		t.Fatalf("canonical: %q %q", hs.Commands(), hr.Commands())
 	}
 	if r := au.last(); !r.Raw || r.Mutating || r.Command != "blacklist" {
@@ -358,6 +380,9 @@ func TestTransportFailures(t *testing.T) {
 	hs.SetOverride(func(string) (string, bool) { return "MUST_LOGIN: true\n", true })
 	if _, err := c.TCPKeepalive(ctx); !errors.Is(err, ErrBadResponse) {
 		t.Fatalf("tk with wrong prefix: %v", err)
+	}
+	if _, err := c.WebRTC(ctx); !errors.Is(err, ErrBadResponse) {
+		t.Fatalf("wr with wrong prefix: %v", err)
 	}
 	hs.SetOverride(func(string) (string, bool) { return "MUST_LOGIN: perhaps\n", true })
 	if _, err := c.MustLogin(ctx); !errors.Is(err, ErrBadResponse) {

@@ -70,22 +70,23 @@ func TestServerHealthAndSettings(t *testing.T) {
 	}
 	if desired["must_login"] != nil || applied["must_login"] != false || b2bNum(applied["limit_speed_mbps"]) != 32 ||
 		!hasStr(applied["relay_servers"], "relay.example.com") || b2bNum(applied["downgrade_start_check_s"]) != 1800 ||
-		len(keys) != 11 || keys["must_login"]["managed"] != false || keys["must_login"]["in_sync"] != true ||
-		applied["tcp_keepalive"] != false || desired["tcp_keepalive"] != nil || keys["tcp_keepalive"]["target"] != "hbbs" {
+		len(keys) != 12 || keys["must_login"]["managed"] != false || keys["must_login"]["in_sync"] != true ||
+		applied["tcp_keepalive"] != false || desired["tcp_keepalive"] != nil || keys["tcp_keepalive"]["target"] != "hbbs" ||
+		applied["webrtc"] != false || keys["webrtc"]["target"] != "hbbs" {
 		t.Fatalf("settings: %v", m)
 	}
 
-	code, m, _ = admin.do(http.MethodPatch, "/server/settings", map[string]any{"must_login": true, "tcp_keepalive": true,
+	code, m, _ = admin.do(http.MethodPatch, "/server/settings", map[string]any{"must_login": true, "tcp_keepalive": true, "webrtc": true,
 		"limit_speed_mbps": 16, "blacklist": []string{"1.2.3.4"}, "downgrade_start_check_s": 900})
 	want(t, "patch", code, 200, m)
 	_, _, ml, black, _, rates, _, tsec := e.fake.State()
-	if !ml || !e.fake.TCPKeepalive() || rates["limit-speed"] != 16 || !slices.Equal(black, []string{"1.2.3.4"}) || tsec != 900 {
+	if !ml || !e.fake.TCPKeepalive() || !e.fake.WebRTC() || rates["limit-speed"] != 16 || !slices.Equal(black, []string{"1.2.3.4"}) || tsec != 900 {
 		t.Fatalf("fake state: ml=%v rates=%v black=%v t=%d", ml, rates, black, tsec)
 	}
 	for _, k := range m["keys"].([]any) {
 		km := k.(map[string]any)
 		switch km["key"] {
-		case "must_login", "tcp_keepalive", "limit_speed_mbps", "blacklist", "downgrade_start_check_s":
+		case "must_login", "tcp_keepalive", "webrtc", "limit_speed_mbps", "blacklist", "downgrade_start_check_s":
 			if km["managed"] != true || km["in_sync"] != true || km["updated_by"] != "root" || km["applied_at"] == nil {
 				t.Fatalf("key status: %v", km)
 			}
@@ -102,7 +103,7 @@ func TestServerHealthAndSettings(t *testing.T) {
 	}
 	for _, bad := range []map[string]any{
 		{"relay_servers": []string{"a b"}}, {"limit_speed_mbps": -1}, {"blocklist": []string{"not-an-ip"}},
-		{"frobnicate": true}, {"must_login": "yes"}, {"tcp_keepalive": "Y"}, {"relay_servers": []string{}},
+		{"frobnicate": true}, {"must_login": "yes"}, {"tcp_keepalive": "Y"}, {"webrtc": "Y"}, {"relay_servers": []string{}},
 	} {
 		code, m, _ := admin.do(http.MethodPatch, "/server/settings", bad)
 		wantErr(t, "invalid patch", code, 400, m, "validation_failed")

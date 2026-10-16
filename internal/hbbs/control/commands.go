@@ -74,6 +74,7 @@ var specs = []CommandSpec{
 	{HBBS, "test-geo", "tg", "<ip1> [<ip2>]", vTestGeo},
 	{HBBS, "must-login", "ml", "[Y|N]", vYN},
 	{HBBS, "tcp-keepalive", "tk", "[Y|N]", vYN},
+	{HBBS, "webrtc", "wr", "[Y|N]", vYN},
 
 	{HBBR, "h", "", "", noArgs},
 	{HBBR, "blacklist-add", "ba", "<ip>[|<ip>...]", vIPListSet},

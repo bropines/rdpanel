@@ -716,7 +716,7 @@
       "console": "Console"
     },
     "rendezvous": "ID server (hbbs)",
-    "rendezvousHint": "Relay selection, login policy and client keepalive.",
+    "rendezvousHint": "Relay selection, login policy, client keepalive and WebRTC.",
     "relay": "Relay (hbbr)",
     "relayHint": "Bandwidth limits and IP lists. Speeds are in Mbit/s.",
     "keys": {
@@ -724,6 +724,7 @@
       "always_use_relay": "Always use relay",
       "must_login": "Require login",
       "tcp_keepalive": "Keepalive for TCP/WebSocket clients",
+      "webrtc": "WebRTC signaling",
       "blacklist": "Blacklist (throttled)",
       "blocklist": "Blocklist (refused)",
       "limit_speed_mbps": "Throttled speed",
@@ -737,6 +738,7 @@
       "always_use_relay": "Force every connection through the relay.",
       "must_login": "Only signed-in clients may connect (needs the same JWT key as the panel).",
       "tcp_keepalive": "Keeps clients with \"Use WebSocket\" or in TCP mode (UDP blocked, proxy) shown online: hbbs pings them every 12 s. Off = upstream behaviour (such clients look online only ~30 s of every 90 s).",
+      "webrtc": "Forwards WebRTC offers, answers and ICE candidates between RustDesk 1.5+ clients that have \"Enable WebRTC\" on, so they can connect peer-to-peer over ICE (or through your TURN server). Off = upstream behaviour (WebRTC is not offered).",
       "blacklist": "One IP or CIDR per line; relays from these IPs are slowed down.",
       "blocklist": "One IP or CIDR per line; connections from these IPs are refused.",
       "limit_speed_mbps": "Speed for blacklisted or downgraded relays.",
@@ -771,6 +773,28 @@
     "saved": "Saved and applied",
     "savedWithErrors_one": "Saved, but {{count}} setting failed to apply",
     "savedWithErrors_other": "Saved, but {{count}} settings failed to apply",
+    "clientOptions": {
+      "title": "Client options (WebRTC)",
+      "hint": "Pushed to every RustDesk client that uses this panel as its API server, on its next heartbeat. Nothing is pushed until you save once; after that, an empty value removes the option on clients.",
+      "pushed": "pushed to clients",
+      "notPushed": "not pushed",
+      "iceServers": "ICE servers",
+      "iceServersHint": "STUN/TURN servers for WebRTC, one per line. TURN needs credentials: turn://user:pass@host:port. Empty = RustDesk's default STUN servers.",
+      "congestion": "WebRTC congestion control",
+      "congestionHint": "Lets the WebRTC transport adapt its bitrate to the network.",
+      "tri": {
+        "default": "Client default",
+        "on": "On",
+        "off": "Off"
+      },
+      "save": "Save client options",
+      "saved": "Client options saved; clients apply them on their next heartbeat",
+      "errors": {
+        "url": "Each entry must be a stun:, stuns:, turn:// or turns:// URL without spaces",
+        "turn": "TURN entries need credentials: turn://user:pass@host:port",
+        "tooMany": "At most 16 ICE servers"
+      }
+    },
     "viewers": {
       "relays": "Active relays",
       "ipBlocker": "IP blocker",

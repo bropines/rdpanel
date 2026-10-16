@@ -14,6 +14,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 
 	"github.com/bropines/rdpanel/internal/auth"
+	"github.com/bropines/rdpanel/internal/clientopts"
 	"github.com/bropines/rdpanel/internal/config"
 	"github.com/bropines/rdpanel/internal/crypto"
 	"github.com/bropines/rdpanel/internal/loginlog"
@@ -80,6 +81,9 @@ type Deps struct {
 	Control ServerControl
 	// Reconciler owns the desired hbbs/hbbr settings (nil: /server/settings 503).
 	Reconciler SettingsReconciler
+	// ClientOptions are the client options pushed in heartbeats (default:
+	// clientopts.New over Store and AEAD; the app shares one with clientapi).
+	ClientOptions *clientopts.Service
 	// ConsoleLimit caps raw console commands per admin per minute (default 30).
 	ConsoleLimit int
 	// ---- end stream B2b ----

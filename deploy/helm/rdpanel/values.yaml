@@ -57,6 +57,10 @@ server:
   # upstream behaviour: they show online ~30 s of every 90 s). Also settable at runtime
   # on the panel's Server page, which then overrides this value.
   tcpKeepalive: false
+  # -- WEBRTC=Y: hbbs forwards WebRTC signaling (offer/answer, ICE candidates) between
+  # RustDesk 1.5+ clients with "Enable WebRTC" on (false = upstream behaviour). See
+  # docs/webrtc.md. Also settable at runtime on the panel's Server page.
+  webrtc: false
   # -- Extra env for the server processes (rendered into the ConfigMap), e.g. RUST_LOG: info.
   env: {}
 
