@@ -120,6 +120,8 @@ type Service struct {
 	lastPush  string
 	statusAt  map[int64]time.Time
 	liveStats map[int64]agentproto.Status
+
+	installScript []byte // install.sh with this panel's URL and image
 }
 
 // New builds a Service.
@@ -157,8 +159,9 @@ func New(cfg Config) (*Service, error) {
 	}
 	return &Service{
 		cfg: cfg, st: cfg.Store, log: cfg.Log, m: m, now: cfg.Now, kick: make(chan struct{}, 1),
-		rate:  newIPRate(1, 30, cfg.Now),
-		fails: map[int64]int{}, probedAt: map[int64]time.Time{}, conns: map[int64]*agentConn{},
+		rate:          newIPRate(1, 30, cfg.Now),
+		installScript: renderInstallScript(cfg.PublicURL, cfg.Image),
+		fails:         map[int64]int{}, probedAt: map[int64]time.Time{}, conns: map[int64]*agentConn{},
 		statusAt: map[int64]time.Time{}, liveStats: map[int64]agentproto.Status{},
 	}, nil
 }
@@ -711,6 +714,10 @@ type Enrollment struct {
 	ExpiresAt time.Time `json:"expires_at"`
 	Compose   string    `json:"compose"`
 	PanelURL  string    `json:"panel_url"`
+	// InstallCommand runs /agent/install.sh with the token (one-line install).
+	InstallCommand string `json:"install_command"`
+	// DockerRun is the same setup as a plain `docker run`.
+	DockerRun string `json:"docker_run"`
 }
 
 func newToken() (string, error) {
@@ -794,13 +801,14 @@ func (s *Service) checkHost(ctx context.Context, h string) error {
 }
 
 func (s *Service) enrollment(tok string, exp time.Time) *Enrollment {
-	url := s.cfg.PublicURL
+	url := strings.TrimRight(s.cfg.PublicURL, "/")
 	if url == "" {
 		url = "https://<panel public URL>"
 	}
 	compose := fmt.Sprintf(`services:
   relay:
     image: %s
+    container_name: rdpanel-relay
     network_mode: host        # hbbr must see real client IPs
     restart: unless-stopped
     environment:
@@ -809,8 +817,12 @@ func (s *Service) enrollment(tok string, exp time.Time) *Enrollment {
       RDPANEL_AGENT_ENROLL_TOKEN: "%s"   # one-time, expires %s
     volumes:
       - ./relay-data:/data
+    stop_grace_period: 20s
+    ulimits:
+      nofile: { soft: 1048576, hard: 1048576 }
 `, s.cfg.Image, url, tok, exp.UTC().Format(time.RFC3339))
-	return &Enrollment{Token: tok, ExpiresAt: exp.UTC(), Compose: compose, PanelURL: url}
+	return &Enrollment{Token: tok, ExpiresAt: exp.UTC(), Compose: compose, PanelURL: url,
+		InstallCommand: installCommand(url, tok), DockerRun: dockerRunCommand(url, s.cfg.Image, tok)}
 }
 
 // Update changes relay fields.

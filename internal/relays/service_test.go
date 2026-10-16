@@ -252,6 +252,13 @@ func TestEnrollmentTokenLifecycle(t *testing.T) {
 		!strings.Contains(enr.Compose, "https://desk-api.example.com") {
 		t.Fatalf("compose:\n%s", enr.Compose)
 	}
+	if want := "curl -fsSL https://desk-api.example.com/agent/install.sh | sudo sh -s -- --token " + enr.Token; enr.InstallCommand != want {
+		t.Fatalf("install command = %q, want %q", enr.InstallCommand, want)
+	}
+	if !strings.Contains(enr.DockerRun, "-e RDPANEL_AGENT_ENROLL_TOKEN="+enr.Token+" ") || !strings.Contains(enr.DockerRun, "--network host") ||
+		!strings.HasSuffix(enr.DockerRun, " ghcr.io/bropines/rdpanel:latest") {
+		t.Fatalf("docker run:\n%s", enr.DockerRun)
+	}
 	if !v.Agent.TokenPending || !v.Agent.RequireApproval || v.Agent.Enrolled() {
 		t.Fatalf("agent row: %+v", v.Agent)
 	}
