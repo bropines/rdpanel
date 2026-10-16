@@ -8,6 +8,9 @@
  *   POST   /me/security/totp/confirm {code}                         → {recovery_codes}
  *   POST   /me/security/totp/disable {password?, code?}             → 204
  *   POST   /me/security/recovery-codes {password?, code?}           → {recovery_codes}
+ *   POST   /me/security/email/verify                                 → 204 (code e-mailed)
+ *   POST   /me/security/email/confirm {code}                         → SecurityOverview
+ *   PUT    /me/security/email-2fa {enabled, password?, code?}        → SecurityOverview
  *   GET    /me/security/sessions                                    → {items: Session[]}
  *   DELETE /me/security/sessions/{id}                               → 204
  *   POST   /me/security/sessions/revoke-others                      → {revoked}
@@ -29,6 +32,7 @@ export type RecoveryCodes = Schemas["RecoveryCodes"];
 export type ProfileUpdate = Schemas["ProfileUpdate"];
 export type PasswordChange = Schemas["ChangePasswordRequest"];
 export type ReauthRequest = Schemas["ReauthRequest"];
+export type SecurityOverview = Schemas["SecurityOverview"];
 export type Passkey = Schemas["Passkey"];
 
 const S = "/me/security";
@@ -42,6 +46,10 @@ export function securityApi(client: ApiClient = api) {
     confirmTotp: (code: string) => client.request<RecoveryCodes>(`${S}/totp/confirm`, { method: "POST", body: { code } }),
     disableTotp: (body: ReauthRequest) => client.request<void>(`${S}/totp/disable`, { method: "POST", body }),
     regenerateRecoveryCodes: (body: ReauthRequest) => client.request<RecoveryCodes>(`${S}/recovery-codes`, { method: "POST", body }),
+    /** E-mails a 6-digit code to verify my address. */
+    sendEmailVerification: () => client.request<void>(`${S}/email/verify`, { method: "POST" }),
+    confirmEmail: (code: string) => client.request<SecurityOverview>(`${S}/email/confirm`, { method: "POST", body: { code } }),
+    setEmail2fa: (body: Schemas["Email2faRequest"]) => client.request<SecurityOverview>(`${S}/email-2fa`, { method: "PUT", body }),
     sessions: () => client.request<{ items: Session[] }>(`${S}/sessions`),
     revokeSession: (id: number) => client.request<void>(`${S}/sessions/${id}`, { method: "DELETE" }),
     revokeOtherSessions: () => client.request<Schemas["RevokeResult"]>(`${S}/sessions/revoke-others`, { method: "POST" }),

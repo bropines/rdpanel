@@ -41,11 +41,12 @@ const rootRoute = createRootRouteWithContext<RouterContext>()({
 const loginRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/login",
-  validateSearch: (s: Record<string, unknown>): { next?: string; error?: string; mfa?: boolean } => ({
+  validateSearch: (s: Record<string, unknown>): { next?: string; error?: string; mfa?: true | "email" } => ({
     next: typeof s.next === "string" ? s.next : undefined,
     error: typeof s.error === "string" ? s.error : undefined,
     // OIDC login of a user with TOTP lands on /login?mfa=1 with a pending session.
-    mfa: s.mfa === 1 || s.mfa === "1" || s.mfa === true ? true : undefined,
+    // With an e-mailed code instead (no TOTP, e-mail 2FA): /login?mfa=email.
+    mfa: s.mfa === "email" ? "email" : s.mfa === 1 || s.mfa === "1" || s.mfa === true ? true : undefined,
   }),
   beforeLoad: async ({ context, search }) => {
     // Already signed in → go straight to the target.
@@ -57,6 +58,13 @@ const loginRoute = createRoute({
     throw redirect({ href: safeNext(search.next) });
   },
   component: LoginPage,
+});
+
+const resetPasswordRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/reset-password",
+  validateSearch: (s: Record<string, unknown>): { token?: string } => ({ token: typeof s.token === "string" ? s.token : undefined }),
+  component: lazyRouteComponent(() => import("@/pages/ResetPasswordPage"), "ResetPasswordPage"),
 });
 
 const appRoute = createRoute({
@@ -96,6 +104,7 @@ const settingsRoute = createRoute({ getParentRoute: admin, path: "/settings", va
 
 const routeTree = rootRoute.addChildren([
   loginRoute,
+  resetPasswordRoute,
   appRoute.addChildren([
     dashboardRoute,
     profileRoute,

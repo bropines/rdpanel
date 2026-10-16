@@ -46,6 +46,45 @@ function me() {
   return id === null ? undefined : db.users.find((u) => u.id === id);
 }
 let pendingMfaUser: number | null = null;
+/** Pending login owes an e-mailed code (mock code: 246810). */
+let pendingEmailMfa = false;
+const MOCK_EMAIL_CODE = "246810";
+const maskEmail = (e: string) => {
+  const [l = "", d = ""] = e.split("@");
+  return `${l.slice(0, 1)}***${l.length > 2 ? l.slice(-1) : ""}@${d}`;
+};
+const emailSettings: S["EmailSettings"] = {
+  source: "settings",
+  enabled: true,
+  host: "smtp.example.com",
+  port: 587,
+  username: "panel@example.com",
+  password_set: true,
+  from: "RustDesk Panel <panel@example.com>",
+  encryption: "starttls",
+  insecure_skip_verify: false,
+  default_locale: "en",
+  password_reset_available: true,
+};
+
+function securityOf(u: db.MockUser): S["SecurityOverview"] {
+  return {
+    has_password: u.has_password,
+    totp_enabled: u.totp_enabled,
+    totp_pending: false,
+    totp_required: !!u.totp_required,
+    must_enroll_totp: !!u.totp_required && !u.totp_enabled,
+    recovery_codes_remaining: u.totp_enabled ? 8 : 0,
+    passkeys_available: true,
+    passkey_count: passkeysByUser[u.id]?.length ?? 0,
+    email: u.email ?? null,
+    email_verified: !!u.email_verified,
+    email_2fa_enabled: !!u.email_2fa_enabled,
+    email_2fa_required: db.panelSettings.auth.require_email_2fa,
+    email_available: emailSettings.enabled,
+    locale: u.locale ?? null,
+  };
+}
 
 function requireAuth(): Response | db.MockUser {
   const u = me();
@@ -305,8 +344,14 @@ export const handlers = [
     const b = await body<{ username?: string; password?: string }>(request);
     const u = db.users.find((x) => x.username.toLowerCase() === (b.username ?? "").toLowerCase());
     if (!u || u.password !== b.password || u.status !== "active") return err(401, "invalid_credentials", "invalid username or password");
+    if (!u.totp_enabled && u.email && u.email_verified && (u.email_2fa_enabled || db.panelSettings.auth.require_email_2fa)) {
+      pendingMfaUser = u.id;
+      pendingEmailMfa = true;
+      return ok({ mfa_required: true, mfa_methods: ["email"], email_hint: maskEmail(u.email) });
+    }
     if (u.totp_enabled) {
       pendingMfaUser = u.id;
+      pendingEmailMfa = false;
       return ok({ mfa_required: true, mfa_methods: passkeysByUser[u.id]?.length ? ["totp", "passkey"] : ["totp"] });
     }
     setCurrentUser(u.id);
@@ -315,11 +360,27 @@ export const handlers = [
   http.post(`${B}/auth/mfa`, async ({ request }) => {
     const b = await body<{ code?: string }>(request);
     if (pendingMfaUser === null) return err(401, "unauthorized", "no pending login");
-    if (b.code !== "123456" && b.code?.toUpperCase() !== "AAAA-BBBB") return err(401, "totp_invalid", "invalid verification code");
+    if (pendingEmailMfa && b.code !== MOCK_EMAIL_CODE) return err(401, "code_invalid", "invalid or expired code");
+    if (!pendingEmailMfa && b.code !== "123456" && b.code?.toUpperCase() !== "AAAA-BBBB") return err(401, "totp_invalid", "invalid verification code");
     const u = db.users.find((x) => x.id === pendingMfaUser)!;
     pendingMfaUser = null;
+    pendingEmailMfa = false;
     setCurrentUser(u.id);
     return ok({ mfa_required: false, me: meBody(u) });
+  }),
+  http.post(`${B}/auth/mfa/resend`, () => {
+    if (pendingMfaUser === null) return err(401, "unauthorized", "no pending login");
+    if (!pendingEmailMfa) return err(409, "conflict", "this login uses an authenticator app code");
+    return noContent();
+  }),
+  http.get(`${B}/auth/options`, () => ok({ password_reset: emailSettings.password_reset_available } satisfies S["AuthOptions"])),
+  // Enumeration-safe: always 202. Mock reset token: "mock-token".
+  http.post(`${B}/auth/password/forgot`, () => ok({}, 202)),
+  http.post(`${B}/auth/password/reset`, async ({ request }) => {
+    const b = await body<S["ResetPasswordRequest"]>(request);
+    if (b.token !== "mock-token") return err(400, "invalid_token", "the reset link is invalid or has expired");
+    if ((b.new_password ?? "").length < 8) return err(400, "validation_failed", "invalid password", { new_password: "must be at least 8 characters" });
+    return noContent();
   }),
   http.post(`${B}/auth/passkey/begin`, () => ok(passkeyCeremony({ rpId: rpId(), userVerification: "required" }))),
   http.post(`${B}/auth/passkey/finish`, async ({ request }) => {
@@ -359,9 +420,14 @@ export const handlers = [
   http.patch(`${B}/me`, async ({ request }) => {
     const u = requireAuth();
     if (u instanceof Response) return u;
-    const b = await body<{ display_name?: string; email?: string | null }>(request);
+    const b = await body<S["ProfileUpdate"]>(request);
     if (b.display_name !== undefined) u.display_name = b.display_name;
-    if (b.email !== undefined) u.email = b.email || null;
+    if (b.email !== undefined && (b.email || null) !== u.email) {
+      u.email = b.email || null;
+      u.email_verified = false;
+      u.email_2fa_enabled = false;
+    }
+    if (b.locale !== undefined) u.locale = b.locale;
     return ok(publicUser(u));
   }),
   http.post(`${B}/me/security/password`, async ({ request }) => {
@@ -434,16 +500,31 @@ export const handlers = [
   http.get(`${B}/me/security`, () => {
     const u = requireAuth();
     if (u instanceof Response) return u;
-    return ok({
-      has_password: u.has_password,
-      totp_enabled: u.totp_enabled,
-      totp_pending: false,
-      totp_required: !!u.totp_required,
-      must_enroll_totp: !!u.totp_required && !u.totp_enabled,
-      recovery_codes_remaining: u.totp_enabled ? 8 : 0,
-      passkeys_available: true,
-      passkey_count: passkeysByUser[u.id]?.length ?? 0,
-    } satisfies S["SecurityOverview"]);
+    return ok(securityOf(u));
+  }),
+  http.post(`${B}/me/security/email/verify`, () => {
+    const u = requireAuth();
+    if (u instanceof Response) return u;
+    if (!u.email) return err(409, "no_email", "the account has no e-mail address");
+    if (u.email_verified) return err(409, "already_verified", "the e-mail address is already verified");
+    return noContent();
+  }),
+  http.post(`${B}/me/security/email/confirm`, async ({ request }) => {
+    const u = requireAuth();
+    if (u instanceof Response) return u;
+    const b = await body<{ code?: string }>(request);
+    if (b.code !== MOCK_EMAIL_CODE) return err(400, "code_invalid", "invalid or expired code");
+    u.email_verified = true;
+    return ok(securityOf(u));
+  }),
+  http.put(`${B}/me/security/email-2fa`, async ({ request }) => {
+    const u = requireAuth();
+    if (u instanceof Response) return u;
+    const b = await body<S["Email2faRequest"]>(request);
+    if (b.enabled && !u.email_verified) return err(409, "email_not_verified", "verify your e-mail address first");
+    if (!b.enabled && u.has_password && b.password !== u.password) return err(401, "reauth_failed", "password or verification code is incorrect");
+    u.email_2fa_enabled = b.enabled;
+    return ok(securityOf(u));
   }),
   http.get(`${B}/me/security/passkeys`, () => {
     const u = requireAuth();
@@ -751,6 +832,8 @@ export const handlers = [
       has_password: !!b.password,
       totp_enabled: false,
       totp_required: !!b.totp_required,
+      email_verified: !!b.email_verified && !!b.email,
+      email_2fa_enabled: false,
       last_login_at: null,
       created_at: nowIso(),
       updated_at: nowIso(),
@@ -1405,6 +1488,36 @@ export const handlers = [
   }),
   http.put(`${B}/settings/logo`, () => err(400, "validation_failed", "logo upload is not supported in mock mode")),
   http.delete(`${B}/settings/logo`, () => noContent()),
+  http.get(`${B}/settings/email`, () => {
+    const u = requireAdmin();
+    if (u instanceof Response) return u;
+    return ok(emailSettings);
+  }),
+  http.put(`${B}/settings/email`, async ({ request }) => {
+    const u = requireAdmin();
+    if (u instanceof Response) return u;
+    const b = await body<S["EmailSettingsInput"]>(request);
+    if (b.from !== undefined && b.host && !/@/.test(b.from)) return err(400, "validation_failed", "invalid e-mail settings", { from: "must be an address" });
+    const { password, ...rest } = b;
+    Object.assign(emailSettings, rest);
+    if (password !== undefined) emailSettings.password_set = password !== "";
+    if (b.host !== undefined) {
+      emailSettings.source = b.host ? "settings" : "none";
+      emailSettings.enabled = !!b.host;
+    }
+    emailSettings.password_reset_available = emailSettings.enabled;
+    audit(u, "settings.email_update", "settings", "");
+    return ok(emailSettings);
+  }),
+  http.post(`${B}/settings/email/test`, async ({ request }) => {
+    const u = requireAdmin();
+    if (u instanceof Response) return u;
+    const b = await body<S["TestEmailRequest"]>(request);
+    const to = b.to || u.email;
+    if (!to) return err(400, "validation_failed", "invalid recipient", { to: "must be a valid e-mail address" });
+    if (!emailSettings.enabled) return err(409, "email_not_configured", "e-mail (SMTP) is not configured");
+    return ok({ to });
+  }),
 
   /* identity providers (api/openapi.yaml tag identity-providers) */
   http.get(`${B}/identity-providers`, () => {

@@ -65,10 +65,16 @@ export const serverApi = {
 
 export type PanelSettings = Schemas["PanelSettings"];
 export type PanelSettingsPatch = Schemas["PanelSettingsPatch"];
+export type EmailSettings = Schemas["EmailSettings"];
+export type EmailSettingsInput = Schemas["EmailSettingsInput"];
 
 export const settingsApi = {
   get: () => api.request<PanelSettings>("/settings"),
   update: (body: PanelSettingsPatch) => api.request<PanelSettings>("/settings", { method: "PATCH", body }),
   uploadLogo: (file: File) => api.request<Branding>("/settings/logo", { method: "PUT", rawBody: file }),
   deleteLogo: () => api.request<void>("/settings/logo", { method: "DELETE" }),
+  email: () => api.request<EmailSettings>("/settings/email"),
+  updateEmail: (body: EmailSettingsInput) => api.request<EmailSettings>("/settings/email", { method: "PUT", body }),
+  testEmail: (body: Schemas["TestEmailRequest"]) =>
+    api.request<Schemas["TestEmailResult"]>("/settings/email/test", { method: "POST", body }),
 };

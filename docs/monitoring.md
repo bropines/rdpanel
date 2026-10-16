@@ -47,7 +47,7 @@ names, user ids, IPs or device ids, except the opt-in per-device gauge.
 | `hbbr_relay_bandwidth_bits_per_second` | gauge | | sum of the relays' current speed |
 | `hbbr_relay_active_bytes` | gauge | | bytes moved so far by the relays that are still open |
 | `hbbr_usage_up` / `hbbr_usage_errors_total` | gauge / counter | | `usage` poll health |
-| `auth_login_attempts_total` | counter | `surface` (`panel`, `client`), `method` (`password`, `totp`, `oidc`), `result` (`success`, `failure`, `rate_limited`) | login attempts. `method` is the step that decided the attempt: a wrong TOTP code is `totp/failure`, a login finished with a TOTP code is `totp/success`; the password step that only leads to the TOTP prompt is not counted |
+| `auth_login_attempts_total` | counter | `surface` (`panel`, `client`), `method` (`password`, `totp`, `email`, `oidc`), `result` (`success`, `failure`, `rate_limited`) | login attempts. `method` is the step that decided the attempt: a wrong TOTP code is `totp/failure`, a login finished with a TOTP code is `totp/success` (e-mailed codes likewise count as `email`); the password step that only leads to the TOTP prompt is not counted |
 | `auth_client_tokens_issued_total` | counter | `method` | RustDesk client tokens minted (`/api/login`, OIDC auth-query) |
 | `audit_events_total` | counter | `type` (`conn`, `file`, `alarm`), `result` (`stored`, `rejected`, `error`) | client audit records (`/api/audit/*`); `rejected` = unknown device / uuid mismatch / bad nonce |
 | `events_published_total`, `events_dropped_total`, `events_subscribers` | | `type` | in-process event bus behind the SSE stream |

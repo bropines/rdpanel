@@ -24,7 +24,8 @@ command, without re-login.
 - **Admin panel:** devices with live online status from hbbs (pushed over SSE), users and
   groups, unified address books with sharing and coloured tags, audit logs, identity
   providers, hbbs/hbbr control. English and Russian, light and dark themes, mobile layout.
-- **Sign-in:** password, TOTP 2FA with recovery codes, passkeys (WebAuthn) for the panel,
+- **Sign-in:** password, TOTP 2FA with recovery codes, e-mailed sign-in codes (panel and
+  RustDesk client), password reset by e-mail, passkeys (WebAuthn) for the panel,
   OIDC (GitHub, Google, any OIDC provider) for both the panel and the RustDesk client. The public client API and the
   admin panel can live on different hosts (e.g. panel only on a VPN/tailnet).
 - **Server control:** relay servers, always-use-relay, must-login, opt-in keepalive for
@@ -167,6 +168,12 @@ Environment variables override the optional YAML file named by `RDPANEL_CONFIG`
 | `RDPANEL_LOG_LEVEL` (`log.level`) | `info` | `debug`, `info`, `warn`, `error` |
 | `RDPANEL_LOG_FORMAT` (`log.format`) | `json` | `json` or `text` |
 | `RDPANEL_UPDATE_CHECK` (`update_check`) | `true` | About page "update available" check: the server asks the GitHub releases API at most every 6 h (failures tolerated); `false` = no outbound request |
+| `RDPANEL_SMTP_HOST` (`smtp.host`) | empty | outgoing mail server; empty = e-mail is configured in Settings → E-mail (or off). When set, the whole `smtp.*` block comes from the configuration and is read-only in the panel |
+| `RDPANEL_SMTP_PORT` (`smtp.port`) | 587 / 465 / 25 | default follows the encryption |
+| `RDPANEL_SMTP_ENCRYPTION` (`smtp.encryption`) | `starttls` | `starttls`, `tls` (implicit TLS, SMTPS) or `none` |
+| `RDPANEL_SMTP_USERNAME`, `RDPANEL_SMTP_PASSWORD` (`smtp.username`, `smtp.password`) | empty | AUTH PLAIN or LOGIN; `RDPANEL_SMTP_PASSWORD_FILE` (`smtp.password_file`) reads the password from a file |
+| `RDPANEL_SMTP_FROM` (`smtp.from`) | — | sender, e.g. `RustDesk Panel <panel@example.com>` (required with a host) |
+| `RDPANEL_SMTP_INSECURE_SKIP_VERIFY` (`smtp.insecure_skip_verify`) | `false` | accept any TLS certificate (self-signed relays only) |
 
 Example YAML:
 

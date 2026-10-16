@@ -105,6 +105,92 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/auth/mfa/resend": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * E-mail a new sign-in code for a pending e-mail login.
+         * @description Requires the pending session of a login whose second factor is an e-mailed
+         *     code (`mfa_method: email`). The previous code is invalidated. Limited by a
+         *     60 s cooldown and hourly caps (429 `rate_limited`, `Retry-After`).
+         */
+        post: operations["resendMfaEmail"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/options": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Optional login-page features. */
+        get: operations["getAuthOptions"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/password/forgot": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Request a password reset link by e-mail.
+         * @description `login` is a username or an e-mail address. The answer is always 202,
+         *     whether or not an account matched; the e-mail is sent in the background
+         *     only to active accounts with a password and a **verified** address that may
+         *     use password sign-in. The link (`<admin_url>/reset-password?token=…`) is
+         *     single-use and valid 30 minutes. 409 `password_reset_unavailable` when SMTP
+         *     or the panel URL is not configured. Requests are rate limited per IP.
+         */
+        post: operations["forgotPassword"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/password/reset": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Set a new password with a reset token from the e-mail.
+         * @description Consumes the token, sets the password and revokes every panel session and
+         *     client token of the user (the browser's session cookie is cleared too).
+         *     400 `invalid_token` for unknown, used or expired tokens.
+         */
+        post: operations["resetPasswordByEmail"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/auth/providers": {
         parameters: {
             query?: never;
@@ -368,6 +454,67 @@ export interface paths {
         put?: never;
         /** Replace recovery codes (requires the password or a TOTP code); shown once. */
         post: operations["regenerateRecoveryCodes"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/security/email/verify": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** E-mail a 6-digit verification code to my address (valid 10 min). */
+        post: operations["sendEmailVerification"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/security/email/confirm": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Confirm my address with the e-mailed code.
+         * @description The code applies only while the address is unchanged. Changing the address clears verification and e-mail 2FA.
+         */
+        post: operations["confirmEmailVerification"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/security/email-2fa": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Turn e-mailed sign-in codes on or off.
+         * @description Enabling needs a verified address and configured SMTP (409 `email_not_verified`,
+         *     `email_not_configured`). Disabling needs the password or a TOTP/recovery code
+         *     (unless the account has neither) and is refused (403 `email_2fa_required`)
+         *     while the admin policy requires e-mail codes and TOTP is off. The factor applies
+         *     when TOTP is not enrolled, to panel and RustDesk client logins.
+         */
+        put: operations["setEmail2fa"];
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -1658,6 +1805,49 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/settings/email": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Outgoing e-mail (SMTP) configuration; the password is never returned. */
+        get: operations["getEmailSettings"];
+        /**
+         * Update the panel-managed SMTP server and the default e-mail language.
+         * @description SMTP fields are read-only (400) when `source` is `config` (RDPANEL_SMTP_HOST /
+         *     `smtp.host` set). An empty `host` disables e-mail. `password`: omit to keep,
+         *     `""` to clear; stored AEAD-encrypted.
+         */
+        put: operations["updateEmailSettings"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/settings/email/test": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Send a test e-mail through the effective configuration.
+         * @description 502 `email_send_failed` carries the SMTP error message (admin only).
+         */
+        post: operations["sendTestEmail"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/events": {
         parameters: {
             query?: never;
@@ -1721,8 +1911,10 @@ export interface components {
         LoginResponse: {
             /** @description True when the password was accepted and `POST /auth/mfa` (or `/auth/mfa/passkey/*`) must follow (a 5 min pending session was issued). */
             mfa_required: boolean;
-            /** @description Usable second factors when `mfa_required` (`passkey` when the user has passkeys). */
-            mfa_methods?: ("totp" | "passkey")[];
+            /** @description Usable second factors when `mfa_required` (`passkey` when the user has passkeys). `[email]`: a 6-digit code was e-mailed to a user without TOTP (resend with `POST /auth/mfa/resend`). */
+            mfa_methods?: ("totp" | "passkey" | "email")[];
+            /** @description Masked address the code was sent to (`email` only). */
+            email_hint?: string;
             me?: components["schemas"]["Me"];
         };
         CodeRequest: {
@@ -1742,9 +1934,77 @@ export interface components {
             display_name?: string;
             /**
              * Format: email
-             * @description "" or null clears it.
+             * @description "" or null clears it. A new address is unverified (e-mail 2FA turns off).
              */
             email?: string | null;
+            /**
+             * @description Language of e-mails; null = panel default.
+             * @enum {string|null}
+             */
+            locale?: "en" | "ru" | null;
+        };
+        AuthOptions: {
+            /** @description "Forgot password?" is available (SMTP and the panel URL are configured). */
+            password_reset: boolean;
+        };
+        ForgotPasswordRequest: {
+            /** @description Username or e-mail address. */
+            login: string;
+        };
+        ResetPasswordRequest: {
+            token: string;
+            new_password: string;
+        };
+        Email2faRequest: {
+            enabled: boolean;
+            /** @description Required to disable (unless the account has no password and no TOTP). */
+            password?: string;
+            /** @description TOTP or recovery code instead of the password. */
+            code?: string;
+        };
+        /** @enum {string} */
+        EmailEncryption: "none" | "starttls" | "tls";
+        EmailSettings: {
+            /**
+             * @description `config`: RDPANEL_SMTP_* / smtp.* (read-only here); `settings`: managed in the panel; `none`: e-mail is off.
+             * @enum {string}
+             */
+            source: "none" | "config" | "settings";
+            enabled: boolean;
+            host: string;
+            port: number;
+            username: string;
+            password_set: boolean;
+            from: string;
+            encryption: components["schemas"]["EmailEncryption"];
+            insecure_skip_verify: boolean;
+            /** @enum {string} */
+            default_locale: "en" | "ru";
+            password_reset_available: boolean;
+        };
+        EmailSettingsInput: {
+            /** @description Empty disables e-mail. */
+            host?: string;
+            /** @description 0 = default for the encryption. */
+            port?: number;
+            username?: string;
+            /** @description Omit to keep; "" clears. */
+            password?: string;
+            /** @description Sender, e.g. "Panel <panel@example.com>". */
+            from?: string;
+            encryption?: components["schemas"]["EmailEncryption"];
+            insecure_skip_verify?: boolean;
+            /** @enum {string} */
+            default_locale?: "en" | "ru";
+        };
+        TestEmailRequest: {
+            /** @description Recipient (default: my address). */
+            to?: string;
+            /** @enum {string} */
+            locale?: "en" | "ru";
+        };
+        TestEmailResult: {
+            to: string;
         };
         /** @enum {string} */
         ProviderKind: "github" | "google" | "oidc";
@@ -1773,6 +2033,16 @@ export interface components {
             /** @description The server has a WebAuthn relying party configured. */
             passkeys_available: boolean;
             passkey_count: number;
+            email: string | null;
+            email_verified: boolean;
+            /** @description E-mailed sign-in codes are on (used when TOTP is off). */
+            email_2fa_enabled: boolean;
+            /** @description Admin policy requires e-mail codes for accounts without TOTP (verified address). */
+            email_2fa_required: boolean;
+            /** @description SMTP is configured. */
+            email_available: boolean;
+            /** @enum {string|null} */
+            locale: "en" | "ru" | null;
         };
         PasskeyCeremony: {
             /** @description Opaque single-use id to post back to the matching finish call. */
@@ -1934,6 +2204,9 @@ export interface components {
             has_password: boolean;
             totp_enabled: boolean;
             totp_required?: boolean;
+            /** @description The current address was confirmed with an e-mailed code (or by an admin). */
+            email_verified: boolean;
+            email_2fa_enabled: boolean;
             /** Format: date-time */
             last_login_at?: string | null;
             /** Format: date-time */
@@ -2303,6 +2576,8 @@ export interface components {
             /** Format: int64 */
             user_group_id?: number | null;
             totp_required?: boolean;
+            /** @description Mark the address as verified. */
+            email_verified?: boolean;
         };
         UserUpdate: {
             username?: string;
@@ -2315,6 +2590,8 @@ export interface components {
             /** Format: int64 */
             user_group_id?: number | null;
             totp_required?: boolean;
+            /** @description Mark the address verified or unverified (unverified also turns e-mail 2FA off). */
+            email_verified?: boolean;
         };
         PasswordReset: {
             password: string;
@@ -2773,6 +3050,8 @@ export interface components {
                 /** @description False refuses password sign-in for the user role (panel and client); admins keep it. */
                 password_login_enabled: boolean;
                 require_admin_2fa: boolean;
+                /** @description Users without TOTP but with a verified address must enter an e-mailed code at sign-in. */
+                require_email_2fa: boolean;
                 session_idle_hours: number;
                 session_absolute_days: number;
                 client_token_lifetime_hours: number;
@@ -2814,6 +3093,8 @@ export interface components {
             auth?: {
                 password_login_enabled?: boolean;
                 require_admin_2fa?: boolean;
+                /** @description Users without TOTP but with a verified address must enter an e-mailed code at sign-in. */
+                require_email_2fa?: boolean;
                 session_idle_hours?: number;
                 session_absolute_days?: number;
                 client_token_lifetime_hours?: number;
@@ -3053,6 +3334,117 @@ export interface operations {
                 };
             };
             401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            429: components["responses"]["RateLimited"];
+        };
+    };
+    resendMfaEmail: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Must equal the rdpanel_csrf cookie. */
+                "X-CSRF-Token": components["parameters"]["CsrfHeader"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Code sent. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            409: components["responses"]["Conflict"];
+            429: components["responses"]["RateLimited"];
+            /** @description The e-mail could not be sent (`email_send_failed`). */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    getAuthOptions: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Options. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AuthOptions"];
+                };
+            };
+        };
+    };
+    forgotPassword: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Must equal the rdpanel_csrf cookie. */
+                "X-CSRF-Token": components["parameters"]["CsrfHeader"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ForgotPasswordRequest"];
+            };
+        };
+        responses: {
+            /** @description Accepted (identical for unknown accounts). */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": Record<string, never>;
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            403: components["responses"]["Forbidden"];
+            409: components["responses"]["Conflict"];
+            429: components["responses"]["RateLimited"];
+        };
+    };
+    resetPasswordByEmail: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Must equal the rdpanel_csrf cookie. */
+                "X-CSRF-Token": components["parameters"]["CsrfHeader"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ResetPasswordRequest"];
+            };
+        };
+        responses: {
+            /** @description Password changed; sign in again. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["ValidationFailed"];
             403: components["responses"]["Forbidden"];
             429: components["responses"]["RateLimited"];
         };
@@ -3415,6 +3807,114 @@ export interface operations {
                 };
             };
             401: components["responses"]["Unauthorized"];
+            409: components["responses"]["Conflict"];
+            429: components["responses"]["RateLimited"];
+        };
+    };
+    sendEmailVerification: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Must equal the rdpanel_csrf cookie. */
+                "X-CSRF-Token": components["parameters"]["CsrfHeader"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Code sent. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            /** @description `email_not_configured`, `no_email` or `already_verified`. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            429: components["responses"]["RateLimited"];
+            /** @description The e-mail could not be sent (`email_send_failed`). */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    confirmEmailVerification: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Must equal the rdpanel_csrf cookie. */
+                "X-CSRF-Token": components["parameters"]["CsrfHeader"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CodeRequest"];
+            };
+        };
+        responses: {
+            /** @description Verified. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SecurityOverview"];
+                };
+            };
+            /** @description Invalid or expired code (`code_invalid`). */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            429: components["responses"]["RateLimited"];
+        };
+    };
+    setEmail2fa: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Must equal the rdpanel_csrf cookie. */
+                "X-CSRF-Token": components["parameters"]["CsrfHeader"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["Email2faRequest"];
+            };
+        };
+        responses: {
+            /** @description Updated. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SecurityOverview"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
             409: components["responses"]["Conflict"];
             429: components["responses"]["RateLimited"];
         };
@@ -6123,6 +6623,97 @@ export interface operations {
             };
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
+        };
+    };
+    getEmailSettings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Effective configuration. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EmailSettings"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    updateEmailSettings: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Must equal the rdpanel_csrf cookie. */
+                "X-CSRF-Token": components["parameters"]["CsrfHeader"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EmailSettingsInput"];
+            };
+        };
+        responses: {
+            /** @description Settings after the update. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EmailSettings"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    sendTestEmail: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Must equal the rdpanel_csrf cookie. */
+                "X-CSRF-Token": components["parameters"]["CsrfHeader"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["TestEmailRequest"];
+            };
+        };
+        responses: {
+            /** @description Sent. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TestEmailResult"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            409: components["responses"]["Conflict"];
+            429: components["responses"]["RateLimited"];
+            /** @description SMTP error (`email_send_failed`). */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
         };
     };
     streamEvents: {

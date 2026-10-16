@@ -1,7 +1,7 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { getRouteApi, useNavigate } from "@tanstack/react-router";
-import { ArrowLeft, Fingerprint, KeyRound, Loader2, MonitorCog } from "lucide-react";
+import { ArrowLeft, Fingerprint, KeyRound, Loader2, Mail, MonitorCog } from "lucide-react";
 import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { useTranslation } from "react-i18next";
@@ -58,10 +58,16 @@ export function LoginPage() {
   const qc = useQueryClient();
   const search = route.useSearch();
   const next = safeNext(search.next);
-  const [step, setStep] = useState<"password" | "mfa">(search.mfa ? "mfa" : "password");
+  const [step, setStep] = useState<"password" | "mfa" | "forgot">(search.mfa ? "mfa" : "password");
   const [error, setError] = useState<string | null>(search.error ? oidcErrorKey(search.error) : null);
-  // Second factors offered by /auth/login; unknown after an OIDC redirect.
-  const [mfaMethods, setMfaMethods] = useState<MfaMethod[] | undefined>(undefined);
+  // Second factors offered by /auth/login; unknown after an OIDC redirect
+  // (except "?mfa=email": an e-mailed code is owed).
+  const [mfaMethods, setMfaMethods] = useState<MfaMethod[] | undefined>(search.mfa === "email" ? ["email"] : undefined);
+  const [emailHint, setEmailHint] = useState<string | undefined>(undefined);
+  const [notice, setNotice] = useState<string | null>(null);
+  const [forgotLogin, setForgotLogin] = useState("");
+  const isEmail = !!mfaMethods?.includes("email");
+  const authOptions = useQuery({ queryKey: ["auth", "options"], queryFn: () => auth.options(), staleTime: 300_000 });
 
   const branding = useQuery({ queryKey: ["branding"], queryFn: () => dashboardApi.branding(), staleTime: 300_000 });
   const options = useQuery({ queryKey: ["auth", "providers", "login-options"], queryFn: () => auth.loginOptions(), staleTime: 300_000 });
@@ -85,6 +91,8 @@ export function LoginPage() {
       setError(null);
       if (res.kind === "mfa") {
         setMfaMethods(res.methods);
+        setEmailHint(res.emailHint);
+        setNotice(null);
         setStep("mfa");
         return;
       }
@@ -108,12 +116,44 @@ export function LoginPage() {
     },
   });
 
+  const resend = useMutation({
+    mutationFn: () => auth.mfaResend(),
+    onSuccess: () => {
+      setError(null);
+      setNotice("login.emailCodeResent");
+    },
+    onError: (err) => setError(loginErrorKey(err)),
+  });
+
+  const forgot = useMutation({
+    mutationFn: (login: string) => auth.forgotPassword(login.trim()),
+    onSuccess: () => {
+      setError(null);
+      setNotice("login.forgotSent");
+    },
+    onError: (err) => setError(loginErrorKey(err)),
+  });
+
   const passkeyLogin = useMutation({ mutationFn: () => auth.passkeyLogin(), onSuccess: done, onError: passkeyError });
   const passkeyMfa = useMutation({ mutationFn: () => auth.passkeyMfa(), onSuccess: done, onError: passkeyError });
 
   const title = branding.data?.title || t("app.title");
   const oidc: AuthProvider[] = options.data?.providers ?? [];
-  const mfaPasskey = canPasskey && (mfaMethods === undefined || mfaMethods.includes("passkey"));
+  const mfaPasskey = canPasskey && !isEmail && (mfaMethods === undefined || mfaMethods.includes("passkey"));
+  const headTitle = step === "mfa" ? t("login.mfaTitle") : step === "forgot" ? t("login.forgotTitle") : title;
+  const headDesc =
+    step === "mfa"
+      ? isEmail
+        ? t("login.emailMfaDescription")
+        : t("login.mfaDescription")
+      : step === "forgot"
+        ? t("login.forgotDescription")
+        : t("login.description");
+  const backToPassword = () => {
+    setStep("password");
+    setError(null);
+    setNotice(null);
+  };
   const pwErrors = pwForm.formState.errors;
 
   return (
@@ -130,8 +170,8 @@ export function LoginPage() {
             ) : (
               <MonitorCog className="mb-2 h-9 w-9 text-primary" aria-hidden />
             )}
-            <CardTitle className="text-xl">{step === "mfa" ? t("login.mfaTitle") : title}</CardTitle>
-            <CardDescription>{step === "mfa" ? t("login.mfaDescription") : t("login.description")}</CardDescription>
+            <CardTitle className="text-xl">{headTitle}</CardTitle>
+            <CardDescription>{headDesc}</CardDescription>
           </CardHeader>
 
           {error && (
@@ -139,8 +179,36 @@ export function LoginPage() {
               {t(error)}
             </div>
           )}
+          {notice && !error && (
+            <div role="status" className="mx-6 mb-2 rounded-md border bg-muted px-3 py-2 text-sm">
+              {t(notice)}
+            </div>
+          )}
 
-          {step === "password" ? (
+          {step === "forgot" ? (
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                if (forgotLogin.trim()) forgot.mutate(forgotLogin);
+              }}
+              noValidate
+            >
+              <CardContent className="space-y-2">
+                <Label htmlFor="forgot-login">{t("login.forgotLogin")}</Label>
+                <Input id="forgot-login" autoComplete="username" autoFocus value={forgotLogin} onChange={(e) => setForgotLogin(e.target.value)} />
+              </CardContent>
+              <CardFooter className="flex-col gap-2">
+                <Button type="submit" className="w-full" disabled={forgot.isPending || !forgotLogin.trim()}>
+                  {forgot.isPending && <Loader2 className="animate-spin" />}
+                  {t("login.forgotSubmit")}
+                </Button>
+                <Button type="button" variant="ghost" className="w-full" onClick={backToPassword}>
+                  <ArrowLeft />
+                  {t("login.back")}
+                </Button>
+              </CardFooter>
+            </form>
+          ) : step === "password" ? (
             <form onSubmit={pwForm.handleSubmit((v) => login.mutate(v))} noValidate>
               <CardContent className="space-y-4">
                 <div className="space-y-2">
@@ -158,6 +226,20 @@ export function LoginPage() {
                     {...pwForm.register("password")}
                   />
                   {pwErrors.password?.message && <p className="text-sm text-destructive">{t(pwErrors.password.message)}</p>}
+                  {authOptions.data?.password_reset && (
+                    <button
+                      type="button"
+                      className="text-xs text-muted-foreground underline-offset-4 hover:underline"
+                      onClick={() => {
+                        setForgotLogin(pwForm.getValues("username"));
+                        setError(null);
+                        setNotice(null);
+                        setStep("forgot");
+                      }}
+                    >
+                      {t("login.forgot")}
+                    </button>
+                  )}
                 </div>
               </CardContent>
               <CardFooter className="flex-col gap-3">
@@ -210,7 +292,7 @@ export function LoginPage() {
           ) : (
             <form onSubmit={mfaForm.handleSubmit((v) => mfa.mutate(v.code))} noValidate>
               <CardContent className="space-y-2">
-                <Label htmlFor="code">{t("login.totp")}</Label>
+                <Label htmlFor="code">{isEmail ? t("login.emailCode") : t("login.totp")}</Label>
                 <Input
                   id="code"
                   autoComplete="one-time-code"
@@ -223,7 +305,9 @@ export function LoginPage() {
                 {mfaForm.formState.errors.code?.message ? (
                   <p className="text-sm text-destructive">{t(mfaForm.formState.errors.code.message)}</p>
                 ) : (
-                  <p className="text-xs text-muted-foreground">{t("login.totpHint")}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {isEmail ? (emailHint ? t("login.emailCodeHintTo", { email: emailHint }) : t("login.emailCodeHint")) : t("login.totpHint")}
+                  </p>
                 )}
               </CardContent>
               <CardFooter className="flex-col gap-2">
@@ -231,6 +315,12 @@ export function LoginPage() {
                   {mfa.isPending && <Loader2 className="animate-spin" />}
                   {t("login.verify")}
                 </Button>
+                {isEmail && (
+                  <Button type="button" variant="outline" className="w-full" disabled={resend.isPending} onClick={() => resend.mutate()}>
+                    {resend.isPending ? <Loader2 className="animate-spin" /> : <Mail />}
+                    {t("login.emailResend")}
+                  </Button>
+                )}
                 {mfaPasskey && (
                   <Button
                     type="button"
@@ -250,10 +340,7 @@ export function LoginPage() {
                   type="button"
                   variant="ghost"
                   className="w-full"
-                  onClick={() => {
-                    setStep("password");
-                    setError(null);
-                  }}
+                  onClick={backToPassword}
                 >
                   <ArrowLeft />
                   {t("login.back")}

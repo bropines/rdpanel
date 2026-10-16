@@ -36,12 +36,18 @@ type User struct {
 	AvatarURL   string
 	Note        string
 	// PasswordHash/PasswordAlgo are both empty when the user has no local password.
-	PasswordHash      string
-	PasswordAlgo      string
-	Role              Role
-	Status            UserStatus
-	UserGroupID       *int64
-	TOTPRequired      bool
+	PasswordHash string
+	PasswordAlgo string
+	Role         Role
+	Status       UserStatus
+	UserGroupID  *int64
+	TOTPRequired bool
+	// EmailVerifiedAt is set while the current Email is verified.
+	EmailVerifiedAt *time.Time
+	// Email2FAEnabled: e-mail code as the second factor (opt-in, verified address only).
+	Email2FAEnabled bool
+	// Locale of e-mails ("" = panel default).
+	Locale            string
 	PasswordChangedAt *time.Time
 	LastLoginAt       *time.Time
 	CreatedAt         time.Time
@@ -64,22 +70,26 @@ type Users struct {
 }
 
 const userColumns = `id, username, email, display_name, avatar_url, note, password_hash, password_algo,
-	role, status, user_group_id, totp_required, password_changed_at, last_login_at, created_at, updated_at`
+	role, status, user_group_id, totp_required, password_changed_at, last_login_at, created_at, updated_at,
+	email_verified_at, email_2fa_enabled, locale`
 
 func scanUser(row interface{ Scan(...any) error }) (*User, error) {
 	var (
-		u                     User
-		email, hash, algo     sql.NullString
-		groupID, pwAt, lastAt sql.NullInt64
-		totp                  int
-		createdAt, updatedAt  int64
+		u                         User
+		email, hash, algo, locale sql.NullString
+		groupID, pwAt, lastAt     sql.NullInt64
+		verifiedAt                sql.NullInt64
+		totp, email2FA            int
+		createdAt, updatedAt      int64
 	)
 	err := row.Scan(&u.ID, &u.Username, &email, &u.DisplayName, &u.AvatarURL, &u.Note, &hash, &algo,
-		&u.Role, &u.Status, &groupID, &totp, &pwAt, &lastAt, &createdAt, &updatedAt)
+		&u.Role, &u.Status, &groupID, &totp, &pwAt, &lastAt, &createdAt, &updatedAt,
+		&verifiedAt, &email2FA, &locale)
 	if err != nil {
 		return nil, mapErr(err)
 	}
 	u.Email, u.PasswordHash, u.PasswordAlgo = email.String, hash.String, algo.String
+	u.EmailVerifiedAt, u.Email2FAEnabled, u.Locale = ptrMs(verifiedAt), email2FA == 1, locale.String
 	u.UserGroupID = ptrID(groupID)
 	u.TOTPRequired = totp == 1
 	u.PasswordChangedAt, u.LastLoginAt = ptrMs(pwAt), ptrMs(lastAt)
@@ -107,12 +117,13 @@ func (r *Users) Create(ctx context.Context, u *User) error {
 	}
 	err := r.q.QueryRowContext(ctx, `INSERT INTO users (id, username, email, display_name, avatar_url, note,
 		password_hash, password_algo, role, status, user_group_id, totp_required, password_changed_at,
-		last_login_at, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`,
+		last_login_at, created_at, updated_at, email_verified_at, email_2fa_enabled, locale)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`,
 		id, strings.TrimSpace(u.Username), nullStr(u.Email), u.DisplayName, u.AvatarURL, u.Note,
 		nullStr(u.PasswordHash), nullStr(u.PasswordAlgo), u.Role, u.Status, nullID(u.UserGroupID),
 		boolInt(u.TOTPRequired), nullMs(u.PasswordChangedAt), nullMs(u.LastLoginAt),
-		toMs(u.CreatedAt), toMs(u.UpdatedAt)).Scan(&u.ID)
+		toMs(u.CreatedAt), toMs(u.UpdatedAt), nullMs(u.EmailVerifiedAt),
+		boolInt(u.Email2FAEnabled && u.EmailVerifiedAt != nil), nullStr(u.Locale)).Scan(&u.ID)
 	return mapErr(err)
 }
 
@@ -187,15 +198,45 @@ func (r *Users) List(ctx context.Context, p ListUsersParams) ([]*User, int, erro
 	return out, total, mapErr(rows.Err())
 }
 
-// Update writes the mutable profile/role fields of u (not the password).
+// Update writes the mutable profile/role fields of u (not the password, not
+// the e-mail verification state). Changing the address (case-insensitively)
+// clears email_verified_at and turns e-mail 2FA off: re-read the user to see
+// the effect.
 func (r *Users) Update(ctx context.Context, u *User) error {
 	u.UpdatedAt = r.now()
 	return expectOne(r.q.ExecContext(ctx, `UPDATE users SET username = ?, email = ?, display_name = ?,
-		avatar_url = ?, note = ?, role = ?, status = ?, user_group_id = ?, totp_required = ?, updated_at = ?
-		WHERE id = ?`,
+		avatar_url = ?, note = ?, role = ?, status = ?, user_group_id = ?, totp_required = ?, locale = ?,
+		email_verified_at = CASE WHEN coalesce(email, '') = coalesce(?, '') COLLATE NOCASE THEN email_verified_at END,
+		email_2fa_enabled = CASE WHEN coalesce(email, '') = coalesce(?, '') COLLATE NOCASE THEN email_2fa_enabled ELSE 0 END,
+		updated_at = ? WHERE id = ?`,
 		strings.TrimSpace(u.Username), nullStr(u.Email), u.DisplayName, u.AvatarURL, u.Note, u.Role, u.Status,
-		nullID(u.UserGroupID), boolInt(u.TOTPRequired), toMs(u.UpdatedAt), u.ID))
+		nullID(u.UserGroupID), boolInt(u.TOTPRequired), nullStr(u.Locale), nullStr(u.Email), nullStr(u.Email),
+		toMs(u.UpdatedAt), u.ID))
 }
+
+// SetEmailVerified marks the user's address verified (at != nil) or not.
+// Verification applies only while the stored address equals email
+// (case-insensitive); otherwise ErrNotFound. Clearing it also turns e-mail
+// 2FA off.
+func (r *Users) SetEmailVerified(ctx context.Context, id int64, email string, at *time.Time) error {
+	if at == nil {
+		return expectOne(r.q.ExecContext(ctx, `UPDATE users SET email_verified_at = NULL, email_2fa_enabled = 0,
+			updated_at = ? WHERE id = ?`, toMs(r.now()), id))
+	}
+	return expectOne(r.q.ExecContext(ctx, `UPDATE users SET email_verified_at = ?, updated_at = ?
+		WHERE id = ? AND email IS NOT NULL AND email = ?`, toMs(*at), toMs(r.now()), id, strings.TrimSpace(email)))
+}
+
+// SetEmail2FA turns the e-mail second factor on or off. Enabling requires a
+// verified address (ErrNotFound otherwise).
+func (r *Users) SetEmail2FA(ctx context.Context, id int64, enabled bool) error {
+	return expectOne(r.q.ExecContext(ctx, `UPDATE users SET email_2fa_enabled = ?, updated_at = ?
+		WHERE id = ? AND (? = 0 OR (email IS NOT NULL AND email_verified_at IS NOT NULL))`,
+		boolInt(enabled), toMs(r.now()), id, boolInt(enabled)))
+}
+
+// EmailVerified reports whether the user has an address and it is verified.
+func (u *User) EmailVerified() bool { return u.Email != "" && u.EmailVerifiedAt != nil }
 
 // SetPassword stores a new password hash (empty hash clears the password).
 func (r *Users) SetPassword(ctx context.Context, id int64, hash, algo string) error {

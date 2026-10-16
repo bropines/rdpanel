@@ -20,6 +20,7 @@ import (
 	"github.com/bropines/rustdesk-panel/internal/auth"
 	"github.com/bropines/rustdesk-panel/internal/config"
 	"github.com/bropines/rustdesk-panel/internal/httpx"
+	"github.com/bropines/rustdesk-panel/internal/mailauth"
 	"github.com/bropines/rustdesk-panel/internal/store"
 )
 
@@ -50,6 +51,7 @@ type brandingSettings struct {
 type authSettings struct {
 	PasswordLoginEnabled     bool `json:"password_login_enabled"`
 	RequireAdmin2FA          bool `json:"require_admin_2fa"`
+	RequireEmail2FA          bool `json:"require_email_2fa"`
 	SessionIdleHours         int  `json:"session_idle_hours"`
 	SessionAbsoluteDays      int  `json:"session_absolute_days"`
 	ClientTokenLifetimeHours int  `json:"client_token_lifetime_hours"`
@@ -165,6 +167,8 @@ func (a *resources) loadSettings(ctx context.Context) (panelSettingsDTO, error) 
 	errs(e)
 	s.Auth.RequireAdmin2FA, e = store.GetOr(ctx, st, store.SettingRequireAdmin2FA, false)
 	errs(e)
+	s.Auth.RequireEmail2FA, e = store.GetOr(ctx, st, mailauth.SettingRequireEmail2FA, false)
+	errs(e)
 	ints, defs := intSettings(a.d.Config)
 	for _, is := range ints {
 		*is.field(&s), e = store.GetOr(ctx, st, is.key, defs[is.key])
@@ -200,6 +204,7 @@ type panelSettingsPatch struct {
 	Auth *struct {
 		PasswordLoginEnabled     *bool `json:"password_login_enabled"`
 		RequireAdmin2FA          *bool `json:"require_admin_2fa"`
+		RequireEmail2FA          *bool `json:"require_email_2fa"`
 		SessionIdleHours         *int  `json:"session_idle_hours"`
 		SessionAbsoluteDays      *int  `json:"session_absolute_days"`
 		ClientTokenLifetimeHours *int  `json:"client_token_lifetime_hours"`
@@ -289,6 +294,9 @@ func (a *resources) handleUpdateSettings(w http.ResponseWriter, r *http.Request)
 		}
 		if au.RequireAdmin2FA != nil {
 			set[store.SettingRequireAdmin2FA] = *au.RequireAdmin2FA
+		}
+		if au.RequireEmail2FA != nil {
+			set[mailauth.SettingRequireEmail2FA] = *au.RequireEmail2FA
 		}
 	}
 	ints, _ := intSettings(a.d.Config)

@@ -42,7 +42,7 @@ export const deviceGroups: S["DeviceGroup"][] = [
   { id: 3, name: "Home", note: "", device_count: 0, created_at: iso(90 * DAY), updated_at: iso(90 * DAY) },
 ];
 
-export type MockUser = S["UserDetail"] & { password: string };
+export type MockUser = S["UserDetail"] & { password: string; locale?: "en" | "ru" | null };
 
 const userBase = (u: Partial<MockUser> & Pick<MockUser, "id" | "username" | "display_name" | "role">): MockUser => ({
   email: null,
@@ -54,6 +54,8 @@ const userBase = (u: Partial<MockUser> & Pick<MockUser, "id" | "username" | "dis
   has_password: true,
   totp_enabled: false,
   totp_required: false,
+  email_verified: false,
+  email_2fa_enabled: false,
   last_login_at: iso(int(1, 72) * HOUR),
   created_at: iso(int(100, 300) * DAY),
   updated_at: iso(int(1, 30) * DAY),
@@ -573,6 +575,7 @@ export const panelSettings: S["PanelSettings"] = {
   auth: {
     password_login_enabled: true,
     require_admin_2fa: true,
+    require_email_2fa: false,
     session_idle_hours: 12,
     session_absolute_days: 7,
     client_token_lifetime_hours: 4380,

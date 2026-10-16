@@ -7,6 +7,7 @@ import (
 	"net/mail"
 	"regexp"
 	"strings"
+	"time"
 	"unicode/utf8"
 
 	"github.com/bropines/rustdesk-panel/internal/auth"
@@ -18,6 +19,7 @@ import (
 var (
 	errLastAdmin = errors.New("last active admin")
 	errSelf      = errors.New("cannot delete yourself")
+	errNoEmail   = errors.New("user has no e-mail address")
 )
 
 var usernameRe = regexp.MustCompile(`^[A-Za-z0-9._@-]{1,128}$`)
@@ -97,6 +99,8 @@ type userInput struct {
 	Status       *string     `json:"status"`
 	UserGroupID  opt[int64]  `json:"user_group_id"`
 	TOTPRequired *bool       `json:"totp_required"`
+	// EmailVerified (update only) marks the address verified or not.
+	EmailVerified *bool `json:"email_verified"`
 }
 
 func validPassword(pw string) bool {
@@ -185,6 +189,10 @@ func (a *resources) handleCreateUser(w http.ResponseWriter, r *http.Request) {
 	}
 	if in.TOTPRequired != nil {
 		u.TOTPRequired = *in.TOTPRequired
+	}
+	if in.EmailVerified != nil && *in.EmailVerified && u.Email != "" {
+		now := a.d.Store.Now()
+		u.EmailVerifiedAt = &now
 	}
 	if in.Password != nil {
 		h, algo, err := a.d.Hasher.Hash(*in.Password)
@@ -332,6 +340,25 @@ func (a *resources) handleUpdateUser(w http.ResponseWriter, r *http.Request) {
 		if err := tx.Users.Update(ctx, u); err != nil {
 			return err
 		}
+		if in.EmailVerified != nil {
+			fresh, err := tx.Users.GetByID(ctx, u.ID)
+			if err != nil {
+				return err
+			}
+			if *in.EmailVerified != fresh.EmailVerified() {
+				var at *time.Time
+				if *in.EmailVerified {
+					now := tx.Now()
+					at = &now
+				}
+				if err := tx.Users.SetEmailVerified(ctx, u.ID, fresh.Email, at); errors.Is(err, store.ErrNotFound) {
+					return errNoEmail
+				} else if err != nil {
+					return err
+				}
+				ch.val("email_verified", fresh.EmailVerified(), *in.EmailVerified)
+			}
+		}
 		ch.val("username", old.Username, u.Username)
 		ch.val("email", old.Email, u.Email)
 		ch.val("display_name", old.DisplayName, u.DisplayName)
@@ -352,6 +379,9 @@ func (a *resources) handleUpdateUser(w http.ResponseWriter, r *http.Request) {
 	switch {
 	case errors.Is(err, errLastAdmin):
 		conflict(w, "last_admin", "cannot demote or disable the last active admin")
+		return
+	case errors.Is(err, errNoEmail):
+		validationFailed(w, "invalid user", map[string]string{"email_verified": "the user has no e-mail address"})
 		return
 	case errors.Is(err, store.ErrConflict):
 		conflict(w, "conflict", "a user with this username already exists")

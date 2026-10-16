@@ -19,6 +19,7 @@ import { Skeleton } from "@/components/ui/misc";
 import { useMe } from "@/lib/session";
 import { useTableSearch } from "@/lib/use-table";
 import { oidcErrorKey } from "@/pages/login-errors";
+import { EmailSection } from "@/pages/my/EmailSection";
 import { PasskeysSection } from "@/pages/my/PasskeysSection";
 import { TotpSection } from "@/pages/my/TotpSection";
 
@@ -233,6 +234,9 @@ export function ProfilePage() {
       </Section>
       <Section title={t("security.twoFactor")} description={t("security.twoFactorHint")}>
         <TotpSection autoEnroll={autoEnroll} />
+      </Section>
+      <Section title={t("email.title")} description={t("email.description")}>
+        <EmailSection />
       </Section>
       <Section title={t("passkeys.title")} description={t("passkeys.hint")}>
         <PasskeysSection />

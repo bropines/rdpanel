@@ -16,6 +16,7 @@ import (
 	"github.com/bropines/rustdesk-panel/internal/crypto"
 	"github.com/bropines/rustdesk-panel/internal/httpx"
 	"github.com/bropines/rustdesk-panel/internal/loginlog"
+	"github.com/bropines/rustdesk-panel/internal/mailauth"
 	"github.com/bropines/rustdesk-panel/internal/metrics"
 	"github.com/bropines/rustdesk-panel/internal/oidc"
 	"github.com/bropines/rustdesk-panel/internal/store"
@@ -36,6 +37,7 @@ type authCore struct {
 	d        Deps
 	sess     *sessions
 	totp     *TOTPService
+	mail     *mailauth.Service
 	limiter  auth.Limiter
 	events   loginlog.Recorder
 	pk       *passkeys
@@ -48,7 +50,11 @@ func newAuthCore(d Deps) *authCore {
 	if totp == nil {
 		totp = NewTOTPService(d.Store, d.AEAD)
 	}
-	c := &authCore{d: d, sess: newSessions(d, totp), totp: totp, limiter: d.Limiter, events: d.LoginEvents,
+	mail := d.Mail
+	if mail == nil {
+		mail = mailauth.New(mailauth.Options{Store: d.Store, AEAD: d.AEAD, Config: d.Config, Log: d.Log})
+	}
+	c := &authCore{d: d, sess: newSessions(d, totp), totp: totp, mail: mail, limiter: d.Limiter, events: d.LoginEvents,
 		pk: newPasskeys(d.Config)}
 	if c.limiter == nil {
 		c.limiter = auth.NewBackoff(auth.DefaultBackoffConfig, d.Store.Now)
@@ -77,8 +83,11 @@ func (c *authCore) record(ctx context.Context, r *http.Request, ev loginlog.Even
 	}
 	if !ev.Success {
 		factor := ev.Method
-		if strings.HasPrefix(ev.FailureReason, "totp") {
+		switch {
+		case strings.HasPrefix(ev.FailureReason, "totp"):
 			factor = metrics.MethodTOTP
+		case strings.HasPrefix(ev.FailureReason, "email_code"):
+			factor = metrics.MethodEmail
 		}
 		c.d.Telemetry.Login(metrics.SurfacePanel, factor, metrics.ResultFailure)
 	}
@@ -164,10 +173,12 @@ type loginRequest struct {
 // or the authenticated Me.
 type loginResponse struct {
 	MFARequired bool `json:"mfa_required"`
-	// MFAMethods lists the usable second factors ("totp", "passkey") when
-	// MFARequired.
+	// MFAMethods lists the usable second factors ("totp", "passkey", or
+	// "email" when a code was e-mailed) when MFARequired.
 	MFAMethods []string `json:"mfa_methods,omitempty"`
-	Me         *meDTO   `json:"me,omitempty"`
+	// EmailHint is the masked address the code was sent to ("email").
+	EmailHint string `json:"email_hint,omitempty"`
+	Me        *meDTO `json:"me,omitempty"`
 }
 
 func (c *authCore) handleLogin(w http.ResponseWriter, r *http.Request) {
@@ -266,6 +277,27 @@ func (c *authCore) handleLogin(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+	if !enrolled {
+		need, err := c.emailFactorRequired(r, user)
+		if err != nil {
+			internalError(w)
+			return
+		}
+		if need {
+			// Password step done: e-mail a code and issue a pending session.
+			if err := c.mail.SendLoginCode(ctx, user, httpx.ClientIPString(r)); err != nil {
+				c.writeMailError(w, r, err)
+				return
+			}
+			if _, _, err := c.sess.create(ctx, w, r, user, true); err != nil {
+				internalError(w)
+				return
+			}
+			httpx.WriteJSON(w, http.StatusOK, loginResponse{MFARequired: true, MFAMethods: []string{mfaMethodEmail},
+				EmailHint: loginEmailHint(user)})
+			return
+		}
+	}
 	factor := metrics.MethodPassword
 	if enrolled {
 		factor = metrics.MethodTOTP
@@ -318,6 +350,27 @@ func (c *authCore) handleMFA(w http.ResponseWriter, r *http.Request) {
 	if ok, wait := c.allow(ipKey, uKey); !ok {
 		c.d.Telemetry.Login(metrics.SurfacePanel, metrics.MethodTOTP, metrics.ResultRateLimited)
 		rateLimited(w, wait)
+		return
+	}
+	// The pending login owes TOTP when enrolled, otherwise an e-mailed code.
+	enrolled, err := c.totp.enrolled(ctx, s.User.ID)
+	if err != nil {
+		internalError(w)
+		return
+	}
+	if !enrolled {
+		valid, err := c.mail.VerifyLoginCode(ctx, s.User.ID, req.Code)
+		if err != nil {
+			internalError(w)
+			return
+		}
+		if !valid {
+			c.fail(ipKey, uKey)
+			c.recordEmailFailure(r, s.User)
+			httpx.WriteError(w, http.StatusUnauthorized, "code_invalid", "invalid or expired code")
+			return
+		}
+		c.completeLogin(w, r, s.User, loginlog.MethodPassword, metrics.MethodEmail, ipKey, uKey)
 		return
 	}
 	valid, err := c.totp.verify(ctx, s.User.ID, req.Code)
@@ -444,12 +497,30 @@ func (c *authCore) webLogin(w http.ResponseWriter, r *http.Request, user *store.
 		internalError(w)
 		return
 	}
-	if _, _, err := c.sess.create(ctx, w, r, user, enrolled); err != nil {
+	emailCode := false
+	if !enrolled {
+		if emailCode, err = c.emailFactorRequired(r, user); err != nil {
+			internalError(w)
+			return
+		}
+		if emailCode {
+			if err := c.mail.SendLoginCode(ctx, user, httpx.ClientIPString(r)); err != nil {
+				c.d.Log.WarnContext(ctx, "oidc login: send e-mail code", slog.Any("err", err))
+				http.Redirect(w, r, MFAPath+"?error=email_failed", http.StatusFound)
+				return
+			}
+		}
+	}
+	if _, _, err := c.sess.create(ctx, w, r, user, enrolled || emailCode); err != nil {
 		internalError(w)
 		return
 	}
 	if enrolled {
 		http.Redirect(w, r, MFAPath+"?mfa=1&next="+url.QueryEscape(next), http.StatusFound)
+		return
+	}
+	if emailCode {
+		http.Redirect(w, r, MFAPath+"?mfa=email&next="+url.QueryEscape(next), http.StatusFound)
 		return
 	}
 	if err := c.d.Store.Users.TouchLastLogin(ctx, user.ID); err != nil {

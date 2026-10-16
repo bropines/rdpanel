@@ -37,13 +37,19 @@ function ProfileTab({ user }: { user: UserDetail }) {
     user_group_id: u.user_group_id ?? null,
     note: u.note ?? "",
     totp_required: !!u.totp_required,
+    email_verified: !!u.email_verified,
   });
   const form = useForm<UserProfileValues>({ resolver: zodResolver(userProfileSchema), defaultValues: values(user) });
   useEffect(() => form.reset(values(user)), [user, form]);
 
   const save = useMutation({
     mutationFn: (v: UserProfileValues) =>
-      usersApi.update(user.id, { ...v, email: v.email || null }),
+      usersApi.update(user.id, {
+        ...v,
+        email: v.email || null,
+        // Sent only when toggled: a changed address is unverified unless re-confirmed.
+        email_verified: v.email_verified !== !!user.email_verified && !!v.email ? v.email_verified : undefined,
+      }),
     onSuccess: () => {
       toast.success(t("common.saved"));
       void qc.invalidateQueries({ queryKey: userKeys.all });
@@ -186,6 +192,17 @@ function SecurityTab({ user }: { user: UserDetail }) {
                 <Badge variant="outline">{t("users.totpPending")}</Badge>
               ) : (
                 <span className="text-muted-foreground">{t("users.totpOff")}</span>
+              ),
+            ],
+            [
+              t("users.email"),
+              !user.email ? (
+                <span className="text-muted-foreground">—</span>
+              ) : (
+                <span className="flex flex-wrap items-center gap-1">
+                  {user.email_verified ? <Badge variant="success">{t("email.verifiedBadge")}</Badge> : <Badge variant="outline">{t("email.unverifiedBadge")}</Badge>}
+                  {user.email_2fa_enabled && <Badge variant="secondary">{t("users.email2fa")}</Badge>}
+                </span>
               ),
             ],
           ]}

@@ -14,6 +14,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/mail"
 	"net/netip"
 	"net/url"
 	"os"
@@ -54,6 +55,47 @@ type Config struct {
 	HTTP     HTTPConfig     `yaml:"http"`
 	HBBS     HBBSConfig     `yaml:"hbbs"`
 	Log      LogConfig      `yaml:"log"`
+	SMTP     SMTPConfig     `yaml:"smtp"`
+}
+
+// SMTP encryption modes.
+const (
+	SMTPEncryptionNone     = "none"
+	SMTPEncryptionSTARTTLS = "starttls"
+	SMTPEncryptionTLS      = "tls"
+)
+
+// SMTPConfig is the outgoing mail server (e-mail verification, e-mail codes,
+// password reset). E-mail features are off when Host is empty here and in the
+// panel settings; a non-empty Host makes the whole block authoritative (the
+// panel's Settings -> Email form becomes read-only).
+type SMTPConfig struct {
+	Host string `yaml:"host"`
+	// Port defaults to 587 (starttls), 465 (tls) or 25 (none).
+	Port     int    `yaml:"port"`
+	Username string `yaml:"username"`
+	Password Secret `yaml:"password"`
+	// PasswordFile is read when Password is empty (Docker/Kubernetes secrets).
+	PasswordFile string `yaml:"password_file"`
+	// From is the sender address, e.g. "RustDesk Panel <panel@example.com>".
+	From string `yaml:"from"`
+	// Encryption is none, starttls (default) or tls (implicit TLS, "SMTPS").
+	Encryption         string `yaml:"encryption"`
+	InsecureSkipVerify bool   `yaml:"insecure_skip_verify"`
+}
+
+// Enabled reports whether the configuration defines a mail server.
+func (s SMTPConfig) Enabled() bool { return s.Host != "" }
+
+// DefaultSMTPPort returns the conventional port of an encryption mode.
+func DefaultSMTPPort(encryption string) int {
+	switch encryption {
+	case SMTPEncryptionTLS:
+		return 465
+	case SMTPEncryptionNone:
+		return 25
+	}
+	return 587
 }
 
 // AuthConfig holds token and session settings.
@@ -182,6 +224,9 @@ func Load(lookup LookupFunc) (*Config, error) {
 	if err := cfg.applyEnv(lookup); err != nil {
 		return nil, err
 	}
+	if err := cfg.loadSecretFiles(); err != nil {
+		return nil, err
+	}
 	cfg.fillDerived()
 	if err := cfg.Validate(); err != nil {
 		return nil, err
@@ -239,6 +284,16 @@ func (c *Config) envVars() []envVar {
 	list := func(dst *[]string) func(string) error {
 		return func(v string) error { *dst = splitList(v); return nil }
 	}
+	integer := func(dst *int) func(string) error {
+		return func(v string) error {
+			n, err := strconv.Atoi(strings.TrimSpace(v))
+			if err != nil {
+				return err
+			}
+			*dst = n
+			return nil
+		}
+	}
 	return []envVar{
 		{"RDPANEL_LISTEN", str(&c.Listen)},
 		{"RDPANEL_PUBLIC_URL", str(&c.PublicURL)},
@@ -269,6 +324,14 @@ func (c *Config) envVars() []envVar {
 		{"RDPANEL_LOG_LEVEL", str(&c.Log.Level)},
 		{"RDPANEL_LOG_FORMAT", str(&c.Log.Format)},
 		{"RDPANEL_UPDATE_CHECK", boolean(&c.UpdateCheck)},
+		{"RDPANEL_SMTP_HOST", str(&c.SMTP.Host)},
+		{"RDPANEL_SMTP_PORT", integer(&c.SMTP.Port)},
+		{"RDPANEL_SMTP_USERNAME", str(&c.SMTP.Username)},
+		{"RDPANEL_SMTP_PASSWORD", sec(&c.SMTP.Password)},
+		{"RDPANEL_SMTP_PASSWORD_FILE", str(&c.SMTP.PasswordFile)},
+		{"RDPANEL_SMTP_FROM", str(&c.SMTP.From)},
+		{"RDPANEL_SMTP_ENCRYPTION", str(&c.SMTP.Encryption)},
+		{"RDPANEL_SMTP_INSECURE_SKIP_VERIFY", boolean(&c.SMTP.InsecureSkipVerify)},
 	}
 }
 
@@ -292,6 +355,18 @@ func (c *Config) applyEnv(lookup LookupFunc) error {
 		if err := v.apply(val); err != nil {
 			return fmt.Errorf("config: %s: %w", v.name, err)
 		}
+	}
+	return nil
+}
+
+// loadSecretFiles reads *_FILE secrets that are not set directly.
+func (c *Config) loadSecretFiles() error {
+	if !c.SMTP.Password.IsSet() && c.SMTP.PasswordFile != "" {
+		raw, err := os.ReadFile(c.SMTP.PasswordFile)
+		if err != nil {
+			return fmt.Errorf("config: smtp.password_file: %w", err)
+		}
+		c.SMTP.Password = Secret(strings.TrimRight(string(raw), "\r\n"))
 	}
 	return nil
 }
@@ -320,6 +395,14 @@ func (c *Config) fillDerived() {
 	c.HTTP.RealIPHeader = http.CanonicalHeaderKey(c.HTTP.RealIPHeader)
 	c.Log.Level = strings.ToLower(c.Log.Level)
 	c.Log.Format = strings.ToLower(c.Log.Format)
+	c.SMTP.Host = strings.TrimSpace(c.SMTP.Host)
+	c.SMTP.Encryption = strings.ToLower(strings.TrimSpace(c.SMTP.Encryption))
+	if c.SMTP.Encryption == "" {
+		c.SMTP.Encryption = SMTPEncryptionSTARTTLS
+	}
+	if c.SMTP.Port == 0 {
+		c.SMTP.Port = DefaultSMTPPort(c.SMTP.Encryption)
+	}
 }
 
 // Validate checks the configuration and pre-parses derived values.
@@ -410,6 +493,21 @@ func (c *Config) Validate() error {
 	case "json", "text":
 	default:
 		add("log.format %q: must be json or text", c.Log.Format)
+	}
+	switch c.SMTP.Encryption {
+	case SMTPEncryptionNone, SMTPEncryptionSTARTTLS, SMTPEncryptionTLS:
+	default:
+		add("smtp.encryption %q: must be none, starttls or tls", c.SMTP.Encryption)
+	}
+	if c.SMTP.Port < 1 || c.SMTP.Port > 65535 {
+		add("smtp.port %d: must be 1-65535", c.SMTP.Port)
+	}
+	if c.SMTP.Enabled() {
+		if c.SMTP.From == "" {
+			add("smtp.from is required when smtp.host is set")
+		} else if _, err := mail.ParseAddress(c.SMTP.From); err != nil {
+			add("smtp.from %q: %v", c.SMTP.From, err)
+		}
 	}
 	if len(errs) > 0 {
 		return fmt.Errorf("config: %w", errors.Join(errs...))
