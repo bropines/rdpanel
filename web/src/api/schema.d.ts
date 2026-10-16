@@ -2258,6 +2258,50 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/openapi.yaml": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * This API contract (OpenAPI 3.1, YAML).
+         * @description Mounted at `/api/v1/openapi.yaml` (not under `/admin`). With `RDPANEL_API_DOCS=auth`
+         *     (default) any signed-in panel user (session cookie or Bearer API token, any role);
+         *     `public` serves it without login, `off` answers 404. When the request is addressed
+         *     to the `RDPANEL_ADMIN_URL` host, the relative `servers` URLs are made absolute
+         *     against that origin. Swagger UI for it is served at `/api/v1/docs`.
+         */
+        get: operations["getOpenAPIYAML"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/openapi.json": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * This API contract (OpenAPI 3.1, JSON).
+         * @description Same document as `/api/v1/openapi.yaml`, converted to JSON.
+         */
+        get: operations["getOpenAPIJSON"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -8139,6 +8183,48 @@ export interface operations {
                 };
                 content: {
                     "text/event-stream": string;
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+        };
+    };
+    getOpenAPIYAML: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The spec as committed in `api/openapi.yaml`. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/yaml": string;
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+        };
+    };
+    getOpenAPIJSON: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The spec as JSON. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": Record<string, never>;
                 };
             };
             401: components["responses"]["Unauthorized"];
