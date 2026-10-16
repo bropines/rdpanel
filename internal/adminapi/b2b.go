@@ -91,6 +91,14 @@ func recordAudit(ctx context.Context, d Deps, r *http.Request, action, targetTyp
 		ActorIP: httpx.ClientIPString(r)}
 	if s := CurrentSession(ctx); s != nil {
 		e.ActorUserID, e.ActorName = &s.User.ID, s.User.Username
+		if s.APIToken != nil {
+			d := make(map[string]any, len(details)+1)
+			for k, v := range details {
+				d[k] = v
+			}
+			d["via_api_token"] = s.APIToken.ID
+			e.Details = d
+		}
 	}
 	if err := d.Store.AdminAudit.Record(ctx, e); err != nil && d.Log != nil {
 		d.Log.WarnContext(ctx, "admin audit", "action", action, "err", err)

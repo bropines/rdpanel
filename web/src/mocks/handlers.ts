@@ -301,6 +301,30 @@ const passkeysByUser: Record<number, S["Passkey"][]> = {
     },
   ],
 };
+/* ── personal API tokens (mock: the secret is generated, never checked) ─── */
+
+const apiTokensByUser: Record<number, S["ApiToken"][]> = {
+  1: [
+    {
+      id: 1,
+      name: "backup script",
+      prefix: "rdp_7Hq2xK",
+      scope: "read",
+      created_at: new Date(db.NOW - 20 * 86400_000).toISOString(),
+      expires_at: new Date(db.NOW + 70 * 86400_000).toISOString(),
+      last_used_at: new Date(db.NOW - 3600_000).toISOString(),
+      last_used_ip: "10.0.0.12",
+      expired: false,
+    },
+  ],
+};
+
+function newApiTokenSecret() {
+  const chars = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
+  const bytes = crypto.getRandomValues(new Uint8Array(40));
+  return "rdp_" + Array.from(bytes, (b) => chars[b % 62]).join("");
+}
+
 /** Credential id (base64url) → owner, for credentials created in this session. */
 const passkeyOwners = new Map<string, { userId: number; passkeyId: number }>();
 
@@ -581,6 +605,44 @@ export const handlers = [
     if (!b.name?.trim()) return err(400, "validation_failed", "invalid passkey", { name: "must be 1 to 64 characters" });
     pk.name = b.name.trim();
     return ok(pk);
+  }),
+  http.get(`${B}/me/api-tokens`, () => {
+    const u = requireAuth();
+    if (u instanceof Response) return u;
+    return ok({ items: apiTokensByUser[u.id] ?? [] });
+  }),
+  http.post(`${B}/me/api-tokens`, async ({ request }) => {
+    const u = requireAuth();
+    if (u instanceof Response) return u;
+    const b = await body<S["CreateApiTokenRequest"]>(request);
+    const name = b.name?.trim() ?? "";
+    if (!name || name.length > 64) return err(400, "validation_failed", "invalid API token", { name: "must be 1-64 characters" });
+    if (b.scope !== "read" && b.scope !== "write") return err(400, "validation_failed", "invalid API token", { scope: "must be read or write" });
+    const token = newApiTokenSecret();
+    const days = b.expires_in_days ?? null;
+    const row: S["ApiToken"] = {
+      id: newId(),
+      name,
+      prefix: token.slice(0, 10),
+      scope: b.scope,
+      created_at: nowIso(),
+      expires_at: days ? new Date(Date.now() + days * 86400_000).toISOString() : null,
+      last_used_at: null,
+      last_used_ip: null,
+      expired: false,
+    };
+    (apiTokensByUser[u.id] ??= []).unshift(row);
+    audit(u, "api_token.create", "api_token", String(row.id), { name, scope: b.scope });
+    return ok({ api_token: row, token }, 201);
+  }),
+  http.delete(`${B}/me/api-tokens/:id`, ({ params }) => {
+    const u = requireAuth();
+    if (u instanceof Response) return u;
+    const list = apiTokensByUser[u.id] ?? [];
+    if (!list.some((x) => x.id === Number(params.id))) return err(404, "not_found", "not found");
+    apiTokensByUser[u.id] = list.filter((x) => x.id !== Number(params.id));
+    audit(u, "api_token.revoke", "api_token", String(params.id));
+    return noContent();
   }),
   http.delete(`${B}/me/security/passkeys/:id`, ({ params }) => {
     const u = requireAuth();
@@ -938,6 +1000,21 @@ export const handlers = [
     const u = requireAdmin();
     if (u instanceof Response) return u;
     return ok({ items: passkeysByUser[Number(params.id)] ?? [] });
+  }),
+  http.get(`${B}/users/:id/api-tokens`, ({ params }) => {
+    const u = requireAdmin();
+    if (u instanceof Response) return u;
+    return ok({ items: apiTokensByUser[Number(params.id)] ?? [] });
+  }),
+  http.delete(`${B}/users/:id/api-tokens/:tid`, ({ params }) => {
+    const u = requireAdmin();
+    if (u instanceof Response) return u;
+    const id = Number(params.id);
+    const list = apiTokensByUser[id] ?? [];
+    if (!list.some((x) => x.id === Number(params.tid))) return err(404, "not_found", "not found");
+    apiTokensByUser[id] = list.filter((x) => x.id !== Number(params.tid));
+    audit(u, "api_token.revoke", "api_token", String(params.tid), { user_id: id });
+    return noContent();
   }),
   http.delete(`${B}/users/:id/passkeys/:pid`, ({ params }) => {
     const u = requireAdmin();

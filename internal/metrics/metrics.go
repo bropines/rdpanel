@@ -55,6 +55,7 @@ type Panel struct {
 	logins *prometheus.CounterVec
 	tokens *prometheus.CounterVec
 	audits *prometheus.CounterVec
+	apiTok *prometheus.CounterVec
 }
 
 // New registers the counters on reg (which may be nil) and pre-initialises
@@ -74,6 +75,10 @@ func New(reg prometheus.Registerer) *Panel {
 			Namespace: "rdpanel", Subsystem: "audit", Name: "events_total",
 			Help: "Client audit records received (/api/audit/*), by type (conn|file|alarm) and result (stored|rejected|error).",
 		}, []string{"type", "result"}),
+		apiTok: prometheus.NewCounterVec(prometheus.CounterOpts{
+			Namespace: "rdpanel", Subsystem: "auth", Name: "api_token_requests_total",
+			Help: "Admin API requests presenting a personal API token (Bearer rdp_...), by result (success|failure|rate_limited).",
+		}, []string{"result"}),
 	}
 	for _, s := range []string{SurfacePanel, SurfaceClient} {
 		for _, m := range []string{MethodPassword, MethodTOTP, MethodEmail, MethodOIDC} {
@@ -94,8 +99,11 @@ func New(reg prometheus.Registerer) *Panel {
 			p.audits.WithLabelValues(t, r)
 		}
 	}
+	for _, r := range []string{ResultSuccess, ResultFailure, ResultRateLimited} {
+		p.apiTok.WithLabelValues(r)
+	}
 	if reg != nil {
-		reg.MustRegister(p.logins, p.tokens, p.audits)
+		reg.MustRegister(p.logins, p.tokens, p.audits, p.apiTok)
 	}
 	return p
 }
@@ -137,6 +145,15 @@ func (p *Panel) Audit(kind, result string) {
 	}
 	p.audits.WithLabelValues(oneOf(kind, "other", AuditConn, AuditFile, AuditAlarm),
 		oneOf(result, AuditError, AuditStored, AuditRejected, AuditError)).Inc()
+}
+
+// APITokenAuth counts one request authenticated (or rejected) by a
+// personal API token.
+func (p *Panel) APITokenAuth(result string) {
+	if p == nil {
+		return
+	}
+	p.apiTok.WithLabelValues(oneOf(result, ResultFailure, ResultSuccess, ResultFailure, ResultRateLimited)).Inc()
 }
 
 // RegisterBuildInfo registers rdpanel_build_info (constant 1) labelled with

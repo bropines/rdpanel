@@ -59,6 +59,7 @@ func newAuthCore(d Deps) *authCore {
 	if c.limiter == nil {
 		c.limiter = auth.NewBackoff(auth.DefaultBackoffConfig, d.Store.Now)
 	}
+	c.sess.limiter = c.limiter
 	if c.events == nil {
 		c.events = loginlog.DB{Q: d.Store.Querier(), Now: d.Store.Now}
 	}
@@ -135,7 +136,7 @@ func (c *authCore) registerAuth(r chi.Router) {
 	r.Post("/auth/passkey/begin", c.handlePasskeyLoginBegin)
 	r.Post("/auth/passkey/finish", c.handlePasskeyLoginFinish)
 	r.Post("/auth/logout", c.handleLogout)
-	r.With(requireSession).Get("/auth/me", c.handleMe)
+	r.With(requireSessionOrToken).Get("/auth/me", c.handleMe)
 	r.Get("/auth/providers", c.handleProviders)
 	r.Post("/auth/oidc/{slug}/start", c.handleOIDCStart)
 	r.Get("/auth/oidc/complete", c.handleOIDCComplete)
@@ -398,7 +399,7 @@ func (c *authCore) handleLogout(w http.ResponseWriter, r *http.Request) {
 func (c *authCore) handleMe(w http.ResponseWriter, r *http.Request) {
 	s := CurrentSession(r.Context())
 	csrf := csrfFromRequest(r)
-	if csrf == "" {
+	if csrf == "" && s.APIToken == nil {
 		var err error
 		if csrf, err = setCSRFCookie(w, c.sess.secure); err != nil {
 			internalError(w)

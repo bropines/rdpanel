@@ -572,6 +572,45 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/me/api-tokens": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** My personal API tokens (not revoked; expired ones flagged). */
+        get: operations["listMyApiTokens"];
+        put?: never;
+        /**
+         * Create a personal API token; the secret is returned once.
+         * @description Requires a cookie session (an API token cannot mint tokens: 403
+         *     `cookie_session_required`). At most 50 tokens per user (409 `api_token_limit`).
+         */
+        post: operations["createMyApiToken"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/api-tokens/{token_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Revoke one of my API tokens (cookie session only). */
+        delete: operations["revokeMyApiToken"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/me/security/password": {
         parameters: {
             query?: never;
@@ -1180,6 +1219,40 @@ export interface paths {
         post?: never;
         /** Revoke (delete) a passkey of a user (admin). */
         delete: operations["revokeUserPasskey"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/users/{user_id}/api-tokens": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Personal API tokens of a user (admin). */
+        get: operations["listUserApiTokens"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/users/{user_id}/api-tokens/{token_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Revoke a personal API token of a user (admin, cookie session only). */
+        delete: operations["revokeUserApiToken"];
         options?: never;
         head?: never;
         patch?: never;
@@ -1846,7 +1919,7 @@ export interface paths {
         };
         /**
          * Live log lines as Server-Sent Events (admin).
-         * @description `text/event-stream`, same session cookie (no CSRF, GET). With `after=<seq>` buffered
+         * @description `text/event-stream`, same session cookie or API token (no CSRF, GET). With `after=<seq>` buffered
          *     matching entries newer than `seq` are replayed first. Events:
          *
          *     ```
@@ -2376,6 +2449,45 @@ export interface components {
         };
         PasskeyRename: {
             name: string;
+        };
+        /** @description A personal API token (metadata only, never the secret). */
+        ApiToken: {
+            /** Format: int64 */
+            id: number;
+            name: string;
+            /** @description First characters of the token (`rdp_` + 6), for recognising it. */
+            prefix: string;
+            /**
+             * @description `read`: GET/HEAD only; `write`: full rights of the owner.
+             * @enum {string}
+             */
+            scope: "read" | "write";
+            /** Format: date-time */
+            created_at: string;
+            /**
+             * Format: date-time
+             * @description Null = never expires.
+             */
+            expires_at: string | null;
+            /**
+             * Format: date-time
+             * @description Updated at most once a minute.
+             */
+            last_used_at: string | null;
+            last_used_ip: string | null;
+            expired: boolean;
+        };
+        ApiTokenCreated: {
+            api_token: components["schemas"]["ApiToken"];
+            /** @description The secret (`rdp_...`). Shown only once; store it now. */
+            token: string;
+        };
+        CreateApiTokenRequest: {
+            name: string;
+            /** @enum {string} */
+            scope: "read" | "write";
+            /** @description Days until expiry; null or absent = never. */
+            expires_in_days?: number | null;
         };
         Passkey: {
             /** Format: int64 */
@@ -3748,6 +3860,7 @@ export interface components {
         };
     };
     parameters: {
+        ApiTokenId: number;
         RelayId: number;
         /** @description Must equal the rdpanel_csrf cookie. */
         CsrfHeader: string;
@@ -4566,6 +4679,86 @@ export interface operations {
                 content?: never;
             };
             401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    listMyApiTokens: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Tokens, newest first. Never contains the secret. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        items: components["schemas"]["ApiToken"][];
+                    };
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+        };
+    };
+    createMyApiToken: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Must equal the rdpanel_csrf cookie. */
+                "X-CSRF-Token": components["parameters"]["CsrfHeader"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateApiTokenRequest"];
+            };
+        };
+        responses: {
+            /** @description Created. `token` is shown only in this response. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiTokenCreated"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    revokeMyApiToken: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Must equal the rdpanel_csrf cookie. */
+                "X-CSRF-Token": components["parameters"]["CsrfHeader"];
+            };
+            path: {
+                token_id: components["parameters"]["ApiTokenId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Revoked. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
         };
     };
@@ -5726,6 +5919,60 @@ export interface operations {
             path: {
                 user_id: components["parameters"]["UserId"];
                 passkey_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Revoked. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    listUserApiTokens: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                user_id: components["parameters"]["UserId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Tokens, newest first. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        items: components["schemas"]["ApiToken"][];
+                    };
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    revokeUserApiToken: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Must equal the rdpanel_csrf cookie. */
+                "X-CSRF-Token": components["parameters"]["CsrfHeader"];
+            };
+            path: {
+                user_id: components["parameters"]["UserId"];
+                token_id: components["parameters"]["ApiTokenId"];
             };
             cookie?: never;
         };

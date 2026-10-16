@@ -273,3 +273,32 @@ describe("server → logs", () => {
     expect(screen.getByText(/Keys, tokens and passwords are redacted/)).toBeInTheDocument();
   });
 });
+
+describe("profile → API tokens", () => {
+  beforeEach(() => loginAs(1));
+
+  it("creates a token, shows it once and revokes it", async () => {
+    const user = userEvent.setup();
+    renderApp("/my/profile");
+    expect(await screen.findByText("backup script", undefined, { timeout: 5000 })).toBeInTheDocument();
+    expect(screen.getByText("rdp_7Hq2xK…")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Create token" }));
+    const dialog = await screen.findByRole("dialog");
+    await user.type(within(dialog).getByLabelText("Name"), "ci deploy");
+    await user.click(within(dialog).getByRole("button", { name: "Create" }));
+    expect(await within(dialog).findByText(/^rdp_[A-Za-z0-9]{40}$/)).toBeInTheDocument();
+    expect(within(dialog).getByRole("note")).toHaveTextContent(/only time the token is shown/);
+    expect(within(dialog).getByRole("button", { name: "Copy" })).toBeInTheDocument();
+    await user.click(within(dialog).getByRole("button", { name: "Done" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    expect(await screen.findByText("ci deploy")).toBeInTheDocument();
+    // The secret is not in the list.
+    expect(screen.queryByText(/^rdp_[A-Za-z0-9]{40}$/)).not.toBeInTheDocument();
+    await user.click(screen.getAllByRole("button", { name: "Revoke" })[0]!);
+    const confirm = await screen.findByRole("alertdialog");
+    expect(confirm).toHaveTextContent("Revoke token “ci deploy”?");
+    await user.click(within(confirm).getByRole("button", { name: "Revoke" }));
+    await waitFor(() => expect(screen.queryByText("ci deploy")).not.toBeInTheDocument());
+    expect(screen.getByText("backup script")).toBeInTheDocument();
+  });
+});

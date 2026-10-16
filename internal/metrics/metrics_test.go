@@ -15,6 +15,7 @@ func TestNilPanelIsNoop(t *testing.T) {
 	p.Login(SurfacePanel, MethodPassword, ResultSuccess)
 	p.TokenIssued(MethodOIDC)
 	p.Audit(AuditConn, AuditStored)
+	p.APITokenAuth(ResultSuccess)
 }
 
 func TestCountersAndLabelSanitising(t *testing.T) {
