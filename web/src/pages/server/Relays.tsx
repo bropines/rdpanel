@@ -47,7 +47,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
-import { Skeleton, Switch, Textarea } from "@/components/ui/misc";
+import { Skeleton, Switch, Tabs, TabsContent, TabsList, TabsTrigger, Textarea } from "@/components/ui/misc";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Sheet, SheetBody, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -272,7 +272,17 @@ function AddRelayDialog({
   );
 }
 
-/** Shows the one-time token and compose snippet; flips live when the agent enrolls/connects. */
+/** A copyable command or file. */
+function Snippet({ value }: { value: string }) {
+  return (
+    <div className="relative">
+      <pre className="max-h-72 overflow-auto whitespace-pre-wrap break-all rounded-md border bg-muted/50 p-3 pr-10 font-mono text-xs leading-relaxed">{value}</pre>
+      <CopyButton value={value} className="absolute right-2 top-2" />
+    </div>
+  );
+}
+
+/** Shows the one-time token and install commands; flips live when the agent enrolls/connects. */
 function EnrollmentDialog({ target, onClose, relays }: { target: { id: number; e: RelayEnrollment } | null; onClose: () => void; relays: Relay[] }) {
   const { t } = useTranslation();
   const r = target ? relays.find((x) => x.id === target.id) : undefined;
@@ -291,18 +301,36 @@ function EnrollmentDialog({ target, onClose, relays }: { target: { id: number; e
           <DialogDescription>{t("relays.enroll.hint")}</DialogDescription>
         </DialogHeader>
         {target && (
-          <div className="space-y-3">
-            <div className="relative">
-              <pre className="max-h-72 overflow-auto rounded-md border bg-muted/50 p-3 pr-10 font-mono text-xs leading-relaxed">{target.e.compose}</pre>
-              <CopyButton value={target.e.compose} className="absolute right-2 top-2" />
-            </div>
+          <div className="min-w-0 space-y-3">
+            <Tabs defaultValue="install">
+              <TabsList>
+                <TabsTrigger value="install">{t("relays.enroll.tabInstall")}</TabsTrigger>
+                <TabsTrigger value="docker">{t("relays.enroll.tabDocker")}</TabsTrigger>
+                <TabsTrigger value="compose">{t("relays.enroll.tabCompose")}</TabsTrigger>
+              </TabsList>
+              <TabsContent value="install" className="mt-3 space-y-2">
+                <Snippet value={target.e.install_command} />
+                <p className="text-xs text-muted-foreground">{t("relays.enroll.installHint")}</p>
+              </TabsContent>
+              <TabsContent value="docker" className="mt-3 space-y-2">
+                <Snippet value={target.e.docker_run} />
+                <p className="text-xs text-muted-foreground">{t("relays.enroll.dockerHint")}</p>
+              </TabsContent>
+              <TabsContent value="compose" className="mt-3 space-y-2">
+                <Snippet value={target.e.compose} />
+                <p className="text-xs text-muted-foreground">{t("relays.enroll.composeHint")}</p>
+              </TabsContent>
+            </Tabs>
             <div className="flex flex-wrap items-center gap-2 text-sm">
               <span className="text-muted-foreground">{t("relays.enroll.token")}:</span>
               <Mono className="break-all">{target.e.token}</Mono>
               <CopyButton value={target.e.token} />
             </div>
-            <p className="text-xs text-muted-foreground">
-              {t("relays.enroll.expires")} <RelativeTime iso={target.e.expires_at} /> · {t("relays.enroll.once")}
+            <p role="note" className="flex items-start gap-2 rounded-md border border-amber-500/40 bg-amber-500/10 p-2 text-xs text-amber-800 dark:text-amber-300">
+              <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+              <span>
+                {t("relays.enroll.warning")} {t("relays.enroll.expires")} <RelativeTime iso={target.e.expires_at} />.
+              </span>
             </p>
             <ul className="space-y-1 text-sm">
               {steps.map(([done, label]) => (

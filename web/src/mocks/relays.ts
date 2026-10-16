@@ -139,6 +139,17 @@ function enrollment(name: string): S["RelayEnrollment"] {
     token,
     expires_at: exp,
     panel_url: "https://desk-api.example.com",
+    install_command: `curl -fsSL https://desk-api.example.com/agent/install.sh | sudo sh -s -- --token ${token}`,
+    docker_run: [
+      "docker run -d --name rdpanel-relay --network host --restart unless-stopped",
+      "  --ulimit nofile=1048576:1048576 --stop-timeout 20",
+      "  --log-opt max-size=20m --log-opt max-file=5",
+      "  -e RDPANEL_MODE=agent",
+      "  -e RDPANEL_AGENT_PANEL_URL=https://desk-api.example.com",
+      `  -e RDPANEL_AGENT_ENROLL_TOKEN=${token}`,
+      "  -v /opt/rdpanel-agent/data:/data",
+      "  ghcr.io/bropines/rdpanel:latest",
+    ].join(" \\\n"),
     compose: `services:\n  relay:\n    image: ghcr.io/bropines/rdpanel:latest\n    network_mode: host        # hbbr must see real client IPs\n    restart: unless-stopped\n    environment:\n      RDPANEL_MODE: agent\n      RDPANEL_AGENT_PANEL_URL: https://desk-api.example.com\n      RDPANEL_AGENT_ENROLL_TOKEN: "${token}"   # one-time, expires ${exp}\n    volumes:\n      - ./relay-data:/data\n# relay: ${name}\n`,
   };
 }

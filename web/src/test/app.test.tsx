@@ -4,7 +4,7 @@
  */
 import { QueryClientProvider } from "@tanstack/react-query";
 import { createMemoryHistory, RouterProvider } from "@tanstack/react-router";
-import { act, render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { setupServer } from "msw/node";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
@@ -238,6 +238,23 @@ describe("server → relays", () => {
     await user.type(screen.getByLabelText("Public host"), "relay-nl.example.com");
     await user.click(screen.getByRole("button", { name: "Create" }));
     expect(await screen.findByText("Enroll ams-3")).toBeInTheDocument();
-    expect(screen.getByText(/RDPANEL_AGENT_ENROLL_TOKEN/)).toBeInTheDocument();
+    // One-line install is the default tab and carries the token.
+    const tabs = screen.getAllByRole("tab").map((t) => t.textContent);
+    expect(tabs).toEqual(["One-line install", "Docker run", "Compose"]);
+    expect(screen.getByRole("tab", { name: "One-line install" })).toHaveAttribute("aria-selected", "true");
+    const token = screen.getByText(/^[A-Za-z0-9]{43}$/).textContent ?? "";
+    expect(
+      screen.getByText(`curl -fsSL https://desk-api.example.com/agent/install.sh | sudo sh -s -- --token ${token}`),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("note")).toHaveTextContent(/single use and expires 1 hour/);
+    const panel = () => screen.getByRole("tabpanel");
+    expect(within(panel()).getByRole("button", { name: "Copy" })).toBeInTheDocument();
+    await user.click(screen.getByRole("tab", { name: "Docker run" }));
+    expect(within(panel()).getByText(/docker run -d --name rdpanel-relay --network host/)).toHaveTextContent(
+      `RDPANEL_AGENT_ENROLL_TOKEN=${token}`,
+    );
+    expect(within(panel()).getByRole("button", { name: "Copy" })).toBeInTheDocument();
+    await user.click(screen.getByRole("tab", { name: "Compose" }));
+    expect(within(panel()).getByText(/RDPANEL_AGENT_ENROLL_TOKEN/)).toHaveTextContent(token);
   });
 });
