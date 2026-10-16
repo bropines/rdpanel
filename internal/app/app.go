@@ -7,12 +7,14 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/collectors"
 
 	"github.com/bropines/rustdesk-panel/internal/adminapi"
 	"github.com/bropines/rustdesk-panel/internal/auth"
+	"github.com/bropines/rustdesk-panel/internal/buildinfo"
 	"github.com/bropines/rustdesk-panel/internal/clientapi"
 	"github.com/bropines/rustdesk-panel/internal/config"
 	"github.com/bropines/rustdesk-panel/internal/crypto"
@@ -20,6 +22,7 @@ import (
 	"github.com/bropines/rustdesk-panel/internal/events"
 	"github.com/bropines/rustdesk-panel/internal/httpx"
 	"github.com/bropines/rustdesk-panel/internal/store"
+	"github.com/bropines/rustdesk-panel/internal/updatecheck"
 	"github.com/bropines/rustdesk-panel/internal/web"
 	webdist "github.com/bropines/rustdesk-panel/web"
 )
@@ -53,6 +56,11 @@ type App struct {
 	// TOTP verifies second factors; it implements clientapi's TOTPVerifier
 	// (Enrolled/Verify) for the client /api/login tfa step.
 	TOTP *adminapi.TOTPService
+	// StartedAt is when New ran (About page uptime).
+	StartedAt time.Time
+	// Updates is the cached GitHub release check (nil when
+	// RDPANEL_UPDATE_CHECK=false).
+	Updates *updatecheck.Checker
 
 	httpMetrics *httpx.Metrics
 }
@@ -60,7 +68,10 @@ type App struct {
 // New opens the database (applying migrations), loads keys and builds the App.
 // Call Close when done.
 func New(ctx context.Context, cfg *config.Config, log *slog.Logger) (*App, error) {
-	a := &App{Config: cfg, Log: log, Hasher: auth.NewHasher()}
+	a := &App{Config: cfg, Log: log, Hasher: auth.NewHasher(), StartedAt: time.Now()}
+	if cfg.UpdateCheck {
+		a.Updates = updatecheck.New("rdpanel/" + buildinfo.Version + " (+https://github.com/bropines/rustdesk-panel)")
+	}
 	var err error
 	if a.DB, err = openDB(ctx, cfg, log); err != nil {
 		return nil, err

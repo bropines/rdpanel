@@ -10,6 +10,17 @@ export const dashboardApi = {
   branding: () => api.request<Branding>("/branding"),
 };
 
+/* ── About ────────────────────────────────────────────────────────────── */
+
+export type About = Schemas["About"];
+
+export const aboutApi = {
+  get: () => api.request<About>("/about"),
+};
+
+/** Shared by the About page and the sidebar footer (the release check is cached server-side). */
+export const aboutQuery = { queryKey: ["about"], queryFn: aboutApi.get, staleTime: 10 * 60_000 } as const;
+
 /* ── Audit ────────────────────────────────────────────────────────────── */
 
 export const auditApi = {

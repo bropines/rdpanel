@@ -520,6 +520,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/about": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Panel version, bundled hbbs/hbbr source and the release update check.
+         * @description Any signed-in user. `server` (process, database and hbbs/hbbr details) is null for the `user` role,
+         *     and so is `update.error`. The update check runs server-side against the GitHub releases API, is
+         *     cached for 6 h (failures are retried after 30 min) and is off with `RDPANEL_UPDATE_CHECK=false`.
+         */
+        get: operations["getAbout"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/lookup/users": {
         parameters: {
             query?: never;
@@ -1872,6 +1894,55 @@ export interface components {
             commit?: string;
             build_date?: string;
             go?: string;
+        };
+        About: {
+            /** @description Product name (rustdesk-panel). */
+            name: string;
+            version: components["schemas"]["VersionInfo"];
+            hbb: components["schemas"]["AboutHbb"];
+            update: components["schemas"]["UpdateCheck"];
+            /** @description Null for the `user` role. */
+            server: components["schemas"]["AboutServer"] | null;
+        };
+        /** @description Source of the bundled hbbs/hbbr (container image build args HBB_REPO / HBB_REF); null when not built in. */
+        AboutHbb: {
+            /** @description e.g. https://github.com/bropines/rustdesk-server */
+            repo: string | null;
+            /** @description Commit or `git describe` of the server fork. */
+            ref: string | null;
+        };
+        UpdateCheck: {
+            /**
+             * @description disabled = RDPANEL_UPDATE_CHECK=false; unknown = no release published or the running version is not
+             *     a semantic version (e.g. a dev build); error = the check failed and no earlier answer is cached.
+             * @enum {string}
+             */
+            status: "disabled" | "unknown" | "error" | "up_to_date" | "update_available";
+            /** @description Tag of the latest GitHub release. */
+            latest: string | null;
+            /** @description Release page. */
+            latest_url: string | null;
+            /** Format: date-time */
+            published_at: string | null;
+            /**
+             * Format: date-time
+             * @description Last attempt (cached answers keep their time).
+             */
+            checked_at: string | null;
+            /** @description Last failure; admins only. */
+            error: string | null;
+        };
+        AboutServer: {
+            /** Format: date-time */
+            started_at: string;
+            uptime_s: number;
+            /** @description Applied goose migration. */
+            schema_version: number | null;
+            /** @description Newest migration embedded in this binary. */
+            schema_latest: number | null;
+            os: string;
+            arch: string;
+            health: components["schemas"]["ServerHealth"];
         };
         DeviceFacets: {
             total: number;
@@ -3383,6 +3454,27 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Dashboard"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+        };
+    };
+    getAbout: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description About data. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["About"];
                 };
             };
             401: components["responses"]["Unauthorized"];

@@ -3,6 +3,9 @@
 //	go build -ldflags "-X github.com/bropines/rustdesk-panel/internal/buildinfo.Version=v1.2.3 \
 //	  -X github.com/bropines/rustdesk-panel/internal/buildinfo.Commit=abc123 \
 //	  -X github.com/bropines/rustdesk-panel/internal/buildinfo.Date=2026-10-15T00:00:00Z"
+//
+// The container image also sets HBBRepo and HBBRef to the source of the bundled
+// hbbs/hbbr binaries (deploy/Dockerfile build args HBB_REPO and HBB_REF).
 package buildinfo
 
 import (
@@ -16,6 +19,10 @@ var (
 	Version = "dev"
 	Commit  = ""
 	Date    = ""
+	// HBBRepo and HBBRef identify the bundled hbbs/hbbr sources; empty when the
+	// binary was built without them (e.g. `make build` outside the image).
+	HBBRepo = ""
+	HBBRef  = ""
 )
 
 // Info is the resolved build metadata.
@@ -24,12 +31,14 @@ type Info struct {
 	Commit    string `json:"commit"`
 	Date      string `json:"date"`
 	GoVersion string `json:"go_version"`
+	HBBRepo   string `json:"hbb_repo,omitempty"`
+	HBBRef    string `json:"hbb_ref,omitempty"`
 }
 
 // Get returns build metadata, falling back to VCS info embedded by the Go
 // toolchain when ldflags were not set.
 func Get() Info {
-	info := Info{Version: Version, Commit: Commit, Date: Date, GoVersion: runtime.Version()}
+	info := Info{Version: Version, Commit: Commit, Date: Date, GoVersion: runtime.Version(), HBBRepo: HBBRepo, HBBRef: HBBRef}
 	if bi, ok := debug.ReadBuildInfo(); ok {
 		for _, s := range bi.Settings {
 			switch s.Key {
@@ -59,5 +68,12 @@ func (i Info) String() string {
 	if i.Date != "" {
 		s += " built " + i.Date
 	}
-	return fmt.Sprintf("%s %s", s, i.GoVersion)
+	s = fmt.Sprintf("%s %s", s, i.GoVersion)
+	if i.HBBRef != "" {
+		s += "; hbbs/hbbr " + i.HBBRef
+		if i.HBBRepo != "" {
+			s += " from " + i.HBBRepo
+		}
+	}
+	return s
 }

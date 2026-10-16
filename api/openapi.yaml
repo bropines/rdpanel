@@ -59,6 +59,7 @@ tags:
   - name: security
   - name: identity-providers
   - name: dashboard
+  - name: about
   - name: users
   - name: groups
   - name: devices
@@ -612,6 +613,23 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Dashboard" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
+  /about:
+    get:
+      tags: [about]
+      operationId: getAbout
+      summary: Panel version, bundled hbbs/hbbr source and the release update check.
+      description: |
+        Any signed-in user. `server` (process, database and hbbs/hbbr details) is null for the `user` role,
+        and so is `update.error`. The update check runs server-side against the GitHub releases API, is
+        cached for 6 h (failures are retried after 30 min) and is off with `RDPANEL_UPDATE_CHECK=false`.
+      responses:
+        "200":
+          description: About data.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/About" }
         "401": { $ref: "#/components/responses/Unauthorized" }
 
   /lookup/users:
@@ -2642,6 +2660,52 @@ components:
         commit: { type: string }
         build_date: { type: string }
         go: { type: string }
+    About:
+      type: object
+      required: [name, version, hbb, update, server]
+      properties:
+        name: { type: string, description: Product name (rustdesk-panel). }
+        version: { $ref: "#/components/schemas/VersionInfo" }
+        hbb: { $ref: "#/components/schemas/AboutHbb" }
+        update: { $ref: "#/components/schemas/UpdateCheck" }
+        server:
+          description: Null for the `user` role.
+          oneOf:
+            - $ref: "#/components/schemas/AboutServer"
+            - type: "null"
+    AboutHbb:
+      type: object
+      description: Source of the bundled hbbs/hbbr (container image build args HBB_REPO / HBB_REF); null when not built in.
+      required: [repo, ref]
+      properties:
+        repo: { type: [string, "null"], description: "e.g. https://github.com/bropines/rustdesk-server" }
+        ref: { type: [string, "null"], description: Commit or `git describe` of the server fork. }
+    UpdateCheck:
+      type: object
+      required: [status, latest, latest_url, published_at, checked_at, error]
+      properties:
+        status:
+          type: string
+          enum: [disabled, unknown, error, up_to_date, update_available]
+          description: |
+            disabled = RDPANEL_UPDATE_CHECK=false; unknown = no release published or the running version is not
+            a semantic version (e.g. a dev build); error = the check failed and no earlier answer is cached.
+        latest: { type: [string, "null"], description: Tag of the latest GitHub release. }
+        latest_url: { type: [string, "null"], description: Release page. }
+        published_at: { type: [string, "null"], format: date-time }
+        checked_at: { type: [string, "null"], format: date-time, description: Last attempt (cached answers keep their time). }
+        error: { type: [string, "null"], description: Last failure; admins only. }
+    AboutServer:
+      type: object
+      required: [started_at, uptime_s, schema_version, schema_latest, os, arch, health]
+      properties:
+        started_at: { type: string, format: date-time }
+        uptime_s: { type: integer }
+        schema_version: { type: [integer, "null"], description: Applied goose migration. }
+        schema_latest: { type: [integer, "null"], description: Newest migration embedded in this binary. }
+        os: { type: string }
+        arch: { type: string }
+        health: { $ref: "#/components/schemas/ServerHealth" }
 
     DeviceFacets:
       type: object

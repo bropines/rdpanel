@@ -58,6 +58,19 @@ export function formatDuration(fromIso: string, toIso: string | null | undefined
   return `${s}s`;
 }
 
+/** "3d 04h", "5h 12m", "42m" style uptime from a number of seconds. */
+export function formatUptime(totalSeconds: number): string {
+  let s = Math.max(0, Math.floor(totalSeconds));
+  const d = Math.floor(s / 86400);
+  s -= d * 86400;
+  const h = Math.floor(s / 3600);
+  s -= h * 3600;
+  const m = Math.floor(s / 60);
+  if (d > 0) return `${d}d ${String(h).padStart(2, "0")}h`;
+  if (h > 0) return `${h}h ${String(m).padStart(2, "0")}m`;
+  return `${m}m`;
+}
+
 /** Short human label for a user reference. */
 export function userLabel(u: { username: string; display_name?: string } | null | undefined): string {
   if (!u) return "—";

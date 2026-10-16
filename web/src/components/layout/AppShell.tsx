@@ -1,11 +1,11 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, Outlet, useNavigate, useRouterState } from "@tanstack/react-router";
-import { LogOut, Menu, MonitorCog, ShieldCheck, X } from "lucide-react";
+import { Info, LogOut, Menu, MonitorCog, ShieldCheck, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { auth } from "@/api/auth";
-import { dashboardApi } from "@/api/system";
+import { aboutQuery, dashboardApi } from "@/api/system";
 import { LanguageSwitcher } from "@/components/layout/LanguageSwitcher";
 import { ThemeToggle } from "@/components/layout/ThemeToggle";
 import { Button } from "@/components/ui/button";
@@ -55,6 +55,32 @@ function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
         </div>
       ))}
     </nav>
+  );
+}
+
+/** Sidebar footer: running version (links to About), with a dot when a release is newer. */
+function VersionFooter({ onNavigate }: { onNavigate?: () => void }) {
+  const { t } = useTranslation();
+  const { data } = useQuery(aboutQuery);
+  const update = data?.update.status === "update_available";
+  return (
+    <div className="mt-auto border-t border-sidebar-border px-3 py-2">
+      <Link
+        to="/about"
+        onClick={onNavigate}
+        className="flex items-center gap-2 rounded-md px-2 py-1 text-xs text-muted-foreground transition-colors hover:bg-sidebar-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+        activeProps={{ className: "bg-sidebar-accent !text-foreground" }}
+        title={update ? t("about.updates.update_available", { latest: data?.update.latest ?? "" }) : t("nav.about")}
+      >
+        <Info className="h-3.5 w-3.5 shrink-0" aria-hidden />
+        <span className="truncate" data-testid="sidebar-version">
+          {data ? t("about.sidebarVersion", { version: data.version.panel }) : t("nav.about")}
+        </span>
+        {update && (
+          <span className="ml-auto h-2 w-2 shrink-0 rounded-full bg-primary" role="img" aria-label={t("about.updates.badge")} />
+        )}
+      </Link>
+    </div>
   );
 }
 
@@ -131,6 +157,12 @@ function UserMenu() {
             {t("nav.myProfile")}
           </Link>
         </DropdownMenuItem>
+        <DropdownMenuItem asChild>
+          <Link to="/about">
+            <Info />
+            {t("nav.about")}
+          </Link>
+        </DropdownMenuItem>
         <DropdownMenuItem onSelect={() => logout.mutate()} disabled={logout.isPending}>
           <LogOut />
           {t("user.logout")}
@@ -162,24 +194,26 @@ export function AppShell() {
           {t("app.skipToContent")}
         </a>
 
-        <aside className="sticky top-0 hidden h-screen w-60 shrink-0 overflow-y-auto border-r border-sidebar-border bg-sidebar md:block">
-          <div className="flex h-14 items-center border-b border-sidebar-border px-4">
+        <aside className="sticky top-0 hidden h-screen w-60 shrink-0 flex-col overflow-y-auto border-r border-sidebar-border bg-sidebar md:flex">
+          <div className="flex h-14 shrink-0 items-center border-b border-sidebar-border px-4">
             <Brand />
           </div>
           <Sidebar />
+          <VersionFooter />
         </aside>
 
         {mobileOpen && (
           <div className="fixed inset-0 z-40 md:hidden" role="dialog" aria-modal="true" aria-label={t("nav.main")}>
             <div className="absolute inset-0 bg-black/50" onClick={() => setMobileOpen(false)} aria-hidden />
-            <aside className="absolute inset-y-0 left-0 w-72 overflow-y-auto bg-sidebar shadow-xl">
-              <div className="flex h-14 items-center justify-between border-b border-sidebar-border px-4">
+            <aside className="absolute inset-y-0 left-0 flex w-72 flex-col overflow-y-auto bg-sidebar shadow-xl">
+              <div className="flex h-14 shrink-0 items-center justify-between border-b border-sidebar-border px-4">
                 <Brand />
                 <Button variant="ghost" size="icon" onClick={() => setMobileOpen(false)} aria-label={t("nav.closeMenu")}>
                   <X />
                 </Button>
               </div>
               <Sidebar onNavigate={() => setMobileOpen(false)} />
+              <VersionFooter onNavigate={() => setMobileOpen(false)} />
             </aside>
           </div>
         )}

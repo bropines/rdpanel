@@ -177,6 +177,22 @@ func TestEnvNames(t *testing.T) {
 	}
 }
 
+func TestUpdateCheck(t *testing.T) {
+	cfg, err := Load(env(nil))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !cfg.UpdateCheck {
+		t.Fatal("update check must default to on")
+	}
+	if cfg, err = Load(env(map[string]string{"RDPANEL_UPDATE_CHECK": "false"})); err != nil || cfg.UpdateCheck {
+		t.Fatalf("RDPANEL_UPDATE_CHECK=false: %v %v", cfg, err)
+	}
+	if _, err := Load(env(map[string]string{"RDPANEL_UPDATE_CHECK": "sometimes"})); err == nil {
+		t.Fatal("invalid boolean accepted")
+	}
+}
+
 func TestHBBSWorkerSettings(t *testing.T) {
 	cfg, err := Load(env(nil))
 	if err != nil {

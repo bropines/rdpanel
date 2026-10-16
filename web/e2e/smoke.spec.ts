@@ -214,6 +214,24 @@ test("audit, server, settings, profile", async ({ page }) => {
   expect(errors).toEqual([]);
 });
 
+test("about page: user menu, sidebar version, update check", async ({ page }) => {
+  const errors = watchErrors(page);
+  await start(page);
+  await page.goto("/");
+  await page.getByRole("button", { name: "Account menu" }).click();
+  await page.getByRole("menuitem", { name: "About" }).click();
+  await expect(page).toHaveURL(/\/about$/);
+  await expect(page.getByRole("heading", { name: "About" })).toBeVisible();
+  await expect(page.getByTestId("update-status")).toHaveText("Version v0.2.0 is available.");
+  await expect(page.getByText("Runtime")).toBeVisible();
+  await expect(page.getByRole("link", { name: /Server fork/ })).toHaveAttribute("href", "https://github.com/bropines/rustdesk-server");
+
+  await page.goto("/devices");
+  await page.getByTestId("sidebar-version").click();
+  await expect(page).toHaveURL(/\/about$/);
+  expect(errors).toEqual([]);
+});
+
 test("user role sees no System pages", async ({ page }) => {
   const errors = watchErrors(page);
   await start(page, "2"); // ivan

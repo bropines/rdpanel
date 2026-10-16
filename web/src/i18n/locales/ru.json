@@ -22,7 +22,8 @@
     "server": "Сервер",
     "settings": "Настройки",
     "openMenu": "Открыть меню",
-    "closeMenu": "Закрыть меню"
+    "closeMenu": "Закрыть меню",
+    "about": "О панели"
   },
   "theme": {
     "toggle": "Сменить тему",
@@ -234,6 +235,55 @@
     "onlineDevices_many": "{{count}} устройств в сети",
     "onlineDevices_other": "{{count}} устройства в сети",
     "fallbackHint": "hbbs недоступен: присутствие оценивается по heartbeat клиентов."
+  },
+  "about": {
+    "title": "О панели",
+    "subtitle": "Версия, исходники и лицензии этой панели.",
+    "description": "Self-hosted API-сервер и панель администратора для RustDesk: замена rustdesk-api с живой интеграцией hbbs/hbbr.",
+    "build": "Сборка",
+    "version": "Версия",
+    "commit": "Коммит",
+    "buildDate": "Дата сборки",
+    "goVersion": "Go",
+    "devBuild": "сборка для разработки",
+    "hbbTitle": "Сервер RustDesk (hbbs/hbbr)",
+    "hbbRepo": "Исходники",
+    "hbbRef": "Ревизия",
+    "hbbNone": "В этой сборке нет hbbs/hbbr.",
+    "serverTitle": "Среда выполнения",
+    "uptime": "Время работы",
+    "startedAt": "Запущена",
+    "schema": "Схема БД",
+    "schemaValue": "версия {{current}} (последняя {{latest}})",
+    "platform": "Платформа",
+    "updates": {
+      "title": "Обновления",
+      "disabled": "Проверка обновлений выключена (RDPANEL_UPDATE_CHECK=false).",
+      "unknown": "Не удалось сравнить эту сборку с последним релизом.",
+      "error": "Не удалось связаться с GitHub для проверки обновлений.",
+      "up_to_date": "Установлен последний релиз.",
+      "update_available": "Доступна версия {{latest}}.",
+      "latest": "Последний релиз",
+      "checked": "Проверено",
+      "releaseNotes": "Что нового",
+      "badge": "Есть обновление"
+    },
+    "links": {
+      "title": "Ссылки",
+      "repo": "Репозиторий на GitHub",
+      "releases": "Релизы",
+      "issues": "Сообщить о проблеме",
+      "docs": "Руководство по развёртыванию",
+      "serverFork": "Форк сервера (hbbs/hbbr)",
+      "upstream": "RustDesk (оригинал)"
+    },
+    "licenses": {
+      "title": "Лицензии",
+      "panel": "rustdesk-panel",
+      "hbb": "hbbs / hbbr",
+      "note": "hbbs и hbbr — свободное ПО под AGPL-3.0; ссылка на их точные исходники приведена выше. Проект не связан с RustDesk."
+    },
+    "sidebarVersion": "Версия {{version}}"
   },
   "os": {
     "windows": "Windows",

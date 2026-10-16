@@ -312,3 +312,12 @@ func TestCLIConfigPrintAndUsage(t *testing.T) {
 		t.Fatalf("invalid config exit %d", code)
 	}
 }
+
+func TestUpdateCheckWiring(t *testing.T) {
+	if a := newTestApp(t, nil); a.Updates == nil || a.StartedAt.IsZero() {
+		t.Fatalf("default: updates=%v started=%v", a.Updates, a.StartedAt)
+	}
+	if a := newTestApp(t, map[string]string{"RDPANEL_UPDATE_CHECK": "false"}); a.Updates != nil {
+		t.Fatal("RDPANEL_UPDATE_CHECK=false must disable the update check")
+	}
+}

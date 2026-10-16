@@ -159,6 +159,7 @@ Environment variables override the optional YAML file named by `RDPANEL_CONFIG`
 | `RDPANEL_HBBS_LIST_DIR` (`hbbs.list_dir`) | empty | hbbr working dir; when set, `blacklist.txt`/`blocklist.txt` are kept in sync there (`/data` in the s6 image) |
 | `RDPANEL_LOG_LEVEL` (`log.level`) | `info` | `debug`, `info`, `warn`, `error` |
 | `RDPANEL_LOG_FORMAT` (`log.format`) | `json` | `json` or `text` |
+| `RDPANEL_UPDATE_CHECK` (`update_check`) | `true` | About page "update available" check: the server asks the GitHub releases API at most every 6 h (failures tolerated); `false` = no outbound request |
 
 Example YAML:
 

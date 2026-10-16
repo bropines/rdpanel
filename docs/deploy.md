@@ -132,10 +132,28 @@ DB) succeeds.
 | `RDPANEL_METRICS_ALLOW` | panel | loopback | who may read `/metrics` |
 | `RDPANEL_HBBS_ID_SERVER`, `RDPANEL_HBBS_RELAY_SERVER`, `RDPANEL_HBBS_PUBLIC_KEY_FILE` | panel | `127.0.0.1:21116`, `127.0.0.1:21117`, `/data/id_ed25519.pub` | where hbbs/hbbr are |
 | `RDPANEL_LOG_LEVEL`, `RDPANEL_LOG_FORMAT`, `RDPANEL_CONFIG` | panel | `info`, `json`, — | logging, optional YAML file |
+| `RDPANEL_UPDATE_CHECK` | panel | `true` | About page release check against the GitHub API (see below); `false` = no outbound request |
 | `HEALTHCHECK_PORTS` | healthcheck | `21115 21116 21117 21118 21119` | ports that must listen |
 
 Do not set `PORT` (hbbr would listen on `PORT+1`) or `KEY` (overrides the key
 file for both daemons) unless you mean it.
+
+### About page and update check
+
+The panel's **About** page (user menu, or the version in the sidebar footer;
+every signed-in user) shows the panel version, commit and build date, and the
+source of the bundled hbbs/hbbr: the image bakes the `HBB_REPO`/`HBB_REF` build
+args into `rdpanel` (see [Building the image](#building-the-image)). Admins
+also see uptime, the database schema version, the platform and live hbbs/hbbr
+status.
+
+To say whether a newer release exists, `rdpanel` asks
+`https://api.github.com/repos/bropines/rustdesk-panel/releases/latest` when
+the page is opened, at most once per 6 hours (a failed check is retried after
+30 minutes, 5 s timeout; the last good answer is kept). Nothing else depends on
+it: without internet access the page just says the check failed. Set
+`RDPANEL_UPDATE_CHECK=false` (YAML `update_check: false`) on air-gapped hosts or
+if the panel must not make outbound requests.
 
 ## Data layout
 
@@ -380,6 +398,10 @@ is empty; run `make hbb` yourself after changing the server sources.
   minutes per arch and would run under QEMU for the foreign arch; CI compiles it
   natively with `cross` and caches it, and the local path reuses a cached
   build. Only trivial `RUN` steps execute on the target platform.
+- `HBB_REPO`/`HBB_REF` (the server fork and the commit the binaries were built
+  from) are written to `/usr/share/doc/rustdesk-server/SOURCE` (AGPL §6) and
+  linked into `rdpanel` (`internal/buildinfo.HBBRepo/HBBRef` ldflags) for the
+  About page and `rdpanel version`.
 - Bump `ALPINE_VERSION`, `GO_IMAGE`, `NODE_IMAGE`, `S6_OVERLAY_VERSION` (+ the
   three `S6_SHA256_*` values from the release's `.sha256` files) as build args
   or in the Dockerfile.

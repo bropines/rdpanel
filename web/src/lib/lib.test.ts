@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { argbToCss, argbToHex, hexToArgb, readableTextColor } from "@/lib/argb";
-import { formatDuration, formatRustdeskId, relativeTime } from "@/lib/format";
+import { formatDuration, formatRustdeskId, formatUptime, relativeTime } from "@/lib/format";
 import { applyPresence, mergeDevice, patchDevicePage } from "@/lib/live-cache";
 import { safeNext } from "@/lib/redirect";
 import { rangeToQuery } from "@/lib/time-range";
@@ -66,6 +66,9 @@ describe("format", () => {
   it("formats durations and ids", () => {
     expect(formatDuration("2026-10-15T10:00:00Z", "2026-10-15T11:02:00Z")).toBe("1h 02m");
     expect(formatDuration("2026-10-15T10:00:00Z", "2026-10-15T10:00:42Z")).toBe("42s");
+    expect(formatUptime(42)).toBe("0m");
+    expect(formatUptime(5 * 3600 + 12 * 60)).toBe("5h 12m");
+    expect(formatUptime(3 * 86400 + 4 * 3600 + 59)).toBe("3d 04h");
     expect(formatRustdeskId("123456789")).toBe("123 456 789");
     expect(formatRustdeskId("my-id")).toBe("my-id");
   });

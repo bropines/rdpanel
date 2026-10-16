@@ -22,7 +22,8 @@
     "server": "Server",
     "settings": "Settings",
     "openMenu": "Open navigation",
-    "closeMenu": "Close navigation"
+    "closeMenu": "Close navigation",
+    "about": "About"
   },
   "theme": {
     "toggle": "Toggle theme",
@@ -220,6 +221,55 @@
     "onlineDevices_one": "{{count}} device online",
     "onlineDevices_other": "{{count}} devices online",
     "fallbackHint": "hbbs is unreachable: presence is estimated from client heartbeats."
+  },
+  "about": {
+    "title": "About",
+    "subtitle": "Version, sources and licenses of this panel.",
+    "description": "Self-hosted API server and admin panel for RustDesk: a drop-in replacement for rustdesk-api with live hbbs/hbbr integration.",
+    "build": "Build",
+    "version": "Version",
+    "commit": "Commit",
+    "buildDate": "Build date",
+    "goVersion": "Go",
+    "devBuild": "development build",
+    "hbbTitle": "RustDesk server (hbbs/hbbr)",
+    "hbbRepo": "Source",
+    "hbbRef": "Revision",
+    "hbbNone": "This build does not bundle hbbs/hbbr.",
+    "serverTitle": "Runtime",
+    "uptime": "Uptime",
+    "startedAt": "Started",
+    "schema": "Database schema",
+    "schemaValue": "version {{current}} (latest {{latest}})",
+    "platform": "Platform",
+    "updates": {
+      "title": "Updates",
+      "disabled": "The update check is turned off (RDPANEL_UPDATE_CHECK=false).",
+      "unknown": "Could not compare this build with the latest release.",
+      "error": "Could not reach GitHub to check for updates.",
+      "up_to_date": "You are running the latest release.",
+      "update_available": "Version {{latest}} is available.",
+      "latest": "Latest release",
+      "checked": "Checked",
+      "releaseNotes": "Release notes",
+      "badge": "Update available"
+    },
+    "links": {
+      "title": "Links",
+      "repo": "GitHub repository",
+      "releases": "Releases",
+      "issues": "Report an issue",
+      "docs": "Deployment guide",
+      "serverFork": "Server fork (hbbs/hbbr)",
+      "upstream": "RustDesk (upstream)"
+    },
+    "licenses": {
+      "title": "Licenses",
+      "panel": "rustdesk-panel",
+      "hbb": "hbbs / hbbr",
+      "note": "hbbs and hbbr are free software under the AGPL-3.0; their exact source is linked above. Not affiliated with RustDesk."
+    },
+    "sidebarVersion": "Version {{version}}"
   },
   "os": {
     "windows": "Windows",

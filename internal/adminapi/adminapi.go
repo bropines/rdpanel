@@ -6,7 +6,9 @@
 package adminapi
 
 import (
+	"context"
 	"log/slog"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/prometheus/client_golang/prometheus"
@@ -17,6 +19,7 @@ import (
 	"github.com/bropines/rustdesk-panel/internal/loginlog"
 	"github.com/bropines/rustdesk-panel/internal/oidc"
 	"github.com/bropines/rustdesk-panel/internal/store"
+	"github.com/bropines/rustdesk-panel/internal/updatecheck"
 )
 
 // Session cookie names shared with the web client (web/src/api/client.ts).
@@ -73,6 +76,25 @@ type Deps struct {
 	// ConsoleLimit caps raw console commands per admin per minute (default 30).
 	ConsoleLimit int
 	// ---- end stream B2b ----
+
+	// ---- About page (GET /about) ----
+	// StartedAt is the process start (uptime); zero = when Register ran.
+	StartedAt time.Time
+	// Schema reports the applied and the newest embedded migration (nil: unknown).
+	Schema SchemaInfo
+	// Updates looks up the latest release (nil: the update check is disabled).
+	Updates UpdateChecker
+}
+
+// SchemaInfo reports the database schema version (implemented by *db.DB).
+type SchemaInfo interface {
+	SchemaVersion(ctx context.Context) (int64, error)
+	LatestSchemaVersion() (int64, error)
+}
+
+// UpdateChecker returns the cached latest release (*updatecheck.Checker).
+type UpdateChecker interface {
+	Latest(ctx context.Context) updatecheck.Result
 }
 
 // DeviceRateInfo is a token bucket: Rate requests per second, bursts of Burst.

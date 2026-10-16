@@ -45,6 +45,9 @@ type Config struct {
 	SecretKey Secret `yaml:"secret_key"`
 	// SecretKeyFile is the AEAD key file. Default: <DataDir>/secret.key.
 	SecretKeyFile string `yaml:"secret_key_file"`
+	// UpdateCheck lets the About page look up the latest rustdesk-panel
+	// release on GitHub (server-side, cached for 6 h; never blocks anything).
+	UpdateCheck bool `yaml:"update_check"`
 
 	Auth AuthConfig `yaml:"auth"`
 	HTTP HTTPConfig `yaml:"http"`
@@ -119,8 +122,9 @@ type LogConfig struct {
 // Defaults returns the built-in configuration before files and env are applied.
 func Defaults() *Config {
 	return &Config{
-		Listen:  ":21114",
-		DataDir: "/data",
+		Listen:      ":21114",
+		DataDir:     "/data",
+		UpdateCheck: true,
 		Auth: AuthConfig{
 			TokenLifetime:   4380 * time.Hour,
 			SessionIdle:     12 * time.Hour,
@@ -243,6 +247,7 @@ func (c *Config) envVars() []envVar {
 		{"RDPANEL_HBBS_LIST_DIR", str(&c.HBBS.ListDir)},
 		{"RDPANEL_LOG_LEVEL", str(&c.Log.Level)},
 		{"RDPANEL_LOG_FORMAT", str(&c.Log.Format)},
+		{"RDPANEL_UPDATE_CHECK", boolean(&c.UpdateCheck)},
 	}
 }
 
