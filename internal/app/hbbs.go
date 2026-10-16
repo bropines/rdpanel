@@ -99,8 +99,9 @@ func (a *App) initHBBS() error {
 func (a *App) initRelays() error {
 	cfg := a.Config
 	image := "ghcr.io/bropines/rdpanel:latest"
-	if v := buildinfo.Version; len(v) > 1 && v[0] == 'v' && strings.Count(v, ".") == 2 && !strings.ContainsAny(v, "-+") {
-		image = "ghcr.io/bropines/rdpanel:" + strings.TrimPrefix(v, "v")
+	// Release builds carry "0.3.0" (image) or "v0.3.0" (make); pin agents to it.
+	if v := strings.TrimPrefix(buildinfo.Version, "v"); v != "" && v[0] >= '0' && v[0] <= '9' && strings.Count(v, ".") == 2 && !strings.ContainsAny(v, "-+") {
+		image = "ghcr.io/bropines/rdpanel:" + v
 	}
 	s, err := relays.New(relays.Config{
 		Store: &relays.Store{DB: a.DB}, Panel: a.Store, Bus: a.Events, Log: a.Log.With("component", "relays"),
