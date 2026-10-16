@@ -19,6 +19,7 @@ func TestSPA(t *testing.T) {
 		"index.html":            {Data: []byte("<html>app</html>")},
 		"assets/index-abc12.js": {Data: []byte("console.log(1)")},
 		"favicon.svg":           {Data: []byte("<svg/>")},
+		"api-docs.html":         {Data: []byte("<html>docs</html>")},
 	}
 	spa := NewSPA(fsys)
 	if !spa.Built() {
@@ -40,6 +41,9 @@ func TestSPA(t *testing.T) {
 	}
 	if rec = serve(spa, http.MethodGet, "/assets/missing.js"); rec.Code != 404 {
 		t.Fatalf("missing asset: %d", rec.Code)
+	}
+	if rec = serve(spa, http.MethodGet, "/api-docs.html"); rec.Code != 404 {
+		t.Fatalf("api-docs.html is served at /api/v1/docs only: %d", rec.Code)
 	}
 	if rec = serve(spa, http.MethodGet, "/robots.txt"); rec.Code != 404 {
 		t.Fatalf("missing file with extension: %d", rec.Code)

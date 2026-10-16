@@ -44,6 +44,11 @@ func (s *SPA) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		s.serveIndex(w, r)
 		return
 	}
+	// The Swagger UI page is served (and gated) by the backend at /api/v1/docs.
+	if name == "api-docs.html" {
+		http.NotFound(w, r)
+		return
+	}
 	f, err := s.fsys.Open(name)
 	if err == nil {
 		defer f.Close()

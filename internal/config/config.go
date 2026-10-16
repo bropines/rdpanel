@@ -49,6 +49,10 @@ type Config struct {
 	// UpdateCheck lets the About page look up the latest RD Panel
 	// release on GitHub (server-side, cached for 6 h; never blocks anything).
 	UpdateCheck bool `yaml:"update_check"`
+	// APIDocs controls the interactive admin API docs at /api/v1/docs and the
+	// spec at /api/v1/openapi.{yaml,json}: "auth" (signed-in users, default),
+	// "public" (readable without login) or "off" (404).
+	APIDocs string `yaml:"api_docs"`
 
 	Auth     AuthConfig     `yaml:"auth"`
 	WebAuthn WebAuthnConfig `yaml:"webauthn"`
@@ -195,12 +199,20 @@ type LogsConfig struct {
 	Dir string `yaml:"dir"`
 }
 
+// API docs modes (Config.APIDocs).
+const (
+	APIDocsAuth   = "auth"
+	APIDocsPublic = "public"
+	APIDocsOff    = "off"
+)
+
 // Defaults returns the built-in configuration before files and env are applied.
 func Defaults() *Config {
 	return &Config{
 		Listen:      ":21114",
 		DataDir:     "/data",
 		UpdateCheck: true,
+		APIDocs:     APIDocsAuth,
 		Auth: AuthConfig{
 			TokenLifetime:   4380 * time.Hour,
 			SessionIdle:     12 * time.Hour,
@@ -353,6 +365,7 @@ func (c *Config) envVars() []envVar {
 		{"RDPANEL_LOGS_BUFFER", integer(&c.Logs.Buffer)},
 		{"RDPANEL_LOGS_DIR", str(&c.Logs.Dir)},
 		{"RDPANEL_UPDATE_CHECK", boolean(&c.UpdateCheck)},
+		{"RDPANEL_API_DOCS", str(&c.APIDocs)},
 		{"RDPANEL_SMTP_HOST", str(&c.SMTP.Host)},
 		{"RDPANEL_SMTP_PORT", integer(&c.SMTP.Port)},
 		{"RDPANEL_SMTP_USERNAME", str(&c.SMTP.Username)},
@@ -424,6 +437,10 @@ func (c *Config) fillDerived() {
 	c.HTTP.RealIPHeader = http.CanonicalHeaderKey(c.HTTP.RealIPHeader)
 	c.Log.Level = strings.ToLower(c.Log.Level)
 	c.Log.Format = strings.ToLower(c.Log.Format)
+	c.APIDocs = strings.ToLower(strings.TrimSpace(c.APIDocs))
+	if c.APIDocs == "" {
+		c.APIDocs = APIDocsAuth
+	}
 	c.SMTP.Host = strings.TrimSpace(c.SMTP.Host)
 	c.SMTP.Encryption = strings.ToLower(strings.TrimSpace(c.SMTP.Encryption))
 	if c.SMTP.Encryption == "" {
@@ -520,6 +537,11 @@ func (c *Config) Validate() error {
 	case "debug", "info", "warn", "error":
 	default:
 		add("log.level %q: must be debug, info, warn or error", c.Log.Level)
+	}
+	switch c.APIDocs {
+	case APIDocsAuth, APIDocsPublic, APIDocsOff:
+	default:
+		add("api_docs %q: must be auth, public or off", c.APIDocs)
 	}
 	switch c.Log.Format {
 	case "json", "text":

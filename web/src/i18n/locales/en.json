@@ -1284,5 +1284,14 @@
       "save": "Save overrides",
       "saved": "Overrides saved; the agent applies them"
     }
+  },
+  "apiDocs": {
+    "title": "API docs",
+    "open": "Interactive API docs",
+    "back": "Back to panel",
+    "pageHint": "Try it out uses your current session; Authorize accepts a personal API token (rdp_…).",
+    "tokensHint": "Explore and try every endpoint in the interactive API docs.",
+    "csrfAuto": "Filled in automatically from the rdpanel_csrf cookie; not needed with a Bearer API token.",
+    "loadFailed": "Could not load the API description (/api/v1/openapi.json)."
   }
 }

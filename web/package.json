@@ -3,6 +3,9 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
+  "scarfSettings": {
+    "enabled": false
+  },
   "engines": {
     "node": ">=20.19"
   },
@@ -54,6 +57,7 @@
     "react-hook-form": "^7.62.0",
     "react-i18next": "^15.7.0",
     "sonner": "^2.0.7",
+    "swagger-ui-dist": "^5.33.3",
     "tailwind-merge": "^2.6.0",
     "zod": "^4.1.0"
   },

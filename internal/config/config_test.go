@@ -131,6 +131,7 @@ func TestValidation(t *testing.T) {
 		"bad secret":     {"RDPANEL_SECRET_KEY": base64.StdEncoding.EncodeToString(make([]byte, 16))},
 		"bad admin url":  {"RDPANEL_PUBLIC_URL": "https://x", "RDPANEL_ADMIN_URL": "https://y/#f"},
 		"admin w/o pub":  {"RDPANEL_ADMIN_URL": "https://y"},
+		"bad api docs":   {"RDPANEL_API_DOCS": "yes"},
 	}
 	for name, e := range cases {
 		t.Run(name, func(t *testing.T) {
@@ -190,6 +191,16 @@ func TestUpdateCheck(t *testing.T) {
 	}
 	if _, err := Load(env(map[string]string{"RDPANEL_UPDATE_CHECK": "sometimes"})); err == nil {
 		t.Fatal("invalid boolean accepted")
+	}
+}
+
+func TestAPIDocs(t *testing.T) {
+	cfg, err := Load(env(nil))
+	if err != nil || cfg.APIDocs != APIDocsAuth {
+		t.Fatalf("default: %q %v", cfg.APIDocs, err)
+	}
+	if cfg, err = Load(env(map[string]string{"RDPANEL_API_DOCS": " Public "})); err != nil || cfg.APIDocs != APIDocsPublic {
+		t.Fatalf("public: %q %v", cfg.APIDocs, err)
 	}
 }
 

@@ -6,6 +6,11 @@ import { defineConfig, type Plugin } from "vite";
 
 const outDir = fileURLToPath(new URL("./dist", import.meta.url));
 const mockOutDir = fileURLToPath(new URL("./dist-mock", import.meta.url));
+// Second entry: the Swagger UI page served by the backend at /api/v1/docs.
+const pages = {
+  main: fileURLToPath(new URL("./index.html", import.meta.url)),
+  "api-docs": fileURLToPath(new URL("./api-docs.html", import.meta.url)),
+};
 const workerSrc = fileURLToPath(new URL("./node_modules/msw/lib/mockServiceWorker.js", import.meta.url));
 
 // web/dist is embedded by the Go binary (web/embed.go). Vite empties outDir on
@@ -52,11 +57,17 @@ export default defineConfig(({ mode }) => {
       emptyOutDir: true,
       assetsDir: "assets",
       sourcemap: false,
+      // The api-docs entry is one prebuilt Swagger UI bundle (~1.5 MB); the SPA chunks stay far below.
+      chunkSizeWarningLimit: 1600,
       rollupOptions: {
+        input: pages,
         output: {
           // Stable vendor chunks: better long-term caching of /assets/*.
           manualChunks(id) {
             if (!id.includes("node_modules")) return undefined;
+            // Swagger UI: only the api-docs entry imports it; let Rollup keep it there
+            // (a manual chunk would also capture shared CJS helpers the SPA imports).
+            if (id.includes("swagger-ui-dist")) return undefined;
             if (/[\\/]node_modules[\\/](react|react-dom|scheduler)[\\/]/.test(id)) return "react";
             if (id.includes("@tanstack")) return "tanstack";
             if (id.includes("@radix-ui") || id.includes("lucide-react")) return "ui";

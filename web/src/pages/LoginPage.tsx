@@ -16,7 +16,7 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/misc";
-import { safeNext } from "@/lib/redirect";
+import { isServerPath, safeNext } from "@/lib/redirect";
 import { passkeysSupported, webauthnErrorKey } from "@/lib/webauthn";
 import { loginErrorKey, oidcErrorKey } from "@/pages/login-errors";
 
@@ -76,7 +76,8 @@ export function LoginPage() {
 
   const done = (me: Me) => {
     qc.setQueryData(meQueryKey, me);
-    void navigate({ href: next, replace: true });
+    if (isServerPath(next)) navigateExternal(next);
+    else void navigate({ href: next, replace: true });
   };
 
   const pwForm = useForm<z.infer<typeof passwordSchema>>({
