@@ -181,7 +181,7 @@ grows while `relays_total` stays flat). Without the patch, the agent falls back 
 ### Option A: agent dials out to the panel (**recommended**)
 
 ```
- remote host (any cloud, NAT ok)                         central host (msk00)
+ remote host (any cloud, NAT ok)                         central host        
 ┌─────────────── relay-agent container ─────────────┐    ┌──────── s6 container ─────────┐
 │ hbbr -k <pub>  :21117 tcp  (:21119 ws opt-in)     │    │ hbbs   rdpanel serve   hbbr   │
 │   ▲ loopback admin 127.0.0.1:21117                │    │   ▲ rs <computed> (reconciler)│
@@ -318,7 +318,7 @@ services:
     network_mode: host
     restart: unless-stopped
     environment:
-      RDPANEL_AGENT_PANEL_URL: https://desk-ru-api.bropinus.ru
+      RDPANEL_AGENT_PANEL_URL: https://desk-api.example.com
       RDPANEL_AGENT_ENROLL_TOKEN: "<one-time token>"
       # never set PORT: hbbr listens on PORT+1 (srv:src/hbbr.rs:31-37)
     volumes: [ "./relay-data:/data" ]
@@ -560,7 +560,7 @@ Relays                              Rotation: fra-1×3, hel-2, local     [+ Add 
 ┌───────────────┬────────┬───────────┬────────┬─────────┬────────────┬────────┬────────────────────┐
 │ Name          │ Region │ Health    │ Active │ Now     │ 24 h       │ Weight │                    │
 ├───────────────┼────────┼───────────┼────────┼─────────┼────────────┼────────┼────────────────────┤
-│ msk00 (local) │ RU     │ ● active  │ 4      │ 38 Mb/s │ 41 GB      │ 1      │ ⋯                  │
+│ main (local)  │ RU     │ ● active  │ 4      │ 38 Mb/s │ 41 GB      │ 1      │ ⋯                  │
 │ fra-1  agent  │ DE     │ ● active  │ 9      │ 120Mb/s │ 210 GB ▁▃▇ │ 3      │ drain · settings   │
 │ hel-2  agent  │ FI     │ ◐ degraded│ 2      │ 5 Mb/s  │ 9 GB       │ 1      │ agent WS down 4m   │
 │ partner static│ —      │ ○ offline │ —      │ —       │ —          │ 1      │ probe: timeout     │
