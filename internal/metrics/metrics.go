@@ -24,6 +24,7 @@ const (
 	MethodTOTP     = "totp"
 	MethodOIDC     = "oidc"
 	MethodWebAuth  = "webauth"
+	MethodPasskey  = "passkey" // panel only (WebAuthn)
 	MethodOther    = "other"
 )
 
@@ -62,7 +63,7 @@ func New(reg prometheus.Registerer) *Panel {
 	p := &Panel{
 		logins: prometheus.NewCounterVec(prometheus.CounterOpts{
 			Namespace: "rdpanel", Subsystem: "auth", Name: "login_attempts_total",
-			Help: "Login attempts by surface (panel|client), deciding factor (password|totp|oidc|webauth) and result (success|failure|rate_limited).",
+			Help: "Login attempts by surface (panel|client), deciding factor (password|totp|oidc|webauth|passkey) and result (success|failure|rate_limited).",
 		}, []string{"surface", "method", "result"}),
 		tokens: prometheus.NewCounterVec(prometheus.CounterOpts{
 			Namespace: "rdpanel", Subsystem: "auth", Name: "client_tokens_issued_total",
@@ -80,6 +81,9 @@ func New(reg prometheus.Registerer) *Panel {
 			}
 		}
 		p.logins.WithLabelValues(s, MethodPassword, ResultRateLimited)
+	}
+	for _, r := range []string{ResultSuccess, ResultFailure} {
+		p.logins.WithLabelValues(SurfacePanel, MethodPasskey, r)
 	}
 	for _, m := range []string{MethodPassword, MethodOIDC} {
 		p.tokens.WithLabelValues(m)
@@ -105,7 +109,7 @@ func oneOf(v, fallback string, allowed ...string) string {
 }
 
 func method(m string) string {
-	return oneOf(m, MethodOther, MethodPassword, MethodTOTP, MethodOIDC, MethodWebAuth)
+	return oneOf(m, MethodOther, MethodPassword, MethodTOTP, MethodOIDC, MethodWebAuth, MethodPasskey)
 }
 
 // Login counts one login attempt.

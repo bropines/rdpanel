@@ -18,6 +18,7 @@ import (
 	"github.com/bropines/rustdesk-panel/internal/crypto"
 	"github.com/bropines/rustdesk-panel/internal/httpx"
 	"github.com/bropines/rustdesk-panel/internal/loginlog"
+	"github.com/bropines/rustdesk-panel/internal/metrics"
 	"github.com/bropines/rustdesk-panel/internal/store"
 )
 
@@ -243,6 +244,7 @@ func (c *authCore) handlePasskeyLoginBegin(w http.ResponseWriter, r *http.Reques
 	}
 	ipKey := limitIP + httpx.ClientIPString(r)
 	if ok, wait := c.allow(ipKey); !ok {
+		c.d.Telemetry.Login(metrics.SurfacePanel, metrics.MethodPasskey, metrics.ResultRateLimited)
 		rateLimited(w, wait)
 		return
 	}
@@ -279,6 +281,7 @@ func (c *authCore) handlePasskeyLoginFinish(w http.ResponseWriter, r *http.Reque
 	}
 	ipKey := limitIP + httpx.ClientIPString(r)
 	if ok, wait := c.allow(ipKey); !ok {
+		c.d.Telemetry.Login(metrics.SurfacePanel, metrics.MethodPasskey, metrics.ResultRateLimited)
 		rateLimited(w, wait)
 		return
 	}
@@ -353,7 +356,7 @@ func (c *authCore) handlePasskeyLoginFinish(w http.ResponseWriter, r *http.Reque
 		internalError(w)
 		return
 	}
-	c.completeLogin(w, r, owner, loginlog.MethodPasskey, ipKey, userKey(owner.Username))
+	c.completeLogin(w, r, owner, loginlog.MethodPasskey, metrics.MethodPasskey, ipKey, userKey(owner.Username))
 }
 
 // ---- second factor ----
@@ -413,6 +416,7 @@ func (c *authCore) handlePasskeyMFAFinish(w http.ResponseWriter, r *http.Request
 	}
 	ipKey, uKey := limitIP+httpx.ClientIPString(r), userKey(s.User.Username)
 	if ok, wait := c.allow(ipKey, uKey); !ok {
+		c.d.Telemetry.Login(metrics.SurfacePanel, metrics.MethodPasskey, metrics.ResultRateLimited)
 		rateLimited(w, wait)
 		return
 	}
@@ -464,7 +468,7 @@ func (c *authCore) handlePasskeyMFAFinish(w http.ResponseWriter, r *http.Request
 		return
 	}
 	// sess.create revokes the pending session (rotation).
-	c.completeLogin(w, r, s.User, loginlog.MethodPasskey, ipKey, uKey)
+	c.completeLogin(w, r, s.User, loginlog.MethodPasskey, metrics.MethodPasskey, ipKey, uKey)
 }
 
 // mfaMethods lists the second factors a pending login can use.
