@@ -79,6 +79,8 @@ Environment variables override the optional YAML file named by `RDPANEL_CONFIG`
 | `RDPANEL_TRUSTED_PROXIES` (`http.trusted_proxies`) | `127.0.0.0/8,::1/128` | IPs/CIDRs whose forwarding headers are trusted |
 | `RDPANEL_REAL_IP_HEADER` (`http.real_ip_header`) | `X-Forwarded-For` | or `X-Real-IP`, `CF-Connecting-IP` |
 | `RDPANEL_METRICS_ALLOW` (`http.metrics_allow`) | `127.0.0.0/8,::1/128` | client IPs allowed to read `/metrics` |
+| `RDPANEL_METRICS_PER_DEVICE` (`http.metrics_per_device`) | `false` | also export `rdpanel_presence_device_online{id}`, one series per device (cardinality = fleet size) |
+| `RDPANEL_HBB_REF` | — (set by the image) | hbbs/hbbr source ref reported as `hbb_ref` in `rdpanel_build_info` |
 | `RDPANEL_HBBS_ID_SERVER` (`hbbs.id_server`) | `127.0.0.1:21116` | hbbs rendezvous address (admin channel = port − 1) |
 | `RDPANEL_HBBS_RELAY_SERVER` (`hbbs.relay_server`) | `127.0.0.1:21117` | hbbr address (admin channel on the same port) |
 | `RDPANEL_HBBS_PUBLIC_KEY_FILE` (`hbbs.public_key_file`) | `<data>/id_ed25519.pub` | hbbs public key served to clients |
@@ -114,6 +116,10 @@ log:
 | `/healthz` | liveness + DB ping |
 | `/metrics` | Prometheus metrics (restricted by `RDPANEL_METRICS_ALLOW`) |
 | `/*` | embedded single-page app |
+
+Monitoring: the metric list, a Grafana dashboard, Prometheus alert rules, a
+Prometheus + Grafana compose example and the Helm `PrometheusRule` / dashboard
+options are described in [`docs/monitoring.md`](docs/monitoring.md).
 
 ## Development
 

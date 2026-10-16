@@ -1,0 +1,63 @@
+# Unit tests for alerts.yaml:  promtool test rules alerts_test.yaml
+rule_files:
+  - alerts.yaml
+
+evaluation_interval: 1m
+
+tests:
+  - interval: 1m
+    input_series:
+      - series: 'up{job="rustdesk-panel", instance="panel:21114"}'
+        values: '1 1 0 0 0 0'
+      - series: 'rdpanel_hbbs_up{job="rustdesk-panel", instance="panel:21114"}'
+        values: '1 0 0 0 0 0'
+      - series: 'rdpanel_hbb_admin_up{job="rustdesk-panel", instance="panel:21114", target="hbbr"}'
+        values: '1 1 1 1 1 1'
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: RustDeskPanelDown
+        exp_alerts:
+          - exp_labels: {severity: critical, job: rustdesk-panel, instance: "panel:21114"}
+            exp_annotations:
+              summary: "rdpanel is not answering /metrics on panel:21114"
+              description: >-
+                Prometheus cannot scrape rdpanel. The admin panel and the client API (login, address book, audit) are probably unavailable. A 403 here means RDPANEL_METRICS_ALLOW does not include the Prometheus address.
+      - eval_time: 5m
+        alertname: RustDeskHBBSDown
+        exp_alerts:
+          - exp_labels: {severity: critical, job: rustdesk-panel, instance: "panel:21114"}
+            exp_annotations:
+              summary: "hbbs (rendezvous server) is unreachable from rdpanel on panel:21114"
+              description: >-
+                The presence poll (OnlineRequest to the hbbs rendezvous port) fails. Clients cannot register or connect; presence falls back to client heartbeats.
+      - eval_time: 5m
+        alertname: RustDeskHBBRDown
+        exp_alerts: []
+
+  - interval: 1m
+    input_series:
+      # 20 failed client logins per minute.
+      - series: 'rdpanel_auth_login_attempts_total{job="rustdesk-panel", instance="panel:21114", surface="client", method="password", result="failure"}'
+        values: '0+20x20'
+      - series: 'rdpanel_auth_login_attempts_total{job="rustdesk-panel", instance="panel:21114", surface="panel", method="password", result="failure"}'
+        values: '0+1x20'
+      # 60 devices online, then 20.
+      - series: 'rdpanel_presence_online_devices{job="rustdesk-panel", instance="panel:21114"}'
+        values: '60x15 20x10'
+    alert_rule_test:
+      - eval_time: 15m
+        alertname: RustDeskLoginFailureSpike
+        exp_alerts:
+          - exp_labels: {severity: warning, job: rustdesk-panel, instance: "panel:21114", surface: client}
+            exp_annotations:
+              summary: "client login failures above 10/min on panel:21114"
+              description: >-
+                20 failed or rate-limited client logins per minute. Possible password guessing; see Audit > Logins in the panel for the source addresses.
+      - eval_time: 24m
+        alertname: RustDeskOnlineDevicesDrop
+        exp_alerts:
+          - exp_labels: {severity: warning, job: rustdesk-panel, instance: "panel:21114"}
+            exp_annotations:
+              summary: "Online devices dropped by more than half on panel:21114"
+              description: >-
+                20 devices are online now, less than half of 15 minutes ago. Look for a network outage, a DNS/certificate change or an hbbs restart.

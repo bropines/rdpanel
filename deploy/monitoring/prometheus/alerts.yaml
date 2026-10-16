@@ -1,0 +1,156 @@
+# Prometheus alerting rules for rustdesk-panel (rdpanel + hbbs/hbbr).
+#
+# Load with `rule_files: [alerts.yaml]` (see ../compose.yml) and check with
+#   promtool check rules alerts.yaml
+#
+# The rules assume the scrape job is called "rustdesk-panel". With another job
+# name, replace job="rustdesk-panel" below. The Helm chart renders the same
+# rules as a PrometheusRule (prometheusRule.enabled) with the job set to the
+# panel Service name; keep deploy/helm/rustdesk-panel/files/alerts.yaml a
+# byte-for-byte copy of this file (a Go test checks it).
+#
+# Thresholds are starting points: tune them to the size of your fleet.
+groups:
+  - name: rustdesk-panel
+    rules:
+      # ---------------------------------------------------------------- panel
+      - alert: RustDeskPanelDown
+        expr: up{job="rustdesk-panel"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: rdpanel is not answering /metrics on {{ $labels.instance }}
+          description: >-
+            Prometheus cannot scrape rdpanel. The admin panel and the client API
+            (login, address book, audit) are probably unavailable. A 403 here
+            means RDPANEL_METRICS_ALLOW does not include the Prometheus address.
+
+      - alert: RustDeskPanelAbsent
+        expr: absent(up{job="rustdesk-panel"})
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: No rustdesk-panel scrape target
+          description: >-
+            Prometheus has no target for job="rustdesk-panel" (service discovery
+            or the ServiceMonitor no longer finds the panel).
+
+      - alert: RustDeskPanelHTTP5xxRatio
+        expr: |
+          (
+            sum by (job, instance) (rate(rdpanel_http_requests_total{job="rustdesk-panel", code=~"5.."}[5m]))
+            /
+            sum by (job, instance) (rate(rdpanel_http_requests_total{job="rustdesk-panel"}[5m]))
+          ) > 0.05
+          and
+          sum by (job, instance) (rate(rdpanel_http_requests_total{job="rustdesk-panel"}[5m])) > 0.05
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: More than 5% of rdpanel HTTP responses are 5xx on {{ $labels.instance }}
+          description: >-
+            {{ $value | humanizePercentage }} of requests failed with a server
+            error over the last 5 minutes. Check the rdpanel log and the
+            rdpanel_http_requests_total{code=~"5.."} series by route.
+
+      # ------------------------------------------------------------ hbbs / hbbr
+      - alert: RustDeskHBBSDown
+        expr: rdpanel_hbbs_up{job="rustdesk-panel"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: hbbs (rendezvous server) is unreachable from rdpanel on {{ $labels.instance }}
+          description: >-
+            The presence poll (OnlineRequest to the hbbs rendezvous port) fails.
+            Clients cannot register or connect; presence falls back to client
+            heartbeats.
+
+      - alert: RustDeskHBBSAdminChannelDown
+        expr: rdpanel_hbb_admin_up{job="rustdesk-panel", target="hbbs"} == 0 and on (job, instance) rdpanel_hbbs_up == 1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: hbbs admin channel is unreachable on {{ $labels.instance }}
+          description: >-
+            hbbs answers clients but not its loopback admin channel, so server
+            settings (must-login, relay list, ...) cannot be applied.
+
+      - alert: RustDeskHBBRDown
+        expr: rdpanel_hbb_admin_up{job="rustdesk-panel", target="hbbr"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: hbbr (relay server) is unreachable from rdpanel on {{ $labels.instance }}
+          description: >-
+            The hbbr admin channel shares the relay port, so hbbr is most likely
+            down: connections that need a relay will fail.
+
+      - alert: RustDeskReconcilerFailing
+        expr: sum by (job, instance, target) (increase(rdpanel_hbb_admin_reconcile_total{job="rustdesk-panel", result="error"}[15m])) > 0
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: Applying server settings to {{ $labels.target }} keeps failing on {{ $labels.instance }}
+          description: >-
+            The reconciler could not push the desired settings to
+            {{ $labels.target }} in the last 15 minutes. See Server > Settings in
+            the panel and the "reconcile: apply failed" log lines.
+
+      - alert: RustDeskReconcilerDriftLoop
+        expr: sum by (job, instance, target, key) (increase(rdpanel_hbb_admin_drift_corrections_total{job="rustdesk-panel"}[30m])) > 10
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "{{ $labels.target }} setting {{ $labels.key }} keeps drifting on {{ $labels.instance }}"
+          description: >-
+            The reconciler corrected {{ $labels.key }} more than 10 times in 30
+            minutes. Something else (a script, the admin console, a restart
+            loop) keeps changing it.
+
+      # --------------------------------------------------------------- presence
+      - alert: RustDeskOnlineDevicesDrop
+        expr: |
+          rdpanel_presence_online_devices{job="rustdesk-panel"}
+            < 0.5 * (rdpanel_presence_online_devices{job="rustdesk-panel"} offset 15m)
+          and (rdpanel_presence_online_devices{job="rustdesk-panel"} offset 15m) >= 5
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: Online devices dropped by more than half on {{ $labels.instance }}
+          description: >-
+            {{ $value }} devices are online now, less than half of 15 minutes
+            ago. Look for a network outage, a DNS/certificate change or an hbbs
+            restart.
+
+      # ------------------------------------------------------------------ auth
+      - alert: RustDeskLoginFailureSpike
+        expr: sum by (job, instance, surface) (rate(rdpanel_auth_login_attempts_total{job="rustdesk-panel", result=~"failure|rate_limited"}[5m])) * 60 > 10
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "{{ $labels.surface }} login failures above 10/min on {{ $labels.instance }}"
+          description: >-
+            {{ $value | humanize }} failed or rate-limited {{ $labels.surface }}
+            logins per minute. Possible password guessing; see Audit > Logins in
+            the panel for the source addresses.
+
+      - alert: RustDeskAuditStoreErrors
+        expr: sum by (job, instance, type) (increase(rdpanel_audit_events_total{job="rustdesk-panel", result="error"}[10m])) > 0
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: Client {{ $labels.type }} audit records fail to store on {{ $labels.instance }}
+          description: >-
+            /api/audit/{{ $labels.type }} answered 5xx (clients retry, but
+            records may be lost). Check disk space and the rdpanel log.

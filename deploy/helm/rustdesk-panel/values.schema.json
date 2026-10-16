@@ -105,6 +105,7 @@
         "trustedProxies": { "$ref": "#/definitions/cidrList" },
         "realIPHeader": { "enum": ["X-Forwarded-For", "X-Real-IP", "CF-Connecting-IP"] },
         "metricsAllow": { "$ref": "#/definitions/cidrList" },
+        "metricsPerDevice": { "type": "boolean" },
         "tokenLifetime": { "$ref": "#/definitions/duration" },
         "jwtLifetime": { "$ref": "#/definitions/duration" },
         "sessionIdle": { "$ref": "#/definitions/duration" },
@@ -382,6 +383,34 @@
         "relabelings": { "type": "array" },
         "metricRelabelings": { "type": "array" },
         "honorLabels": { "type": "boolean" }
+      }
+    },
+    "prometheusRule": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "namespace": { "type": "string" },
+        "labels": { "$ref": "#/definitions/stringMap" },
+        "annotations": { "$ref": "#/definitions/stringMap" },
+        "job": { "type": "string" },
+        "additionalRuleLabels": { "$ref": "#/definitions/stringMap" },
+        "disabledAlerts": { "type": "array", "items": { "type": "string" } },
+        "extraGroups": { "type": "array" }
+      }
+    },
+    "grafanaDashboard": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "namespace": { "type": "string" },
+        "sidecarLabel": { "type": "string", "minLength": 1 },
+        "sidecarLabelValue": { "type": "string" },
+        "folder": { "type": "string" },
+        "folderAnnotation": { "type": "string", "minLength": 1 },
+        "labels": { "$ref": "#/definitions/stringMap" },
+        "annotations": { "$ref": "#/definitions/stringMap" }
       }
     },
     "networkPolicy": {

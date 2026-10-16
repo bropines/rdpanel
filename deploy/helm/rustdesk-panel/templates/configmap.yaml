@@ -34,6 +34,9 @@ data:
   RDPANEL_TRUSTED_PROXIES: {{ join "," $p.trustedProxies | quote }}
   RDPANEL_REAL_IP_HEADER: {{ $p.realIPHeader | quote }}
   RDPANEL_METRICS_ALLOW: {{ join "," $p.metricsAllow | quote }}
+  {{- if $p.metricsPerDevice }}
+  RDPANEL_METRICS_PER_DEVICE: "true"
+  {{- end }}
   {{- with $p.tokenLifetime }}
   RDPANEL_TOKEN_LIFETIME: {{ . | quote }}
   {{- end }}

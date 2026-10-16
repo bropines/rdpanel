@@ -198,6 +198,17 @@ cleans it up.
 
 - `serviceMonitor.enabled` scrapes `/metrics` on the panel Service. `/metrics`
   is IP-restricted: add the Prometheus pod CIDR to `panel.metricsAllow`, or scrapes return 403.
+- `prometheusRule.enabled` installs the alert rules of
+  `deploy/monitoring/prometheus/alerts.yaml` (copied in `files/alerts.yaml`) as a
+  `PrometheusRule`, with `job` set to the panel Service name (what the
+  ServiceMonitor produces; override with `prometheusRule.job`). Add your
+  Prometheus `ruleSelector` labels under `prometheusRule.labels`; drop alerts with
+  `disabledAlerts`, add labels with `additionalRuleLabels`, more groups with `extraGroups`.
+- `grafanaDashboard.enabled` creates a ConfigMap with the dashboard
+  (`files/rustdesk-panel.json`) labelled `grafana_dashboard: "1"` for the Grafana
+  sidecar; `grafanaDashboard.folder` sets the `grafana_folder` annotation.
+- `panel.metricsPerDevice` adds one `rdpanel_presence_device_online{id}` series per
+  device (off by default). See [docs/monitoring.md](../../../docs/monitoring.md).
 - `networkPolicy.enabled` allows 21114 only from the namespaces matched by
   `ingressControllerNamespaceSelector`, plus `metricsNamespaceSelector` and
   `extraPanelFrom`. WS ports are allowed only from the controller. Rendezvous
@@ -231,6 +242,7 @@ The full list with comments is in [`values.yaml`](values.yaml). These are the ma
 | `panel.trustedProxies` | loopback | `RDPANEL_TRUSTED_PROXIES` |
 | `panel.realIPHeader` | `X-Forwarded-For` | `RDPANEL_REAL_IP_HEADER` |
 | `panel.metricsAllow` | loopback | `RDPANEL_METRICS_ALLOW` |
+| `panel.metricsPerDevice` | `false` | `RDPANEL_METRICS_PER_DEVICE` |
 | `panel.tokenLifetime`, `jwtLifetime`, `sessionIdle`, `sessionAbsolute` | `""` (binary default) | Go durations |
 | `panel.log.level` / `format` | `info` / `json` | |
 | `panel.env` | `{}` | any extra `RDPANEL_*` |
@@ -258,6 +270,8 @@ The full list with comments is in [`values.yaml`](values.yaml). These are the ma
 | `probes.startup` / `liveness` / `readiness` | | timings. `customXxxProbe` replaces a probe. |
 | `extraEnv`, `extraEnvFrom`, `extraVolumes`, `extraVolumeMounts`, `extraContainers`, `initContainers` | `[]` | |
 | `serviceMonitor.*` | off | Prometheus Operator |
+| `prometheusRule.*` | off | alert rules as a PrometheusRule |
+| `grafanaDashboard.*` | off | dashboard ConfigMap for the Grafana sidecar |
 | `networkPolicy.*` | off | |
 | `podDisruptionBudget.*` | off | |
 | `migration.*` | off | legacy import Job |
@@ -265,7 +279,7 @@ The full list with comments is in [`values.yaml`](values.yaml). These are the ma
 ## Examples
 
 - [`ci/hostnetwork-values.yaml`](ci/hostnetwork-values.yaml): hostNetwork, panel on loopback, exec probes, no Services.
-- [`ci/loadbalancer-values.yaml`](ci/loadbalancer-values.yaml): MetalLB split TCP/UDP with a shared IP, existing secrets and key pair, ServiceMonitor, NetworkPolicy, PDB.
+- [`ci/loadbalancer-values.yaml`](ci/loadbalancer-values.yaml): MetalLB split TCP/UDP with a shared IP, existing secrets and key pair, ServiceMonitor, PrometheusRule, Grafana dashboard, NetworkPolicy, PDB.
 - [`ci/ingress-values.yaml`](ci/ingress-values.yaml): ingress-nginx and cert-manager, WebSocket Ingress, HTTPRoute, NodePort rendezvous.
 
 ## Development / validation

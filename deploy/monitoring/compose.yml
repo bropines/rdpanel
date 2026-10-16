@@ -1,0 +1,53 @@
+# Example Prometheus + Grafana for a single rustdesk-panel host (docs/monitoring.md).
+#
+#   cd deploy/monitoring
+#   echo 'GRAFANA_ADMIN_PASSWORD=<something long>' > .env && chmod 600 .env
+#   docker compose up -d
+#   ssh -L 3000:127.0.0.1:3000 <host>      # Grafana: http://127.0.0.1:3000 (admin)
+#
+# Both containers use host networking, like the panel in deploy/compose.example.yml:
+# Prometheus then scrapes http://127.0.0.1:21114/metrics from loopback, which
+# the default RDPANEL_METRICS_ALLOW (127.0.0.0/8, ::1) already permits, and
+# nothing has to be published. Prometheus and Grafana listen on 127.0.0.1 only;
+# put Grafana behind your reverse proxy (with TLS) if it must be reachable.
+#
+# If the panel listens elsewhere (e.g. RDPANEL_LISTEN=127.0.0.1:31114), change
+# the target in prometheus/prometheus.yml.
+services:
+  prometheus:
+    image: prom/prometheus:v3.5.0
+    container_name: rdpanel-prometheus
+    network_mode: host
+    restart: unless-stopped
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=30d
+      - --web.listen-address=127.0.0.1:9090
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./prometheus/alerts.yaml:/etc/prometheus/alerts.yaml:ro
+      - prometheus-data:/prometheus
+
+  grafana:
+    image: grafana/grafana:12.1.1
+    container_name: rdpanel-grafana
+    network_mode: host
+    restart: unless-stopped
+    depends_on: [prometheus]
+    environment:
+      GF_SERVER_HTTP_ADDR: 127.0.0.1
+      GF_SERVER_HTTP_PORT: "3000"
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?set GRAFANA_ADMIN_PASSWORD in .env}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+      GF_ANALYTICS_CHECK_FOR_UPDATES: "false"
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/rustdesk-panel.json:/var/lib/grafana/dashboards/rustdesk-panel.json:ro
+      - grafana-data:/var/lib/grafana
+
+volumes:
+  prometheus-data:
+  grafana-data:
