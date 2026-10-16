@@ -16,6 +16,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/misc";
+import { API_DOCS_URL } from "@/lib/api-docs";
 import { useMe } from "@/lib/session";
 import { useTableSearch } from "@/lib/use-table";
 import { oidcErrorKey } from "@/pages/login-errors";
@@ -249,6 +250,11 @@ export function ProfilePage() {
         <Identities />
       </Section>
       <Section title={t("apiTokens.title")} description={t("apiTokens.hint")}>
+        <p className="mb-3 text-sm">
+          <a href={API_DOCS_URL} className="text-primary hover:underline">
+            {t("apiDocs.tokensHint")}
+          </a>
+        </p>
         <ApiTokensSection />
       </Section>
     </div>

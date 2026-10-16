@@ -35,13 +35,28 @@ func TestOpenAPIMatchesRouter(t *testing.T) {
 	var spec struct {
 		Paths map[string]map[string]any `yaml:"paths"`
 	}
+	type server struct {
+		URL string `yaml:"url"`
+	}
 	if err := yaml.Unmarshal(raw, &spec); err != nil {
 		t.Fatal(err)
 	}
 	documented := map[string]bool{}
+	external := map[string]bool{} // "METHOD /full/path" for paths with their own servers
 	for p, item := range spec.Paths {
-		if _, ok := item["servers"]; ok {
-			continue // outside the admin base path (/api/v1/events)
+		if raw, ok := item["servers"]; ok {
+			// Outside the admin base path (/api/v1/events, /api/v1/openapi.*).
+			b, _ := yaml.Marshal(raw)
+			var servers []server
+			if err := yaml.Unmarshal(b, &servers); err != nil || len(servers) != 1 {
+				t.Fatalf("%s: want exactly one server, got %v", p, raw)
+			}
+			for m := range item {
+				if m == "get" || m == "post" || m == "put" || m == "patch" || m == "delete" {
+					external[strings.ToUpper(m)+" "+normPath(servers[0].URL+p)] = true
+				}
+			}
+			continue
 		}
 		for m := range item {
 			switch m {
@@ -59,6 +74,7 @@ func TestOpenAPIMatchesRouter(t *testing.T) {
 	routed := map[string]bool{}
 	err = chi.Walk(routes, func(method, route string, _ http.Handler, _ ...func(http.Handler) http.Handler) error {
 		route = strings.ReplaceAll(route, "/*/", "/")
+		delete(external, method+" "+normPath(strings.TrimSuffix(strings.TrimSuffix(route, "/*"), "/")))
 		if !strings.HasPrefix(route, adminBase+"/") {
 			return nil
 		}
@@ -81,6 +97,9 @@ func TestOpenAPIMatchesRouter(t *testing.T) {
 		if !routed[k] && openAPIExceptions[k] == "" {
 			missingRoute = append(missingRoute, k)
 		}
+	}
+	for k := range external {
+		missingRoute = append(missingRoute, k)
 	}
 	sort.Strings(missingDoc)
 	sort.Strings(missingRoute)

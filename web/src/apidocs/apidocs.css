@@ -1,0 +1,51 @@
+/* Page chrome for /api/v1/docs; Swagger UI has no dark theme, so dark mode inverts it. */
+:root {
+  color-scheme: light;
+  --docs-bg: #ffffff;
+  --docs-fg: #0f0f12;
+  --docs-muted: #6b6b76;
+  --docs-border: #e4e4e7;
+}
+:root.dark {
+  color-scheme: dark;
+  --docs-bg: #09090b;
+  --docs-fg: #fafafa;
+  --docs-muted: #a1a1aa;
+  --docs-border: #27272a;
+}
+body {
+  margin: 0;
+  background: var(--docs-bg);
+  color: var(--docs-fg);
+  font-family: ui-sans-serif, system-ui, sans-serif;
+}
+.apidocs-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.5rem 1rem;
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid var(--docs-border);
+}
+.apidocs-bar a {
+  color: inherit;
+  text-decoration: none;
+}
+.apidocs-bar a:hover {
+  text-decoration: underline;
+}
+#apidocs-hint {
+  color: var(--docs-muted);
+  font-size: 0.875rem;
+}
+#apidocs-root {
+  padding-bottom: 2rem;
+}
+:root.dark #apidocs-root {
+  background: #fff;
+  filter: invert(0.92) hue-rotate(180deg);
+}
+:root.dark #apidocs-root img,
+:root.dark #apidocs-root .microlight {
+  filter: invert(1) hue-rotate(180deg);
+}

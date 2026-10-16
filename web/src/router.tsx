@@ -15,7 +15,7 @@ import { ErrorState } from "@/components/common";
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/misc";
 import { requireAdmin, requireSession } from "@/lib/guards";
-import { safeNext } from "@/lib/redirect";
+import { isServerPath, safeNext } from "@/lib/redirect";
 import { meQuery } from "@/lib/session";
 import { ForbiddenPage } from "@/pages/ForbiddenPage";
 import { LoginPage } from "@/pages/LoginPage";
@@ -55,7 +55,8 @@ const loginRoute = createRoute({
     } catch {
       return;
     }
-    throw redirect({ href: safeNext(search.next) });
+    const next = safeNext(search.next);
+    throw redirect({ href: next, reloadDocument: isServerPath(next) });
   },
   component: LoginPage,
 });

@@ -18,3 +18,8 @@ export function safeNext(next: unknown, fallback = "/"): string {
     return fallback;
   }
 }
+
+/** `next` targets served by the backend, not the SPA router (e.g. /api/v1/docs): need a full page load. */
+export function isServerPath(next: string): boolean {
+  return next.startsWith("/api/");
+}

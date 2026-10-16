@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, Outlet, useNavigate, useRouterState } from "@tanstack/react-router";
-import { Info, LogOut, Menu, MonitorCog, ShieldCheck, X } from "lucide-react";
+import { BookOpen, Info, LogOut, Menu, MonitorCog, ShieldCheck, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -17,6 +17,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { API_DOCS_URL } from "@/lib/api-docs";
 import { LiveProvider, useLiveStatus } from "@/lib/live";
 import { displayName, useMe } from "@/lib/session";
 import { cn } from "@/lib/utils";
@@ -162,6 +163,12 @@ function UserMenu() {
             <Info />
             {t("nav.about")}
           </Link>
+        </DropdownMenuItem>
+        <DropdownMenuItem asChild>
+          <a href={API_DOCS_URL}>
+            <BookOpen />
+            {t("apiDocs.title")}
+          </a>
         </DropdownMenuItem>
         <DropdownMenuItem onSelect={() => logout.mutate()} disabled={logout.isPending}>
           <LogOut />

@@ -22,6 +22,7 @@ import { ErrorState, KeyValue, Mono, PageHeader, RelativeTime } from "@/componen
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/misc";
+import { API_DOCS_URL } from "@/lib/api-docs";
 import { formatDateTime, formatUptime } from "@/lib/format";
 import { useMe } from "@/lib/session";
 import { HealthRow } from "@/pages/DashboardPage";
@@ -133,6 +134,11 @@ export function AboutPage() {
             <CardIconTitle icon={Info}>{d.name}</CardIconTitle>
             <CardContent className="space-y-4">
               <p className="text-sm text-muted-foreground">{t("about.description")}</p>
+              <p className="text-sm">
+                <a href={API_DOCS_URL} className="text-primary hover:underline">
+                  {t("apiDocs.open")}
+                </a>
+              </p>
               <KeyValue
                 items={[
                   [

@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io/fs"
 	"log/slog"
 	"time"
 
@@ -48,6 +49,9 @@ type App struct {
 	Limiter  *auth.Backoff
 	Registry *prometheus.Registry
 	SPA      *web.SPA
+	// WebFS is the built SPA (web/dist); /api/v1/docs serves api-docs.html and
+	// its assets from it.
+	WebFS fs.FS
 	// Events is the in-process pub/sub behind /api/v1/events.
 	Events *events.Bus
 	// EventsAuth authenticates SSE streams (panel sessions, set by the admin
@@ -128,7 +132,8 @@ func New(ctx context.Context, cfg *config.Config, log *slog.Logger, opts ...Opti
 		_ = a.DB.Close()
 		return nil, err
 	}
-	a.SPA = web.NewSPA(webdist.Dist())
+	a.WebFS = webdist.Dist()
+	a.SPA = web.NewSPA(a.WebFS)
 	if !a.SPA.Built() {
 		log.Warn("web UI not embedded; serving placeholder page (run `make web build`)")
 	}

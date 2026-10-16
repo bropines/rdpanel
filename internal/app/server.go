@@ -31,6 +31,7 @@ const shutdownTimeout = 15 * time.Second
 //	/healthz, /metrics
 //	/api/v1/admin/*  panel API (stream B)
 //	/api/v1/events   SSE (stream C)
+//	/api/v1/openapi.{yaml,json}, /api/v1/docs  API contract + Swagger UI
 //	/api/*           RustDesk client API (stream A)
 //	/agent/v1/*      relay agent hub (enroll, WebSocket session)
 //	/agent/install.sh relay agent installer (static script, no auth)
@@ -90,6 +91,8 @@ func (a *App) Handler() http.Handler {
 				Log: a.Log.With("component", "events"), Store: a.Store, Bus: a.Events, Auth: eventsAuth,
 			})
 		})
+		// Admin API contract and its interactive docs (RDPANEL_API_DOCS).
+		newAPIDocs(cfg, panelSessionAuth(adminDeps), a.WebFS).register(api)
 		// Client OIDC endpoints (/api/login-options, /api/oidc/*) are owned by
 		// internal/oidc; clientapi must not register these paths.
 		oidc.Register(api, oidc.RouteDeps{Service: oidcSvc, Log: a.Log.With("component", "oidc")})

@@ -68,6 +68,10 @@ info:
     **Live events.** `GET /api/v1/events` (outside this base path) is a
     Server-Sent Events stream, see the `/events` path and `x-sse-events`.
 
+    **Interactive docs.** Swagger UI for this contract is served at `/api/v1/docs`
+    (`RDPANEL_API_DOCS`: `auth` default, `public`, `off`); the spec itself at
+    `/api/v1/openapi.yaml` / `.json`.
+
     Every `/api/v1/admin` route is listed here; `internal/app/openapi_test.go`
     walks the real router and fails on any difference.
   license:
@@ -94,6 +98,7 @@ tags:
   - name: settings
   - name: lookup
   - name: events
+  - name: docs
 x-sse-events:
   description: |
     `GET /api/v1/events` — `text/event-stream`, session-authenticated (same cookie, or a Bearer API token),
@@ -3039,6 +3044,41 @@ paths:
           content:
             text/event-stream:
               schema: { type: string }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+  /openapi.yaml:
+    servers:
+      - url: /api/v1
+    get:
+      tags: [docs]
+      operationId: getOpenAPIYAML
+      summary: This API contract (OpenAPI 3.1, YAML).
+      description: |
+        Mounted at `/api/v1/openapi.yaml` (not under `/admin`). With `RDPANEL_API_DOCS=auth`
+        (default) any signed-in panel user (session cookie or Bearer API token, any role);
+        `public` serves it without login, `off` answers 404. When the request is addressed
+        to the `RDPANEL_ADMIN_URL` host, the relative `servers` URLs are made absolute
+        against that origin. Swagger UI for it is served at `/api/v1/docs`.
+      responses:
+        "200":
+          description: The spec as committed in `api/openapi.yaml`.
+          content:
+            application/yaml:
+              schema: { type: string }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+  /openapi.json:
+    servers:
+      - url: /api/v1
+    get:
+      tags: [docs]
+      operationId: getOpenAPIJSON
+      summary: This API contract (OpenAPI 3.1, JSON).
+      description: Same document as `/api/v1/openapi.yaml`, converted to JSON.
+      responses:
+        "200":
+          description: The spec as JSON.
+          content:
+            application/json:
+              schema: { type: object }
         "401": { $ref: "#/components/responses/Unauthorized" }
 
 components:
