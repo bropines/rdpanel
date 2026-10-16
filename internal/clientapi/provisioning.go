@@ -1,6 +1,7 @@
 package clientapi
 
 import (
+	"context"
 	"crypto/ed25519"
 	"encoding/base64"
 	"errors"
@@ -143,6 +144,45 @@ type assignError string
 
 func (e assignError) Error() string { return string(e) }
 
+// abPreset adds a device to a shared address book by name: the address_book_*
+// fields of `rustdesk --assign` and the preset-address-book-* sysinfo keys.
+type abPreset struct {
+	Name, Tag             string
+	Alias, Password, Note *string
+}
+
+// applyABPreset upserts d into the shared book named p.Name (no-op for an
+// empty name), appending p.Tag to the entry's tags. A missing or ambiguous
+// book is an assignError.
+func applyABPreset(ctx context.Context, tx *store.Store, d *store.Device, p abPreset) error {
+	if strings.TrimSpace(p.Name) == "" {
+		return nil
+	}
+	books, err := tx.AddressBooks.FindSharedByName(ctx, p.Name)
+	if err != nil {
+		return err
+	}
+	switch len(books) {
+	case 0:
+		return assignError("Address book not found")
+	case 1:
+	default:
+		return assignError("Address book name is ambiguous")
+	}
+	patch := store.ABEntryPatch{Alias: p.Alias, Password: p.Password, Note: p.Note}
+	if p.Tag != "" {
+		tags := []string{clip(p.Tag, 128)}
+		if e, err := tx.AddressBooks.GetEntry(ctx, books[0].ID, d.RustdeskID); err == nil {
+			tags = append(e.Tags, tags...)
+		}
+		patch.Tags = &tags
+	}
+	hostname := d.Hostname
+	patch.Hostname = &hostname
+	_, err = tx.AddressBooks.UpsertEntry(ctx, books[0].ID, d.RustdeskID, patch)
+	return err
+}
+
 // deviceAssign implements POST /api/devices/cli (`rustdesk --assign`) with an
 // admin client token. Success is an empty body ("Done!"); any other text is
 // printed verbatim by the CLI.
@@ -207,41 +247,15 @@ func (h *handler) deviceAssign(w http.ResponseWriter, r *http.Request) {
 		if err := tx.Devices.Update(ctx, d); err != nil {
 			return err
 		}
-		if req.AddressBookName == nil || *req.AddressBookName == "" {
+		if req.AddressBookName == nil {
 			return nil
 		}
-		books, err := tx.AddressBooks.FindSharedByName(ctx, *req.AddressBookName)
-		if err != nil {
-			return err
+		p := abPreset{Name: *req.AddressBookName, Alias: req.AddressBookAlias, Password: req.AddressBookPassword,
+			Note: req.AddressBookNote}
+		if req.AddressBookTag != nil {
+			p.Tag = *req.AddressBookTag
 		}
-		switch len(books) {
-		case 0:
-			return assignError("Address book not found")
-		case 1:
-		default:
-			return assignError("Address book name is ambiguous")
-		}
-		var p store.ABEntryPatch
-		if req.AddressBookAlias != nil {
-			p.Alias = req.AddressBookAlias
-		}
-		if req.AddressBookPassword != nil {
-			p.Password = req.AddressBookPassword
-		}
-		if req.AddressBookNote != nil {
-			p.Note = req.AddressBookNote
-		}
-		if req.AddressBookTag != nil && *req.AddressBookTag != "" {
-			tags := []string{clip(*req.AddressBookTag, 128)}
-			if e, err := tx.AddressBooks.GetEntry(ctx, books[0].ID, d.RustdeskID); err == nil {
-				tags = append(e.Tags, tags...)
-			}
-			p.Tags = &tags
-		}
-		h2 := d.Hostname
-		p.Hostname = &h2
-		_, err = tx.AddressBooks.UpsertEntry(ctx, books[0].ID, d.RustdeskID, p)
-		return err
+		return applyABPreset(ctx, tx, d, p)
 	})
 	var ae assignError
 	switch {

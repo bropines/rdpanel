@@ -114,9 +114,18 @@ type sysinfoRequest struct {
 	Username *string `json:"username"`
 	Version  string  `json:"version"`
 
+	// Deployment presets (custom-client options, keys in the client's
+	// config/keys.rs). preset-device-username and preset-device-name need no
+	// handling: the client already sends them as username/hostname.
 	PresetUserName        string `json:"preset-user-name"`
 	PresetDeviceGroupName string `json:"preset-device-group-name"`
 	PresetNote            string `json:"preset-note"`
+	PresetStrategyName    string `json:"preset-strategy-name"`
+	PresetABName          string `json:"preset-address-book-name"`
+	PresetABTag           string `json:"preset-address-book-tag"`
+	PresetABAlias         string `json:"preset-address-book-alias"`
+	PresetABPassword      string `json:"preset-address-book-password"`
+	PresetABNote          string `json:"preset-address-book-note"`
 }
 
 var errUUIDMismatch = errors.New("uuid mismatch")
@@ -124,9 +133,12 @@ var errUUIDMismatch = errors.New("uuid mismatch")
 // sysinfo implements POST /api/sysinfo (plain-text answer). It may create the
 // device. The uuid may change only while the device has no owner, when no
 // uuid was stored yet, or when the request carries a valid Bearer token of
-// the owner. On first contact the presets preset-user-name,
-// preset-device-group-name and preset-note are honoured (existing users and
-// groups only).
+// the owner. On the device's first sysinfo (a new device, or one registered
+// earlier by `rustdesk --deploy` without sysinfo) the deployment presets are
+// honoured: preset-user-name, preset-device-group-name and preset-note fill
+// unset fields (existing users and groups only), and preset-address-book-*
+// add the device to the named shared address book. preset-strategy-name is
+// ignored (no strategies yet).
 func (h *handler) sysinfo(w http.ResponseWriter, r *http.Request) {
 	var req sysinfoRequest
 	if err := decodeBody(w, r, &req, maxBody); err != nil || !validID(req.ID) || req.UUID == "" ||
@@ -162,7 +174,22 @@ func (h *handler) sysinfo(w http.ResponseWriter, r *http.Request) {
 		if d.UUID != "" && d.UUID != req.UUID && d.OwnerUserID != nil && *d.OwnerUserID != bearerUser {
 			return errUUIDMismatch
 		}
-		return tx.Devices.UpdateSysinfo(ctx, d.ID, info)
+		first := d.SysinfoAt == nil
+		if err := tx.Devices.UpdateSysinfo(ctx, d.ID, info); err != nil || !first {
+			return err
+		}
+		// First sysinfo of a pre-registered (deployed) device: presets apply.
+		d.Hostname = info.Hostname
+		if info.OSUsername != nil {
+			d.OSUsername = *info.OSUsername
+		}
+		if err := h.applyPresets(ctx, tx, d, &req); err != nil {
+			return err
+		}
+		if err := tx.Devices.Update(ctx, d); err != nil {
+			return err
+		}
+		return h.applyABPresetFromSysinfo(ctx, tx, d, &req)
 	})
 	switch {
 	case errors.Is(err, errUUIDMismatch):
@@ -181,33 +208,78 @@ func (h *handler) createDevice(ctx context.Context, tx *store.Store, req *sysinf
 	now := h.Now()
 	d := &store.Device{
 		RustdeskID: req.ID, UUID: info.UUID, Hostname: info.Hostname, OS: info.OS, CPU: info.CPU,
-		Memory: info.Memory, ClientVersion: info.ClientVersion, SysinfoAt: &now, Note: clip(req.PresetNote, maxField),
+		Memory: info.Memory, ClientVersion: info.ClientVersion, SysinfoAt: &now,
 	}
 	if info.OSUsername != nil {
 		d.OSUsername = *info.OSUsername
 	}
-	if owner, err := tx.Devices.GuessOwner(ctx, req.ID, req.UUID); err == nil {
-		d.OwnerUserID = &owner
-	} else if !errors.Is(err, store.ErrNotFound) {
+	if err := h.applyPresets(ctx, tx, d, req); err != nil {
 		return err
 	}
+	if err := tx.Devices.Create(ctx, d); err != nil {
+		return err
+	}
+	return h.applyABPresetFromSysinfo(ctx, tx, d, req)
+}
+
+// applyPresets fills the unset owner, device group and note of d on its first
+// sysinfo: the owner is the user already logged in on this device (newest
+// client token), else preset-user-name; unknown users and groups are skipped.
+func (h *handler) applyPresets(ctx context.Context, tx *store.Store, d *store.Device, req *sysinfoRequest) error {
+	if d.OwnerUserID == nil {
+		if owner, err := tx.Devices.GuessOwner(ctx, req.ID, req.UUID); err == nil {
+			d.OwnerUserID = &owner
+		} else if !errors.Is(err, store.ErrNotFound) {
+			return err
+		}
+	}
 	if d.OwnerUserID == nil && strings.TrimSpace(req.PresetUserName) != "" {
-		u, err := tx.Users.GetByUsername(ctx, req.PresetUserName)
+		u, err := tx.Users.GetByUsername(ctx, strings.TrimSpace(req.PresetUserName))
 		if err == nil && u.IsActive() {
 			d.OwnerUserID = &u.ID
 		} else if err != nil && !errors.Is(err, store.ErrNotFound) {
 			return err
 		}
 	}
-	if strings.TrimSpace(req.PresetDeviceGroupName) != "" {
-		g, err := tx.DeviceGroups.GetByName(ctx, req.PresetDeviceGroupName)
+	if d.DeviceGroupID == nil && strings.TrimSpace(req.PresetDeviceGroupName) != "" {
+		g, err := tx.DeviceGroups.GetByName(ctx, strings.TrimSpace(req.PresetDeviceGroupName))
 		if err == nil {
 			d.DeviceGroupID = &g.ID
 		} else if !errors.Is(err, store.ErrNotFound) {
 			return err
 		}
 	}
-	return tx.Devices.Create(ctx, d)
+	if d.Note == "" && req.PresetNote != "" {
+		d.Note = clip(req.PresetNote, maxField)
+	}
+	if req.PresetStrategyName != "" {
+		h.log.DebugContext(ctx, "sysinfo: preset-strategy-name ignored (strategies not supported)",
+			slog.String("id", req.ID))
+	}
+	return nil
+}
+
+// applyABPresetFromSysinfo applies preset-address-book-*; a missing or
+// ambiguous book is logged and skipped (the device is still registered).
+func (h *handler) applyABPresetFromSysinfo(ctx context.Context, tx *store.Store, d *store.Device, req *sysinfoRequest) error {
+	p := abPreset{Name: req.PresetABName, Tag: req.PresetABTag}
+	if req.PresetABAlias != "" {
+		p.Alias = &req.PresetABAlias
+	}
+	if req.PresetABPassword != "" {
+		p.Password = &req.PresetABPassword
+	}
+	if req.PresetABNote != "" {
+		p.Note = &req.PresetABNote
+	}
+	err := applyABPreset(ctx, tx, d, p)
+	var ae assignError
+	if errors.As(err, &ae) {
+		h.log.InfoContext(ctx, "sysinfo: address book preset skipped", slog.String("id", d.RustdeskID),
+			slog.String("reason", string(ae)))
+		return nil
+	}
+	return err
 }
 
 // sysinfoVer implements POST /api/sysinfo_ver (client 1.4.0): an opaque

@@ -18,7 +18,9 @@ command, without re-login.
 
 - **Client API** (`/api/*`), wire-compatible with RustDesk 1.3–1.5: password and OIDC login,
   address books (legacy and personal/shared), heartbeat/sysinfo, audit (connections, files,
-  alarms, session notes), deploy and switch-grant. Every endpoint has a contract test.
+  alarms, session notes), deploy and switch-grant, custom-client deployment presets. Every
+  endpoint has a contract test; audited against 1.4.6, 1.5.0 and master
+  ([compat notes](docs/research/client-compat-1.4.6.md)).
 - **Admin panel:** devices with live online status from hbbs (pushed over SSE), users and
   groups, unified address books with sharing and coloured tags, audit logs, identity
   providers, hbbs/hbbr control. English and Russian, light and dark themes, mobile layout.

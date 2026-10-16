@@ -18,6 +18,8 @@ A citation `R:src/hbbs_http/sync.rs:236-274` maps to
 A citation `L:http/controller/api/ab.go:536-557` maps to
 `https://github.com/lejianwen/rustdesk-api/blob/c5687e150615bfb00d9d105f0883a2802750a8ad/http/controller/api/ab.go#L536-L557`.
 
+A per-version compatibility audit (1.4.6, 1.5.0, master) with the exact email-code (`email_check`) contract is in [`client-compat-1.4.6.md`](client-compat-1.4.6.md).
+
 The latest client release on 2026-10-15 is **1.5.0** (2026-09-30). The 1.4.x line runs 1.4.0 (2025-05-11) to 1.4.9 (2026-07-06). Master is 1.5.1-dev.
 
 ---
@@ -416,7 +418,7 @@ Body (JSON, no auth), built from `get_sysinfo()` (`R:src/common.rs:928-973`) plu
   "preset-note": "…"
 }
 ```
-The key strings are in `R:libs/base/src/config/keys.rs:79-115`. The presets let an admin-built client auto-assign the device to a user, strategy, device group, or address book on first contact. A compatible server should honour them.
+The key strings are in `R:libs/base/src/config/keys.rs:79-115`. The presets let an admin-built client auto-assign the device to a user, strategy, device group, or address book on first contact. A compatible server should honour them. Note that "first contact" must include a device pre-registered by `POST /api/devices/deploy` (§10.1), which exists before its first sysinfo; this server applies the presets on the first sysinfo of a device (see [`client-compat-1.4.6.md`](client-compat-1.4.6.md) §4).
 
 **Response:** plain text, compared byte-for-byte. Do not JSON-quote it.
 - `SYSINFO_UPDATED`: success. The client will not upload again until the URL, ID, or OS username changes, or the server asks for it.
