@@ -10,6 +10,7 @@ import { delay, http, HttpResponse, type JsonBodyType } from "msw";
 import type { Schemas } from "@/api/client";
 import type { IdentityProvider, IdentityProviderInput, IdentityProviderPatch } from "@/api/identityProviders";
 import * as db from "@/mocks/data";
+import { logHandlers } from "@/mocks/logs";
 import { relayHandlers } from "@/mocks/relays";
 import { liveStream } from "@/mocks/sse";
 
@@ -1617,6 +1618,7 @@ export const handlers = [
     });
   }),
   ...relayHandlers,
+  ...logHandlers,
 ];
 
 function ensureTags(bookId: number, names: string[]) {

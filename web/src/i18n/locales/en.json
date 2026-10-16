@@ -714,7 +714,8 @@
       "settings": "Settings",
       "viewers": "Viewers",
       "console": "Console",
-      "relays": "Relays"
+      "relays": "Relays",
+      "logs": "Logs"
     },
     "rendezvous": "ID server (hbbs)",
     "rendezvousHint": "Relay selection, login policy, client keepalive and WebRTC.",
@@ -847,6 +848,41 @@
         "tooMany": "At most {{max}} arguments",
         "pattern": "An argument contains characters this command does not accept"
       }
+    },
+    "logs": {
+      "title": "Logs",
+      "description": "Recent lines from hbbs, hbbr and the panel, up to {{n}} per source (kept in memory).",
+      "live": "Live",
+      "status": {
+        "connecting": "Connecting…",
+        "open": "Live",
+        "reconnecting": "Reconnecting…",
+        "closed": "Paused"
+      },
+      "download": "Download",
+      "panelOnly": "Only the panel's own lines are captured here. hbbs and hbbr lines appear when the panel runs in the all-in-one image (RDPANEL_LOGS_DIR).",
+      "sources": "Sources",
+      "allSources": "All",
+      "level": "Minimum level",
+      "levelAll": "All levels",
+      "levels": {
+        "debug": "Debug",
+        "info": "Info",
+        "warn": "Warning",
+        "error": "Error"
+      },
+      "search": "Search lines…",
+      "loadOlder": "Load older lines",
+      "empty": "No log lines yet.",
+      "noMatch": "No lines match the filters.",
+      "jumpLatest": "Jump to latest",
+      "shown_one": "{{count}} line",
+      "shown_other": "{{count}} lines",
+      "dropped_one": "{{count}} line skipped (stream too fast)",
+      "dropped_other": "{{count}} lines skipped (stream too fast)",
+      "redacted": "Keys, tokens and passwords are redacted.",
+      "disabled": "Log buffer is off",
+      "disabledHint": "Set RDPANEL_LOGS_BUFFER to a number of lines (default 2000) to see hbbs, hbbr and panel logs here."
     }
   },
   "settings": {

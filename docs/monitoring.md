@@ -74,6 +74,7 @@ names, user ids, IPs or device ids, except the opt-in per-device gauge.
 | `auth_client_tokens_issued_total` | counter | `method` | RustDesk client tokens minted (`/api/login`, OIDC auth-query) |
 | `audit_events_total` | counter | `type` (`conn`, `file`, `alarm`), `result` (`stored`, `rejected`, `error`) | client audit records (`/api/audit/*`); `rejected` = unknown device / uuid mismatch / bad nonce |
 | `events_published_total`, `events_dropped_total`, `events_subscribers` | | `type` | in-process event bus behind the SSE stream |
+| `logs_lines_total` / `logs_dropped_total` | counter | `source` (`hbbs`, `hbbr`, `panel`, `other`) | lines captured for Server → Logs / lines a too-slow live log viewer skipped ([deploy.md → Server logs](deploy.md#server-logs)) |
 
 Plus the standard `go_*` and `process_*` collectors.
 

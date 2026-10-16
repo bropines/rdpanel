@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { Activity, Network, Radio, Server, SlidersHorizontal, TerminalSquare, View } from "lucide-react";
+import { Activity, Network, Radio, ScrollText, Server, SlidersHorizontal, TerminalSquare, View } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 import type { Schemas } from "@/api/client";
@@ -11,6 +11,7 @@ import { Skeleton, Tabs, TabsContent, TabsList, TabsTrigger } from "@/components
 import { useTableSearch } from "@/lib/use-table";
 import { cn } from "@/lib/utils";
 import { Console } from "@/pages/server/Console";
+import { LogsTab } from "@/pages/server/Logs";
 import { RelaysTab } from "@/pages/server/Relays";
 import { ClientOptionsCard } from "@/pages/server/ClientOptionsCard";
 import { ServerSettingsForm } from "@/pages/server/ServerSettingsForm";
@@ -118,6 +119,10 @@ export function ServerPage() {
             <TerminalSquare />
             {t("server.tabs.console")}
           </TabsTrigger>
+          <TabsTrigger value="logs">
+            <ScrollText />
+            {t("server.tabs.logs")}
+          </TabsTrigger>
         </TabsList>
         <TabsContent value="settings">
           {tab === "settings" && (
@@ -130,6 +135,7 @@ export function ServerPage() {
         <TabsContent value="relays">{tab === "relays" && <RelaysTab />}</TabsContent>
         <TabsContent value="viewers">{tab === "viewers" && <Viewers />}</TabsContent>
         <TabsContent value="console">{tab === "console" && <Console />}</TabsContent>
+        <TabsContent value="logs">{tab === "logs" && <LogsTab />}</TabsContent>
       </Tabs>
     </div>
   );

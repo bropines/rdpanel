@@ -241,3 +241,18 @@ describe("server → relays", () => {
     expect(screen.getByText(/RDPANEL_AGENT_ENROLL_TOKEN/)).toBeInTheDocument();
   });
 });
+
+describe("server → logs", () => {
+  beforeEach(() => loginAs(1));
+
+  it("shows buffered hbbs/hbbr/panel lines and filters by source", async () => {
+    const user = userEvent.setup();
+    renderApp("/server?tab=logs");
+    expect(await screen.findByText("Listening on tcp :21117", undefined, { timeout: 5000 })).toBeInTheDocument();
+    expect(screen.getByText("Listening on tcp/udp [::]:21116")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /^hbbr/ }));
+    await waitFor(() => expect(screen.queryByText("Listening on tcp/udp [::]:21116")).not.toBeInTheDocument());
+    expect(screen.getByText("Listening on tcp :21117")).toBeInTheDocument();
+    expect(screen.getByText(/Keys, tokens and passwords are redacted/)).toBeInTheDocument();
+  });
+});

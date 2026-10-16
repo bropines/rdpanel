@@ -1,4 +1,4 @@
-import { api, type QueryOf, type Schemas } from "@/api/client";
+import { API_BASE, api, buildQuery, type QueryOf, type Schemas } from "@/api/client";
 
 /* ── Dashboard / branding ─────────────────────────────────────────────── */
 
@@ -64,7 +64,15 @@ export const serverApi = {
     api.request<Schemas["ConsoleResult"]>("/server/console", { method: "POST", body }),
   consoleHistory: (q: QueryOf<"listConsoleHistory">) =>
     api.request<Schemas["ConsoleHistoryPage"]>("/server/console/history", { query: q }),
+  logs: (q: QueryOf<"listServerLogs">) => api.request<Schemas["LogPage"]>("/server/logs", { query: q }),
+  downloadLogs: (q: QueryOf<"downloadServerLogs">) => api.download("/server/logs/download", q),
 };
+
+/** URL of the live log stream (SSE, same session cookie). */
+export function logStreamUrl(q: QueryOf<"streamServerLogs">): string {
+  const qs = buildQuery(q);
+  return `${API_BASE}/server/logs/stream${qs ? `?${qs}` : ""}`;
+}
 
 /* ── Panel settings ───────────────────────────────────────────────────── */
 
