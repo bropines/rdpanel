@@ -1,5 +1,5 @@
 # Production-like: pod in the node network namespace, pinned to one node, panel
-# bound to loopback behind a node-local reverse proxy (like the docker setup on msk00).
+# bound to loopback behind a node-local reverse proxy (like the docker setup in docs/deploy.md).
 hostNetwork: true
 
 nodeSelector:

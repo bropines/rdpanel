@@ -18,7 +18,7 @@ Research this spec is based on (read them, they are normative where this file de
 ## 1. Goals / non-goals
 
 Goals
-1. **Drop-in replacement**: same API base URL (`https://desk-ru-api.bropinus.ru`), clients keep working
+1. **Drop-in replacement**: same API base URL (`https://desk-api.example.com`), clients keep working
    without re-login after migration (same user ids, same `RUSTDESK_API_JWT_KEY`, migrated tokens).
 2. **Better panel**: fast, clean UI (React), proper roles, live device status, audit, 2FA, OIDC.
 3. **Secure by default**: fixes every item in the legacy critique (§8 of the migration doc).
@@ -179,8 +179,8 @@ user_thirds 3, login_logs 73, audit_conns 1086, audit_files 54.
 - `.github/workflows/ci.yml`: go vet + test (race), web typecheck + lint + test + build, govulncheck.
 - `.github/workflows/image.yml`: on tag/main → build hbbs/hbbr (cross, amd64+arm64) from the server repo ref,
   build web+panel, buildx multi-arch → `ghcr.io/bropines/rustdesk-panel:{version,latest}` using `GITHUB_TOKEN` only.
-- Production (msk00): compose with `network_mode: host`, panel bound to `127.0.0.1:31114` (Angie vhost
-  `desk-ru-api.bropinus.ru` already proxies there), data dirs `hbbs-data` + new `panel-data`.
+- Production: compose with `network_mode: host`, panel bound to `127.0.0.1:31114` (Angie vhost
+  `desk-api.example.com` already proxies there), data dirs `hbbs-data` + new `panel-data`.
 
 ## 9. Quality bar
 

@@ -206,8 +206,8 @@ The panel can serve RustDesk clients from a public host while the panel UI and
 its API (`/api/v1/*`) are reachable only on an internal host (VPN/tailnet):
 
 ```sh
-RDPANEL_PUBLIC_URL=https://desk-ru-api.bropinus.ru            # clients' "API server"
-RDPANEL_ADMIN_URL=https://desk-ru-api-internal.bropines.ru     # panel (tailnet only)
+RDPANEL_PUBLIC_URL=https://desk-api.example.com            # clients' "API server"
+RDPANEL_ADMIN_URL=https://desk-admin.internal.example.com     # panel (tailnet only)
 ```
 
 Register only `<public_url>/api/oidc/callback` at GitHub/Google/OIDC providers.
@@ -224,21 +224,21 @@ panel-related needs to be reachable on the public host.
 server {
     listen 443 ssl;
     http2 on;
-    server_name desk-ru-api.bropinus.ru;
+    server_name desk-api.example.com;
     # ssl_certificate ...
 
     location ^~ /api/v1/ { return 404; }               # panel API + SSE: internal only
     location = /api/oidc/callback { include rdpanel-proxy.conf; }
     location /api/ { include rdpanel-proxy.conf; }      # RustDesk client API
     location = /metrics { return 404; }
-    location / { return 302 https://desk-ru-api-internal.bropines.ru$request_uri; }
+    location / { return 302 https://desk-admin.internal.example.com$request_uri; }
 }
 
 # Admin host (tailnet only): everything.
 server {
     listen 100.64.0.10:443 ssl;                         # tailnet address
     http2 on;
-    server_name desk-ru-api-internal.bropines.ru;
+    server_name desk-admin.internal.example.com;
     # ssl_certificate ...
 
     location / { include rdpanel-proxy.conf; }
@@ -339,7 +339,7 @@ The hbbs/hbbr data layout is the same (`/data/id_ed25519{,.pub}`,
    in the old container) somewhere readable, e.g. `./rustdeskapi.db` (mode 0644
    or owned by `PUID`: the CLI runs as `PUID`).
 3. Mount the old hbbs data dir as `/data` (and optionally a new dir as
-   `/data/panel`), see the msk00 block in `deploy/compose.example.yml`. On first
+   `/data/panel`), see the upgrade example at the end of `deploy/compose.example.yml`. On first
    start `key-secret` validates the existing key pair and chowns the files to
    `PUID:PGID` (the old image ran as root).
 4. Start the container, then import once, **before** creating users in the new
@@ -349,8 +349,8 @@ The hbbs/hbbr data layout is the same (`/data/id_ed25519{,.pub}`,
    docker compose exec rustdesk rdpanel migrate-legacy --from /import/rustdeskapi.db --dry-run --report /data/panel/migrate-report.json
    docker compose exec rustdesk rdpanel migrate-legacy --from /import/rustdeskapi.db
    ```
-5. Point the reverse proxy at the new `RDPANEL_LISTEN` (msk00:
-   `127.0.0.1:31114`, already the Angie upstream of `desk-ru-api.bropinus.ru`).
+5. Point the reverse proxy at the new `RDPANEL_LISTEN` (e.g.
+   `127.0.0.1:31114`, already the Angie upstream of `desk-api.example.com`).
 6. Rollback: stop the new container and start the old one on the same hbbs data
    dir; it only needs root to own the files again (`chown -R 0:0 hbbs-data`).
 

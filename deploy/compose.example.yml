@@ -30,7 +30,7 @@ services:
       options: { max-size: 20m, max-file: "5" }
 
 # --------------------------------------------------------------------------
-# msk00 layout (existing lejianwen s6 deployment, reverse proxy = Angie):
+# Example: upgrading an existing lejianwen s6 deployment (reverse proxy = Angie):
 #
 #   /opt/rustdesk/
 #     hbbs-data/      existing hbbs data dir (id_ed25519, id_ed25519.pub,
@@ -38,7 +38,7 @@ services:
 #     panel-data/     new: panel.db, secret.key, jwt.key
 #     rustdeskapi.db  copy of the old lejianwen API database (one-time import)
 #     rdpanel.env     RELAY=..., RDPANEL_LISTEN=127.0.0.1:31114,
-#                     RDPANEL_PUBLIC_URL=https://desk-ru-api.bropinus.ru,
+#                     RDPANEL_PUBLIC_URL=https://desk-api.example.com,
 #                     RUSTDESK_API_JWT_KEY=<same value as the old API>,
 #                     ENCRYPTED_ONLY / MUST_LOGIN / ALWAYS_USE_RELAY as before
 #
@@ -50,7 +50,7 @@ services:
 #     restart: unless-stopped
 #     env_file: rdpanel.env
 #     environment:
-#       RDPANEL_LISTEN: 127.0.0.1:31114     # Angie vhost desk-ru-api.bropinus.ru -> here
+#       RDPANEL_LISTEN: 127.0.0.1:31114     # Angie vhost desk-api.example.com -> here
 #     volumes:
 #       - ./hbbs-data:/data                 # keys reused; chowned to PUID:PGID on start
 #       - ./panel-data:/data/panel
