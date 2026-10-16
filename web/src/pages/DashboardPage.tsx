@@ -52,7 +52,7 @@ function StatCard({
   );
 }
 
-function HealthRow({ name, h }: { name: string; h: Schemas["ComponentHealth"] }) {
+export function HealthRow({ name, h }: { name: string; h: Schemas["ComponentHealth"] }) {
   const { t } = useTranslation();
   const variant = h.status === "up" ? "success" : h.status === "down" ? "destructive" : "secondary";
   return (

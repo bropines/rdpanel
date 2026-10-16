@@ -393,6 +393,36 @@ export const handlers = [
       version: { panel: "0.1.0-mock", commit: "6045ece0b1", build_date: "2026-10-15", go: "go1.23" },
     } satisfies S["Dashboard"]);
   }),
+  http.get(`${B}/about`, () => {
+    const u = requireAuth();
+    if (u instanceof Response) return u;
+    const admin = u.role === "admin";
+    const started = new Date(Date.now() - (3 * 86400 + 4 * 3600 + 17 * 60) * 1000);
+    return ok({
+      name: "rustdesk-panel",
+      version: { panel: "v0.1.0", commit: "6045ece0b1a2", build_date: "2026-10-15T09:30:00Z", go: "go1.27.1" },
+      hbb: { repo: "https://github.com/bropines/rustdesk-server", ref: "8b6f4907c1d2e3f4a5b6c7d8e9f0a1b2c3d4e5f6" },
+      update: {
+        status: "update_available",
+        latest: "v0.2.0",
+        latest_url: "https://github.com/bropines/rustdesk-panel/releases/tag/v0.2.0",
+        published_at: "2026-10-12T15:00:00Z",
+        checked_at: new Date(Date.now() - 40 * 60_000).toISOString(),
+        error: null,
+      },
+      server: admin
+        ? {
+            started_at: started.toISOString(),
+            uptime_s: Math.round((Date.now() - started.getTime()) / 1000),
+            schema_version: 7,
+            schema_latest: 7,
+            os: "linux",
+            arch: "amd64",
+            health: health(),
+          }
+        : null,
+    } satisfies S["About"]);
+  }),
   http.get(`${B}/lookup/users`, ({ request }) => {
     const u = requireAuth();
     if (u instanceof Response) return u;

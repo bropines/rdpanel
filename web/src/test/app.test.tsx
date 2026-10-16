@@ -155,6 +155,31 @@ describe("auth guard", () => {
   });
 });
 
+describe("about page", () => {
+  it("shows version, update status and server details to admins", async () => {
+    loginAs(1);
+    renderApp("/about");
+    expect(await screen.findByTestId("panel-version")).toHaveTextContent("v0.1.0");
+    expect(screen.getByTestId("update-status")).toHaveTextContent("Version v0.2.0 is available.");
+    expect(screen.getByText("Runtime")).toBeInTheDocument();
+    expect(screen.getByText("version 7 (latest 7)")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /GitHub repository/ })).toHaveAttribute("href", "https://github.com/bropines/rustdesk-panel");
+    expect(screen.getByTestId("sidebar-version")).toHaveTextContent("Version v0.1.0");
+  });
+
+  it("is available to users without server details", async () => {
+    loginAs(2);
+    const router = renderApp("/about");
+    expect(await screen.findByTestId("panel-version")).toBeInTheDocument();
+    expect(router.state.location.pathname).toBe("/about");
+    expect(screen.getByRole("link", { name: /8b6f4907c1d2/ })).toHaveAttribute(
+      "href",
+      "https://github.com/bropines/rustdesk-server/tree/8b6f4907c1d2e3f4a5b6c7d8e9f0a1b2c3d4e5f6",
+    );
+    expect(screen.queryByText("Runtime")).not.toBeInTheDocument();
+  });
+});
+
 describe("devices page", () => {
   beforeEach(() => loginAs(1));
 
