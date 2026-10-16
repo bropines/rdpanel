@@ -91,6 +91,8 @@ Put a TLS reverse proxy in front of the panel, then configure clients with ID se
 - **Full guide:** [`docs/deploy.md`](docs/deploy.md) (reverse proxy, split public/internal
   hosts, WebSocket clients, image tags, building).
 - **Kubernetes:** Helm chart in [`deploy/helm/rdpanel`](deploy/helm/rdpanel).
+- **Single sign-on:** [`docs/oidc.md`](docs/oidc.md) (Authentik, Keycloak, Pocket ID,
+  GitHub, Google). **Monitoring:** [`docs/monitoring.md`](docs/monitoring.md).
 - **Coming from lejianwen/rustdesk-api:** [`docs/migration.md`](docs/migration.md). Keep the
   same `RUSTDESK_API_JWT_KEY` and hbbs key pair, then
   `rdpanel migrate-legacy --from rustdeskapi.db --dry-run`.

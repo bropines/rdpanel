@@ -219,7 +219,7 @@ RDPANEL_PUBLIC_URL=https://desk-api.example.com            # clients' "API serve
 RDPANEL_ADMIN_URL=https://desk-admin.internal.example.com     # panel (tailnet only)
 ```
 
-Register only `<public_url>/api/oidc/callback` at GitHub/Google/OIDC providers.
+Register only `<public_url>/api/oidc/callback` at GitHub/Google/OIDC providers (step-by-step, including Authentik: [`oidc.md`](oidc.md)).
 Panel OIDC logins and identity linking start on the admin host (which sets an
 HttpOnly binding cookie there), the IdP returns to the callback on the public
 host, which exchanges the code and redirects the browser to
