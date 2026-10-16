@@ -28,6 +28,7 @@ export const userProfileSchema = z.object({
   user_group_id: z.number().nullable(),
   note: z.string().max(4096, "validation.tooLong"),
   totp_required: z.boolean(),
+  email_verified: z.boolean(),
 });
 
 export const userCreateSchema = userProfileSchema.extend({
@@ -135,6 +136,16 @@ export function UserFields({
           render={({ field }) => <Switch id="u-totp" checked={field.value} onCheckedChange={field.onChange} />}
         />
       </div>
+      <div className="flex items-center justify-between gap-3 rounded-md border px-3 py-2">
+        <label htmlFor="u-email-verified" className="text-sm">
+          {t("users.emailVerified")}
+        </label>
+        <Controller
+          control={form.control}
+          name="email_verified"
+          render={({ field }) => <Switch id="u-email-verified" checked={field.value} onCheckedChange={field.onChange} />}
+        />
+      </div>
       <Field label={t("users.note")} htmlFor="u-note" className="sm:col-span-2" error={err("note")}>
         <Textarea id="u-note" rows={2} {...form.register("note")} />
       </Field>
@@ -172,6 +183,7 @@ export function CreateUserDialog({ open, onOpenChange, onCreated }: { open: bool
       user_group_id: null,
       note: "",
       totp_required: false,
+      email_verified: false,
     },
   });
   const create = useMutation({
@@ -185,6 +197,7 @@ export function CreateUserDialog({ open, onOpenChange, onCreated }: { open: bool
         user_group_id: v.user_group_id,
         note: v.note,
         totp_required: v.totp_required,
+        email_verified: v.email_verified && !!v.email,
         ...(v.password ? { password: v.password } : {}),
       }),
     onSuccess: (u) => {

@@ -15,6 +15,7 @@ import { initI18n } from "@/i18n";
 import { loginRedirect } from "@/lib/guards";
 import { createQueryClient } from "@/lib/query";
 import { ThemeProvider } from "@/lib/theme-provider";
+import * as db from "@/mocks/data";
 import { handlers } from "@/mocks/handlers";
 import { createAppRouter } from "@/router";
 
@@ -99,6 +100,28 @@ describe("auth guard", () => {
     await user.click(screen.getByRole("button", { name: "Verify" }));
     await waitFor(() => expect(router.state.location.pathname).toBe("/users"));
     expect(await screen.findByText("Maria Kuznetsova")).toBeInTheDocument();
+  });
+
+  it("signs in with password + e-mailed code", async () => {
+    loginAs(null);
+    const ivan = db.users.find((u) => u.username === "ivan")!;
+    const saved = { ...ivan };
+    Object.assign(ivan, { totp_enabled: false, email_verified: true, email_2fa_enabled: true });
+    try {
+      const user = userEvent.setup();
+      const router = renderApp("/login");
+      await user.type(await screen.findByLabelText("Username"), "ivan");
+      await user.type(screen.getByLabelText("Password"), "ivan");
+      await user.click(screen.getByRole("button", { name: "Sign in" }));
+      expect(await screen.findByText(/sent to i\*\*\*n@example.com/)).toBeInTheDocument();
+      await user.click(screen.getByRole("button", { name: "Send a new code" }));
+      expect(await screen.findByRole("status")).toHaveTextContent("A new code was sent");
+      await user.type(screen.getByLabelText("E-mail code"), "246810");
+      await user.click(screen.getByRole("button", { name: "Verify" }));
+      await waitFor(() => expect(router.state.location.pathname).toBe("/"));
+    } finally {
+      Object.assign(ivan, saved);
+    }
   });
 
   it("shows a validation error on wrong credentials", async () => {

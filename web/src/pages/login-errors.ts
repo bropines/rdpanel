@@ -5,6 +5,11 @@ export function loginErrorKey(err: unknown): string {
   if (err instanceof ApiError) {
     if (err.code === "rate_limited") return "login.rateLimited";
     if (err.code === "totp_invalid") return "login.codeWrong";
+    if (err.code === "code_invalid") return "login.codeWrong";
+    if (err.code === "email_send_failed") return "login.emailSendFailed";
+    if (err.code === "email_not_configured") return "login.emailNotConfigured";
+    if (err.code === "invalid_token") return "login.resetTokenInvalid";
+    if (err.code === "password_reset_unavailable") return "login.resetUnavailable";
     if (err.code === "password_login_disabled") return "login.passwordDisabled";
     if (err.code === "oidc_not_configured") return "login.oidcNotConfigured";
     if (err.code === "provider_unavailable") return "login.providerUnavailable";
@@ -31,5 +36,6 @@ export const OIDC_ERROR_CODES = [
 /** i18n key for an OIDC redirect error (`oidc_no_account` or `no_account`). */
 export function oidcErrorKey(code: string | undefined): string {
   const c = (code ?? "").replace(/^oidc_/, "");
+  if (c === "email_failed") return "login.emailSendFailed";
   return (OIDC_ERROR_CODES as readonly string[]).includes(c) ? `login.oidcErrors.${c}` : "login.oidcFailed";
 }

@@ -180,7 +180,23 @@
     "usePasskey": "Use a passkey instead",
     "passkeyFailed": "The passkey was not accepted. Try again or use another sign-in method.",
     "passkeysUnavailable": "Passkeys are not configured on this server.",
-    "noPasskeys": "No passkey is registered for this account."
+    "noPasskeys": "No passkey is registered for this account.",
+    "forgot": "Forgot password?",
+    "forgotTitle": "Reset password",
+    "forgotDescription": "Enter your username or e-mail address. If the account has a verified e-mail address, we will send a reset link.",
+    "forgotLogin": "Username or e-mail",
+    "forgotSubmit": "Send reset link",
+    "forgotSent": "If the account exists and has a verified e-mail address, a reset link is on its way. It is valid for 30 minutes.",
+    "emailMfaDescription": "Enter the code we e-mailed you.",
+    "emailCode": "E-mail code",
+    "emailCodeHint": "6-digit code from the e-mail. It is valid for 10 minutes.",
+    "emailCodeHintTo": "6-digit code sent to {{email}}. It is valid for 10 minutes.",
+    "emailResend": "Send a new code",
+    "emailCodeResent": "A new code was sent. Earlier codes no longer work.",
+    "emailSendFailed": "The e-mail could not be sent. Try again later or contact the administrator.",
+    "emailNotConfigured": "E-mail is not configured on this server.",
+    "resetTokenInvalid": "The reset link is invalid or has expired. Request a new one.",
+    "resetUnavailable": "Password reset by e-mail is not available."
   },
   "placeholder": {
     "notFound": "Page not found",
@@ -415,7 +431,9 @@
     "reset2faDescription": "The authenticator and recovery codes are removed. If 2FA is required, the user has to enrol again at the next sign-in.",
     "totpReset": "2FA reset",
     "noDevices": "No devices bound to this user.",
-    "noBooks": "No address books."
+    "noBooks": "No address books.",
+    "emailVerified": "E-mail verified",
+    "email2fa": "E-mail codes"
   },
   "groups": {
     "description": "User groups control who sees whom in RustDesk clients; device groups organise devices.",
@@ -811,7 +829,8 @@
       "general": "General",
       "branding": "Branding",
       "security": "Security",
-      "retention": "Retention"
+      "retention": "Retention",
+      "email": "E-mail"
     },
     "publicUrl": "Public URL",
     "webClientUrl": "Web client URL",
@@ -866,7 +885,9 @@
     "loginBackoff": "Failed sign-ins (per IP and per username)",
     "loginBackoffValue": "{{free}} free attempts, then a delay starting at {{base}} s that doubles up to {{max}} min",
     "deviceRate": "Device API (per IP, unauthenticated)",
-    "deviceRateValue": "{{rate}} requests/s, bursts of {{burst}}"
+    "deviceRateValue": "{{rate}} requests/s, bursts of {{burst}}",
+    "requireEmail2fa": "Require e-mailed codes without TOTP",
+    "requireEmail2faHint": "Users without an authenticator app but with a verified e-mail address must enter an e-mailed code at sign-in (panel and RustDesk client)."
   },
   "security": {
     "description": "Your profile, password, two-factor authentication and linked accounts.",
@@ -979,5 +1000,64 @@
     "cancelled": "The passkey prompt was cancelled or timed out.",
     "alreadyRegistered": "This authenticator already holds a passkey for your account.",
     "securityError": "The browser refused the request: this address does not match the server's passkey domain."
+  },
+  "reset": {
+    "title": "Choose a new password",
+    "newPassword": "New password",
+    "confirm": "Repeat new password",
+    "hint": "All sessions and RustDesk client sign-ins of the account are ended after the reset.",
+    "submit": "Set password",
+    "done": "Your password was changed. Sign in with the new password.",
+    "toLogin": "Back to sign-in"
+  },
+  "email": {
+    "title": "E-mail",
+    "description": "Verify your address to use e-mailed sign-in codes and password reset.",
+    "noAddress": "Add an e-mail address in your profile above to verify it.",
+    "verifiedBadge": "Verified",
+    "unverifiedBadge": "Not verified",
+    "unavailable": "E-mail is not configured on this server.",
+    "verifyHint": "We will e-mail you a 6-digit code (valid for 10 minutes).",
+    "sendCode": "Send code",
+    "resendCode": "Send again",
+    "code": "Code",
+    "confirm": "Verify",
+    "codeSent": "Verification code sent",
+    "verified": "E-mail address verified",
+    "twoFa": "E-mailed sign-in codes",
+    "twoFaHint": "After the password, enter a code sent to your verified address (panel and RustDesk client).",
+    "twoFaTotpWins": "Your authenticator app is used instead while it is enabled.",
+    "twoFaRequired": "Required by the administrator for accounts without an authenticator app.",
+    "twoFaOn": "E-mailed sign-in codes enabled",
+    "twoFaOff": "E-mailed sign-in codes disabled",
+    "disable": "Disable",
+    "language": "E-mail language",
+    "languageHint": "Language of verification, sign-in and reset e-mails.",
+    "languageDefault": "Panel default"
+  },
+  "emailSettings": {
+    "title": "Outgoing e-mail (SMTP)",
+    "on": "Enabled",
+    "off": "Disabled",
+    "description": "Used for address verification, e-mailed sign-in codes and password reset. Leave the host empty to turn e-mail off.",
+    "host": "SMTP host",
+    "hostHint": "Empty disables e-mail.",
+    "encryption": "Encryption",
+    "noEncryption": "None (plain)",
+    "port": "Port",
+    "portHint": "Empty: 587 / 465 / 25",
+    "username": "Username",
+    "password": "Password",
+    "passwordSet": "Stored encrypted. Leave empty to keep it.",
+    "from": "Sender (From)",
+    "insecure": "Skip TLS certificate verification",
+    "insecureHint": "Only for servers with self-signed certificates on a trusted network.",
+    "defaultLocale": "Default e-mail language",
+    "defaultLocaleHint": "For users who did not choose one in their profile.",
+    "resetNeedsUrl": "Password reset needs RDPANEL_PUBLIC_URL or RDPANEL_ADMIN_URL for the link.",
+    "testTo": "Send a test e-mail to",
+    "sendTest": "Send test e-mail",
+    "testSent": "Test e-mail sent to {{to}}",
+    "testFailed": "Sending failed: {{error}}"
   }
 }

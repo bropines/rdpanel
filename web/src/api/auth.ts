@@ -9,6 +9,10 @@
  *   POST /auth/oidc/{slug}/start {next}   → {url}: the SPA navigates there
  *   POST /auth/passkey/{begin,finish}     → usernameless passkey sign-in (LoginResponse)
  *   POST /auth/mfa/passkey/{begin,finish} → passkey as the second factor (LoginResponse)
+ *   POST /auth/mfa/resend               → 204: new e-mailed code (mfa_methods [email])
+ *   GET  /auth/options                   → {password_reset}
+ *   POST /auth/password/forgot {login}   → 202 (enumeration-safe)
+ *   POST /auth/password/reset {token,new_password} → 204 (all sessions revoked)
  */
 import { api, type ApiClient, type Schemas } from "@/api/client";
 import { getPasskey, type JsonObject } from "@/lib/webauthn";
@@ -20,13 +24,14 @@ export type LoginResponse = Schemas["LoginResponse"];
 export type AuthProvider = Schemas["LoginProvider"];
 
 export type MfaMethod = NonNullable<LoginResponse["mfa_methods"]>[number];
-export type LoginResult = { kind: "ok"; me: Me } | { kind: "mfa"; methods?: MfaMethod[] };
+export type LoginResult = { kind: "ok"; me: Me } | { kind: "mfa"; methods?: MfaMethod[]; emailHint?: string };
+export type AuthOptions = Schemas["AuthOptions"];
 export type LoginOptions = { providers: AuthProvider[]; passkey: boolean };
 export type PasskeyCeremony = Schemas["PasskeyCeremony"];
 
 /** Maps a login/MFA response to the next UI step. */
 export function loginResult(res: LoginResponse): LoginResult {
-  if (res.mfa_required || !res.me) return { kind: "mfa", methods: res.mfa_methods };
+  if (res.mfa_required || !res.me) return { kind: "mfa", methods: res.mfa_methods, emailHint: res.email_hint };
   return { kind: "ok", me: res.me };
 }
 
@@ -56,6 +61,14 @@ export function authApi(client: ApiClient = api) {
       const credential = await getPasskey(c.options as JsonObject);
       return okMe(await client.request<LoginResponse>("/auth/mfa/passkey/finish", { method: "POST", body: { ceremony_id: c.ceremony_id, credential } }));
     },
+    /** E-mails a new sign-in code for a pending e-mail login. */
+    mfaResend: () => client.request<void>("/auth/mfa/resend", { method: "POST" }),
+    /** Optional login-page features ("Forgot password?"). */
+    options: () => client.request<AuthOptions>("/auth/options"),
+    /** Requests a reset link; always resolves the same way whether or not the account exists. */
+    forgotPassword: (login: string) => client.request<unknown>("/auth/password/forgot", { method: "POST", body: { login } }),
+    resetPassword: (token: string, newPassword: string) =>
+      client.request<void>("/auth/password/reset", { method: "POST", body: { token, new_password: newPassword } }),
     logout: () => client.request<void>("/auth/logout", { method: "POST" }),
     me: () => client.request<Me>("/auth/me"),
     providers: async (): Promise<AuthProvider[]> =>

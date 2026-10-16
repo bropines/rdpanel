@@ -40,6 +40,7 @@ describe("user and password forms", () => {
     user_group_id: null,
     note: "",
     totp_required: false,
+    email_verified: false,
     password: "",
   };
 
@@ -197,6 +198,7 @@ describe("panel settings form", () => {
     welcome_markdown: "hi",
     password_login_enabled: true,
     require_admin_2fa: true,
+    require_email_2fa: false,
     session_idle_hours: "12",
     session_absolute_days: "7",
     client_token_lifetime_hours: "4380",

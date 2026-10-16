@@ -15,6 +15,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Skeleton, Switch, Tabs, TabsContent, TabsList, TabsTrigger, Textarea } from "@/components/ui/misc";
 import { displayName, useMe } from "@/lib/session";
+import { EmailSettingsCard } from "@/pages/EmailSettingsCard";
 
 const int = (min: number, max = Number.MAX_SAFE_INTEGER) =>
   z
@@ -44,6 +45,7 @@ export const settingsSchema = z.object({
   welcome_markdown: z.string().max(20000, "validation.tooLong"),
   password_login_enabled: z.boolean(),
   require_admin_2fa: z.boolean(),
+  require_email_2fa: z.boolean(),
   session_idle_hours: int(1, 720),
   session_absolute_days: int(1, 365),
   client_token_lifetime_hours: int(1, 87600),
@@ -72,6 +74,7 @@ function toValues(s: PanelSettings): SettingsValues {
     welcome_markdown: s.branding.welcome_markdown,
     password_login_enabled: s.auth.password_login_enabled,
     require_admin_2fa: s.auth.require_admin_2fa,
+    require_email_2fa: s.auth.require_email_2fa,
     session_idle_hours: String(s.auth.session_idle_hours),
     session_absolute_days: String(s.auth.session_absolute_days),
     client_token_lifetime_hours: String(s.auth.client_token_lifetime_hours),
@@ -89,6 +92,7 @@ export function toPatch(v: SettingsValues): PanelSettingsPatch {
     auth: {
       password_login_enabled: v.password_login_enabled,
       require_admin_2fa: v.require_admin_2fa,
+      require_email_2fa: v.require_email_2fa,
       session_idle_hours: Number(v.session_idle_hours),
       session_absolute_days: Number(v.session_absolute_days),
       client_token_lifetime_hours: Number(v.client_token_lifetime_hours),
@@ -242,6 +246,7 @@ export function SettingsPage() {
           <TabsTrigger value="general">{t("settings.tabs.general")}</TabsTrigger>
           <TabsTrigger value="branding">{t("settings.tabs.branding")}</TabsTrigger>
           <TabsTrigger value="security">{t("settings.tabs.security")}</TabsTrigger>
+          <TabsTrigger value="email">{t("settings.tabs.email")}</TabsTrigger>
           <TabsTrigger value="retention">{t("settings.tabs.retention")}</TabsTrigger>
         </TabsList>
 
@@ -300,6 +305,12 @@ export function SettingsPage() {
               hint={t("settings.requireAdmin2faHint")}
               control={<Controller control={form.control} name="require_admin_2fa" render={({ field }) => <Switch id="s-require_admin_2fa" checked={field.value} onCheckedChange={field.onChange} />} />}
             />
+            <SwitchRow
+              id="s-require_email_2fa"
+              label={t("settings.requireEmail2fa")}
+              hint={t("settings.requireEmail2faHint")}
+              control={<Controller control={form.control} name="require_email_2fa" render={({ field }) => <Switch id="s-require_email_2fa" checked={field.value} onCheckedChange={field.onChange} />} />}
+            />
             <div className="grid gap-4 sm:grid-cols-3">
               {num("session_idle_hours", t("settings.sessionIdle"), t("settings.hours"))}
               {num("session_absolute_days", t("settings.sessionAbsolute"), t("settings.days"))}
@@ -320,6 +331,10 @@ export function SettingsPage() {
               </ConfigValue>
             </div>
           </Section>
+        </TabsContent>
+
+        <TabsContent value="email" className="space-y-4">
+          <EmailSettingsCard />
         </TabsContent>
 
         <TabsContent value="retention" className="space-y-4">
