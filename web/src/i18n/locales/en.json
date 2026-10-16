@@ -134,7 +134,7 @@
   },
   "login": {
     "title": "Sign in",
-    "description": "Use your RustDesk account to manage devices and address books.",
+    "description": "Sign in with your panel account to manage devices and address books.",
     "username": "Username",
     "password": "Password",
     "totp": "Authentication code",
