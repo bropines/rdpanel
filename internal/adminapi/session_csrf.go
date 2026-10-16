@@ -46,10 +46,18 @@ func csrfFromRequest(r *http.Request) string {
 // X-CSRF-Token header must equal the rdpanel_csrf cookie. A cross-site page
 // can make the browser send the cookie but can neither read it nor set the
 // header, so forged requests fail.
+//
+// Requests carrying "Authorization: Bearer ..." are exempt: the session
+// loader then authenticates them by that API token alone (never by the
+// cookie), and a cross-site page cannot make a browser attach that header.
 func csrfProtect(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {
 		case http.MethodGet, http.MethodHead, http.MethodOptions:
+			next.ServeHTTP(w, r)
+			return
+		}
+		if _, bearer := bearerFrom(r); bearer {
 			next.ServeHTTP(w, r)
 			return
 		}

@@ -1,5 +1,6 @@
 // Package adminapi implements the panel JSON API mounted at /api/v1/admin:
-// cookie sessions (auth_tokens kind=web), CSRF double-submit (X-CSRF-Token),
+// cookie sessions (auth_tokens kind=web) or personal API tokens (Bearer rdp_...,
+// api_tokens.go), CSRF double-submit (X-CSRF-Token) for cookie sessions,
 // TOTP, OIDC panel login and CRUD for users, groups, devices, address books,
 // audit, identity providers, server control and settings. The contract is
 // api/openapi.yaml; errors use httpx.WriteError ({"error":{"code","message"}}).
@@ -140,5 +141,6 @@ func Register(r chi.Router, d Deps) {
 	c.registerEmail(r)
 	c.registerProviders(r)
 	registerResources(r, c)
+	registerAPITokens(r, c)
 	registerB2b(r, d, c.sess.load)
 }

@@ -33,6 +33,10 @@ type SessionInfo struct {
 	// MustEnrollTOTP: policy requires 2FA but the user has not enrolled; only
 	// the auth and "my security" endpoints are reachable.
 	MustEnrollTOTP bool
+	// APIToken is set when the request authenticated with a personal API
+	// token (Authorization: Bearer rdp_...) instead of the session cookie.
+	// Token is then a placeholder with ID 0 that matches no auth_tokens row.
+	APIToken *store.APIToken
 }
 
 type sessionCtxKey struct{}
@@ -85,12 +89,32 @@ func RequireAdmin(next http.Handler) http.Handler {
 	}))
 }
 
-// requireSession admits authenticated sessions even when 2FA enrolment is
-// still owed (used by /auth/me, /auth/logout and the "my security" routes).
+// requireSession admits authenticated cookie sessions even when 2FA
+// enrolment is still owed (used by the "my security" routes). API tokens are
+// refused: they cannot change credentials, 2FA, sessions or passkeys.
 func requireSession(next http.Handler) http.Handler {
+	return requireSessionOrToken(requireCookieSession(next))
+}
+
+// requireSessionOrToken is requireSession that also admits API tokens
+// (GET /auth/me).
+func requireSessionOrToken(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if s := CurrentSession(r.Context()); s == nil || s.MFAPending {
 			httpx.WriteError(w, http.StatusUnauthorized, "unauthorized", "authentication required")
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+// requireCookieSession refuses requests authenticated with an API token
+// (403 cookie_session_required), e.g. minting or revoking API tokens.
+func requireCookieSession(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if s := CurrentSession(r.Context()); s != nil && s.APIToken != nil {
+			httpx.WriteError(w, http.StatusForbidden, "cookie_session_required",
+				"this endpoint requires a panel session, not an API token")
 			return
 		}
 		next.ServeHTTP(w, r)
@@ -116,6 +140,10 @@ type sessions struct {
 	mu       sync.Mutex
 	cachedAt time.Time
 	cIdle    time.Duration
+
+	// limiter throttles failed API token attempts per client IP (the
+	// authCore's limiter, shared with the login endpoints).
+	limiter auth.Limiter
 }
 
 // lifetimeCacheTTL bounds how long lookup uses a cached idle timeout.
@@ -230,8 +258,14 @@ func (m *sessions) mustEnroll(ctx context.Context, user *store.User, enrolled bo
 }
 
 // load is middleware attaching the session (if any) to the request context.
+// A request with "Authorization: Bearer ..." is authenticated by that API
+// token only (the cookie is ignored); an invalid token answers 401.
 func (m *sessions) load(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if plain, ok := bearerFrom(r); ok {
+			m.loadAPIToken(w, r, next, plain)
+			return
+		}
 		c, err := r.Cookie(SessionCookie)
 		if err != nil || c.Value == "" || len(c.Value) > 128 {
 			next.ServeHTTP(w, r)

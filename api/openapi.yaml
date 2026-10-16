@@ -11,8 +11,18 @@ info:
     Secure on https) holding an opaque token (sha256 stored server-side, kind `web`),
     12 h idle / 7 d absolute.
 
+    **API tokens.** Scripts can send `Authorization: Bearer rdp_...` instead of the
+    cookie (`bearerAuth`; create tokens under Profile & security or `POST /me/api-tokens`,
+    see docs/api.md). A token acts as its owner with the owner's current role; it is
+    refused (401) when expired, revoked or the owner is disabled, and failed attempts are
+    rate-limited per IP. Scope `read` allows only GET/HEAD (403 `insufficient_scope`).
+    Tokens cannot mint or revoke tokens nor use `/me/security/*` (403
+    `cookie_session_required`). They also work on `GET /api/v1/events`, never on the
+    RustDesk client API (`/api/*`).
+
     **CSRF.** Double submit: every non-GET request must send header `X-CSRF-Token`
     equal to the `rdpanel_csrf` cookie (obtain/refresh it with `GET /auth/csrf`).
+    Requests authenticated with a Bearer API token need no CSRF header.
 
     **Errors.** Every non-2xx response has the body `{"error":{"code","message"}}`.
     `code` is stable and machine-readable (`unauthorized`, `forbidden`, `csrf_failed`,
@@ -20,7 +30,8 @@ info:
     `totp_invalid`, `internal`, `invalid_credentials`, `password_login_disabled`,
     `totp_enrollment_required`, `reauth_failed`, `oidc_not_configured`,
     `provider_unavailable`, `last_admin`, `server_unavailable`, `passkey_failed`,
-    `passkeys_unavailable`, `no_passkeys`, `passkey_limit`, `reauth_required`).
+    `passkeys_unavailable`, `no_passkeys`, `passkey_limit`, `reauth_required`,
+    `insufficient_scope`, `cookie_session_required`, `api_token_limit`).
 
     **Route guards.** Resource routes require a full session; while an admin-forced
     2FA enrolment is pending only `/auth/*` and `/me/security/*` are reachable
@@ -66,6 +77,7 @@ servers:
   - url: /api/v1/admin
 security:
   - sessionCookie: []
+  - bearerAuth: []
 tags:
   - name: auth
   - name: security
@@ -84,7 +96,7 @@ tags:
   - name: events
 x-sse-events:
   description: |
-    `GET /api/v1/events` — `text/event-stream`, session-authenticated (same cookie),
+    `GET /api/v1/events` — `text/event-stream`, session-authenticated (same cookie, or a Bearer API token),
     no CSRF (GET). The server sends a comment line `: ping` every 25 s and sets
     `retry: 3000`. Clients reconnect with exponential backoff (1 s → 30 s, jitter)
     and refetch lists after a reconnect because events are not replayed
@@ -660,6 +672,61 @@ paths:
       responses:
         "204": { description: Revoked. }
         "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /me/api-tokens:
+    get:
+      tags: [security]
+      operationId: listMyApiTokens
+      summary: My personal API tokens (not revoked; expired ones flagged).
+      responses:
+        "200":
+          description: Tokens, newest first. Never contains the secret.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items: { type: array, items: { $ref: "#/components/schemas/ApiToken" } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+    post:
+      tags: [security]
+      operationId: createMyApiToken
+      summary: Create a personal API token; the secret is returned once.
+      description: |
+        Requires a cookie session (an API token cannot mint tokens: 403
+        `cookie_session_required`). At most 50 tokens per user (409 `api_token_limit`).
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - $ref: "#/components/parameters/CsrfHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateApiTokenRequest" }
+      responses:
+        "201":
+          description: Created. `token` is shown only in this response.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ApiTokenCreated" }
+        "400": { $ref: "#/components/responses/ValidationFailed" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409": { $ref: "#/components/responses/Conflict" }
+  /me/api-tokens/{token_id}:
+    delete:
+      tags: [security]
+      operationId: revokeMyApiToken
+      summary: Revoke one of my API tokens (cookie session only).
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - $ref: "#/components/parameters/CsrfHeader"
+        - $ref: "#/components/parameters/ApiTokenId"
+      responses:
+        "204": { description: Revoked. }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/NotFound" }
   /me/security/password:
     post:
@@ -1426,6 +1493,41 @@ paths:
       parameters:
         - $ref: "#/components/parameters/UserId"
         - { name: passkey_id, in: path, required: true, schema: { type: integer, format: int64 } }
+        - $ref: "#/components/parameters/CsrfHeader"
+      responses:
+        "204": { description: Revoked. }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /users/{user_id}/api-tokens:
+    get:
+      tags: [users]
+      operationId: listUserApiTokens
+      summary: Personal API tokens of a user (admin).
+      parameters:
+        - $ref: "#/components/parameters/UserId"
+      responses:
+        "200":
+          description: Tokens, newest first.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items: { type: array, items: { $ref: "#/components/schemas/ApiToken" } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /users/{user_id}/api-tokens/{token_id}:
+    delete:
+      tags: [users]
+      operationId: revokeUserApiToken
+      summary: Revoke a personal API token of a user (admin, cookie session only).
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - $ref: "#/components/parameters/UserId"
+        - $ref: "#/components/parameters/ApiTokenId"
         - $ref: "#/components/parameters/CsrfHeader"
       responses:
         "204": { description: Revoked. }
@@ -2476,7 +2578,7 @@ paths:
       operationId: streamServerLogs
       summary: Live log lines as Server-Sent Events (admin).
       description: |
-        `text/event-stream`, same session cookie (no CSRF, GET). With `after=<seq>` buffered
+        `text/event-stream`, same session cookie or API token (no CSRF, GET). With `after=<seq>` buffered
         matching entries newer than `seq` are replayed first. Events:
 
         ```
@@ -2945,7 +3047,17 @@ components:
       type: apiKey
       in: cookie
       name: rdpanel_session
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: rdp_ + 40 base62 characters
+      description: Personal API token (see `/me/api-tokens` and docs/api.md).
   parameters:
+    ApiTokenId:
+      name: token_id
+      in: path
+      required: true
+      schema: { type: integer, format: int64 }
     RelayId:
       name: id
       in: path
@@ -3323,6 +3435,38 @@ components:
       additionalProperties: false
       properties:
         name: { type: string, minLength: 1, maxLength: 64 }
+    ApiToken:
+      type: object
+      description: A personal API token (metadata only, never the secret).
+      required: [id, name, prefix, scope, created_at, expires_at, last_used_at, last_used_ip, expired]
+      properties:
+        id: { type: integer, format: int64 }
+        name: { type: string, maxLength: 64 }
+        prefix: { type: string, description: "First characters of the token (`rdp_` + 6), for recognising it." }
+        scope: { type: string, enum: [read, write], description: "`read`: GET/HEAD only; `write`: full rights of the owner." }
+        created_at: { type: string, format: date-time }
+        expires_at: { type: [string, "null"], format: date-time, description: Null = never expires. }
+        last_used_at: { type: [string, "null"], format: date-time, description: Updated at most once a minute. }
+        last_used_ip: { type: [string, "null"] }
+        expired: { type: boolean }
+    ApiTokenCreated:
+      type: object
+      required: [api_token, token]
+      properties:
+        api_token: { $ref: "#/components/schemas/ApiToken" }
+        token: { type: string, description: "The secret (`rdp_...`). Shown only once; store it now." }
+    CreateApiTokenRequest:
+      type: object
+      additionalProperties: false
+      required: [name, scope]
+      properties:
+        name: { type: string, minLength: 1, maxLength: 64 }
+        scope: { type: string, enum: [read, write] }
+        expires_in_days:
+          type: [integer, "null"]
+          minimum: 1
+          maximum: 3650
+          description: Days until expiry; null or absent = never.
     Passkey:
       type: object
       required: [id, name, created_at, last_used_at, backup_eligible, synced, clone_warning, transports]

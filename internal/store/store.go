@@ -52,6 +52,8 @@ type Store struct {
 	// Passkeys (WebAuthn) for panel login.
 	WebAuthnCredentials *WebAuthnCredentials
 	WebAuthnChallenges  *WebAuthnChallenges
+	// APITokens are personal tokens for the admin API.
+	APITokens *APITokens
 }
 
 // Option configures a Store.
@@ -112,6 +114,7 @@ func build(d *db.DB, q db.Querier, o options) *Store {
 	s.PunchRequests = &PunchRequests{q: q, d: d, now: now}
 	s.WebAuthnCredentials = &WebAuthnCredentials{q: q, now: now}
 	s.WebAuthnChallenges = &WebAuthnChallenges{q: q, now: now}
+	s.APITokens = &APITokens{q: q, now: now}
 	return s
 }
 
