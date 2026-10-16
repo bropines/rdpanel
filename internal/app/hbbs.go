@@ -9,6 +9,7 @@ import (
 	"github.com/bropines/rustdesk-panel/internal/hbbs/control"
 	"github.com/bropines/rustdesk-panel/internal/hbbs/presence"
 	"github.com/bropines/rustdesk-panel/internal/hbbs/reconcile"
+	"github.com/bropines/rustdesk-panel/internal/hbbs/relaystats"
 )
 
 // HBBS groups the hbbs/hbbr integration. Fields are nil when the integration
@@ -19,6 +20,8 @@ type HBBS struct {
 	Presence   *presence.Poller
 	Control    *control.Client
 	Reconciler *reconcile.Reconciler
+	// RelayStats samples hbbr "usage" for the relay metrics.
+	RelayStats *relaystats.Poller
 }
 
 // initEvents creates the event bus (always available; publishing is cheap).
@@ -43,6 +46,12 @@ func (a *App) initHBBS() error {
 		return err
 	}
 	a.HBBS.Presence = p
+	if a.Config.HTTP.MetricsPerDevice {
+		if err := a.Registry.Register(p.DeviceCollector()); err != nil {
+			return err
+		}
+		log.Info("per-device presence metrics enabled (RDPANEL_METRICS_PER_DEVICE)")
+	}
 
 	ctl, err := control.New(control.Config{
 		HBBSAddr: cfg.AdminAddr(), HBBRAddr: cfg.RelayAdminAddr(), Log: log,
@@ -62,5 +71,13 @@ func (a *App) initHBBS() error {
 		return err
 	}
 	a.HBBS.Reconciler = r
+	rs, err := relaystats.New(relaystats.Config{
+		Source: ctl, Registerer: a.Registry, Log: log, Interval: cfg.ReconcileInterval,
+		Reachable: func() bool { return r.Status().HBBR.Reachable },
+	})
+	if err != nil {
+		return err
+	}
+	a.HBBS.RelayStats = rs
 	return nil
 }

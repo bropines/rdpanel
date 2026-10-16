@@ -11,6 +11,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/bropines/rustdesk-panel/internal/metrics"
 	"github.com/bropines/rustdesk-panel/internal/store"
 )
 
@@ -72,17 +73,20 @@ func (h *handler) auditDevice(ctx context.Context, id, uuid string) error {
 // record (nonce already seen) is acknowledged without storing it again, and a
 // failed write releases the nonce. Responses follow the 1.5.0 contract: 2xx
 // with an empty body = stored; 5xx = retry; other 4xx = dropped.
-func (h *handler) storeAudit(w http.ResponseWriter, r *http.Request, id, uuid, nonce string, write func(tx *store.Store) error) {
+func (h *handler) storeAudit(w http.ResponseWriter, r *http.Request, kind, id, uuid, nonce string, write func(tx *store.Store) error) {
 	ctx := r.Context()
 	if len(nonce) > maxNonceLen {
+		h.Telemetry.Audit(kind, metrics.AuditRejected)
 		writeError(w, http.StatusBadRequest, "Invalid nonce")
 		return
 	}
 	if err := h.auditDevice(ctx, id, uuid); err != nil {
 		if errors.Is(err, errAuditDevice) {
+			h.Telemetry.Audit(kind, metrics.AuditRejected)
 			writeError(w, http.StatusForbidden, "Unknown device or uuid mismatch")
 			return
 		}
+		h.Telemetry.Audit(kind, metrics.AuditError)
 		h.log.ErrorContext(ctx, "audit: load device", slog.Any("err", err))
 		internalError(w)
 		return
@@ -97,10 +101,12 @@ func (h *handler) storeAudit(w http.ResponseWriter, r *http.Request, id, uuid, n
 		return write(tx)
 	})
 	if err != nil {
+		h.Telemetry.Audit(kind, metrics.AuditError)
 		h.log.ErrorContext(ctx, "audit: store", slog.Any("err", err))
 		internalError(w)
 		return
 	}
+	h.Telemetry.Audit(kind, metrics.AuditStored)
 	writeEmpty(w)
 }
 
@@ -143,7 +149,7 @@ func (h *handler) auditConn(w http.ResponseWriter, r *http.Request) {
 	if req.Action != nil {
 		action = *req.Action
 	}
-	h.storeAudit(w, r, req.ID, req.UUID, req.Nonce, func(tx *store.Store) error {
+	h.storeAudit(w, r, metrics.AuditConn, req.ID, req.UUID, req.Nonce, func(tx *store.Store) error {
 		switch action {
 		case "new":
 			return tx.ConnectionAudits.Create(ctx, &store.ConnectionAudit{
@@ -267,7 +273,7 @@ func (h *handler) auditFile(w http.ResponseWriter, r *http.Request) {
 		Num  int64  `json:"num"`
 	}
 	_ = json.Unmarshal([]byte(info), &meta)
-	h.storeAudit(w, r, req.ID, req.UUID, req.Nonce, func(tx *store.Store) error {
+	h.storeAudit(w, r, metrics.AuditFile, req.ID, req.UUID, req.Nonce, func(tx *store.Store) error {
 		return tx.FileTransferAudits.Create(r.Context(), &store.FileTransferAudit{
 			DeviceID: req.ID, DeviceUUID: req.UUID, ControllerRustdeskID: clip(req.PeerID, maxIDLen),
 			ControllerName: clip(meta.Name, 255), ControllerIP: clip(meta.IP, 64), Direction: req.Type,
@@ -293,7 +299,7 @@ func (h *handler) auditAlarm(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "Invalid request")
 		return
 	}
-	h.storeAudit(w, r, req.ID, req.UUID, req.Nonce, func(tx *store.Store) error {
+	h.storeAudit(w, r, metrics.AuditAlarm, req.ID, req.UUID, req.Nonce, func(tx *store.Store) error {
 		return tx.AlarmAudits.Create(r.Context(), &store.AlarmAudit{
 			DeviceID: req.ID, DeviceUUID: req.UUID, AlarmType: req.Typ, ConnID: req.ConnID,
 			ConnAuditRef: clip(req.ConnAuditRef, 256), Info: auditInfo(req.Info),

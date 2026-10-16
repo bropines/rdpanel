@@ -81,6 +81,9 @@ type HTTPConfig struct {
 	RealIPHeader string `yaml:"real_ip_header"`
 	// MetricsAllow lists IPs/CIDRs (as resolved client IPs) allowed to scrape /metrics.
 	MetricsAllow []string `yaml:"metrics_allow"`
+	// MetricsPerDevice exports rdpanel_presence_device_online{id=...}, one
+	// series per device. Off by default: cardinality grows with the fleet.
+	MetricsPerDevice bool `yaml:"metrics_per_device"`
 
 	trustedProxies []netip.Prefix
 	metricsAllow   []netip.Prefix
@@ -234,6 +237,7 @@ func (c *Config) envVars() []envVar {
 		{"RDPANEL_TRUSTED_PROXIES", list(&c.HTTP.TrustedProxies)},
 		{"RDPANEL_REAL_IP_HEADER", str(&c.HTTP.RealIPHeader)},
 		{"RDPANEL_METRICS_ALLOW", list(&c.HTTP.MetricsAllow)},
+		{"RDPANEL_METRICS_PER_DEVICE", boolean(&c.HTTP.MetricsPerDevice)},
 		{"RDPANEL_HBBS_ID_SERVER", str(&c.HBBS.IDServer)},
 		{"RDPANEL_HBBS_RELAY_SERVER", str(&c.HBBS.RelayServer)},
 		{"RDPANEL_HBBS_PUBLIC_KEY_FILE", str(&c.HBBS.PublicKeyFile)},

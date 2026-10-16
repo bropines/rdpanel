@@ -16,6 +16,7 @@ import (
 	"github.com/bropines/rustdesk-panel/internal/crypto"
 	"github.com/bropines/rustdesk-panel/internal/httpx"
 	"github.com/bropines/rustdesk-panel/internal/loginlog"
+	"github.com/bropines/rustdesk-panel/internal/metrics"
 	"github.com/bropines/rustdesk-panel/internal/oidc"
 	"github.com/bropines/rustdesk-panel/internal/store"
 )
@@ -71,6 +72,13 @@ func (c *authCore) record(ctx context.Context, r *http.Request, ev loginlog.Even
 	ev.IP, ev.UserAgent = httpx.ClientIPString(r), r.UserAgent()
 	if err := c.events.Record(ctx, ev); err != nil {
 		c.d.Log.WarnContext(ctx, "record login event", slog.Any("err", err))
+	}
+	if !ev.Success {
+		factor := ev.Method
+		if strings.HasPrefix(ev.FailureReason, "totp") {
+			factor = metrics.MethodTOTP
+		}
+		c.d.Telemetry.Login(metrics.SurfacePanel, factor, metrics.ResultFailure)
 	}
 }
 
@@ -166,6 +174,7 @@ func (c *authCore) handleLogin(w http.ResponseWriter, r *http.Request) {
 	}
 	ipKey, uKey := limitIP+httpx.ClientIPString(r), userKey(req.Username)
 	if ok, wait := c.allow(ipKey, uKey); !ok {
+		c.d.Telemetry.Login(metrics.SurfacePanel, metrics.MethodPassword, metrics.ResultRateLimited)
 		rateLimited(w, wait)
 		return
 	}
@@ -248,11 +257,17 @@ func (c *authCore) handleLogin(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	c.completeLogin(w, r, user, loginlog.MethodPassword, ipKey, uKey)
+	factor := metrics.MethodPassword
+	if enrolled {
+		factor = metrics.MethodTOTP
+	}
+	c.completeLogin(w, r, user, loginlog.MethodPassword, factor, ipKey, uKey)
 }
 
 // completeLogin issues a full session and writes Me (inside loginResponse).
-func (c *authCore) completeLogin(w http.ResponseWriter, r *http.Request, user *store.User, method string, keys ...string) {
+// method is stored in login_events; factor (the step that completed the
+// login: password or totp) labels the login metric.
+func (c *authCore) completeLogin(w http.ResponseWriter, r *http.Request, user *store.User, method, factor string, keys ...string) {
 	ctx := r.Context()
 	tok, csrf, err := c.sess.create(ctx, w, r, user, false)
 	if err != nil {
@@ -264,6 +279,7 @@ func (c *authCore) completeLogin(w http.ResponseWriter, r *http.Request, user *s
 		c.d.Log.WarnContext(ctx, "touch last login", slog.Any("err", err))
 	}
 	c.record(ctx, r, loginlog.Event{UserID: &user.ID, TokenID: &tok.ID, Method: method, Success: true})
+	c.d.Telemetry.Login(metrics.SurfacePanel, factor, metrics.ResultSuccess)
 	me, err := c.me(ctx, user, csrf)
 	if err != nil {
 		internalError(w)
@@ -291,6 +307,7 @@ func (c *authCore) handleMFA(w http.ResponseWriter, r *http.Request) {
 	uKey := userKey(s.User.Username)
 	ipKey := limitIP + httpx.ClientIPString(r)
 	if ok, wait := c.allow(ipKey, uKey); !ok {
+		c.d.Telemetry.Login(metrics.SurfacePanel, metrics.MethodTOTP, metrics.ResultRateLimited)
 		rateLimited(w, wait)
 		return
 	}
@@ -307,7 +324,7 @@ func (c *authCore) handleMFA(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// sess.create revokes the pending session (rotation).
-	c.completeLogin(w, r, s.User, loginlog.MethodPassword, ipKey, uKey)
+	c.completeLogin(w, r, s.User, loginlog.MethodPassword, metrics.MethodTOTP, ipKey, uKey)
 }
 
 func (c *authCore) handleLogout(w http.ResponseWriter, r *http.Request) {

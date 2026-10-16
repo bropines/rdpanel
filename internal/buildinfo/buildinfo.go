@@ -7,8 +7,10 @@ package buildinfo
 
 import (
 	"fmt"
+	"os"
 	"runtime"
 	"runtime/debug"
+	"strings"
 )
 
 // Link-time variables.
@@ -17,6 +19,16 @@ var (
 	Commit  = ""
 	Date    = ""
 )
+
+// HBBRefEnv names the environment variable carrying the hbbs/hbbr source ref
+// of the bundled servers. The all-in-one image sets it from its HBB_REF build
+// argument (rdpanel itself is built in a stage that does not know the ref).
+const HBBRefEnv = "RDPANEL_HBB_REF"
+
+// HBBRef returns the hbbs/hbbr source ref ("" when unknown).
+func HBBRef() string {
+	return strings.TrimSpace(os.Getenv(HBBRefEnv))
+}
 
 // Info is the resolved build metadata.
 type Info struct {

@@ -18,6 +18,7 @@ import (
 	"github.com/bropines/rustdesk-panel/internal/crypto"
 	"github.com/bropines/rustdesk-panel/internal/httpx"
 	"github.com/bropines/rustdesk-panel/internal/loginlog"
+	"github.com/bropines/rustdesk-panel/internal/metrics"
 	"github.com/bropines/rustdesk-panel/internal/store"
 )
 
@@ -458,4 +459,12 @@ func (s *Service) recordEvent(ctx context.Context, st *store.OAuthState, userID,
 	if err := s.events.Record(ctx, ev); err != nil {
 		s.log.WarnContext(ctx, "oidc: record login event", slog.Any("err", err))
 	}
+	surface, result := metrics.SurfacePanel, metrics.ResultFailure
+	if st.Flow == store.OAuthFlowClient {
+		surface = metrics.SurfaceClient
+	}
+	if ok {
+		result = metrics.ResultSuccess
+	}
+	s.telemetry.Login(surface, metrics.MethodOIDC, result)
 }

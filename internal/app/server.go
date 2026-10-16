@@ -55,6 +55,7 @@ func (a *App) Handler() http.Handler {
 		adminDeps := adminapi.Deps{
 			Log: a.Log.With("component", "adminapi"), Config: cfg, Store: a.Store, AEAD: a.AEAD,
 			JWT: a.JWT, Hasher: a.Hasher, Limiter: a.Limiter, Metrics: a.Registry, TOTP: a.TOTP,
+			Telemetry:  a.Telemetry,
 			DeviceRate: adminapi.DeviceRateInfo{Rate: clientapi.DefaultDeviceRate.Rate, Burst: clientapi.DefaultDeviceRate.Burst},
 		}
 		a.wireAdminDeps(&adminDeps)
@@ -63,6 +64,7 @@ func (a *App) Handler() http.Handler {
 			Store: a.Store, AEAD: a.AEAD, JWT: a.JWT, Log: a.Log.With("component", "oidc"),
 			PublicURL: cfg.PublicURL, AdminURL: cfg.AdminURL, TokenLifetime: cfg.Auth.TokenLifetime, JWTLifetime: cfg.Auth.JWTLifetime,
 			SecureCookies: cfg.AdminHTTPS(), WebLogin: adminapi.OIDCWebLogin(adminDeps),
+			Telemetry: a.Telemetry,
 		})
 		adminDeps.OIDC = oidcSvc
 		api.Route("/v1/admin", func(r chi.Router) {
@@ -85,7 +87,7 @@ func (a *App) Handler() http.Handler {
 		clientapi.Register(api, clientapi.Deps{
 			Log: a.Log.With("component", "clientapi"), Config: cfg, Store: a.Store, AEAD: a.AEAD,
 			JWT: a.JWT, Hasher: a.Hasher, Limiter: a.Limiter, Metrics: a.Registry, Kicks: a.Kicks,
-			TOTP: clientTOTP{a.TOTP},
+			TOTP: clientTOTP{a.TOTP}, Telemetry: a.Telemetry,
 		})
 	})
 

@@ -13,12 +13,14 @@ import (
 
 	"github.com/bropines/rustdesk-panel/internal/adminapi"
 	"github.com/bropines/rustdesk-panel/internal/auth"
+	"github.com/bropines/rustdesk-panel/internal/buildinfo"
 	"github.com/bropines/rustdesk-panel/internal/clientapi"
 	"github.com/bropines/rustdesk-panel/internal/config"
 	"github.com/bropines/rustdesk-panel/internal/crypto"
 	"github.com/bropines/rustdesk-panel/internal/db"
 	"github.com/bropines/rustdesk-panel/internal/events"
 	"github.com/bropines/rustdesk-panel/internal/httpx"
+	"github.com/bropines/rustdesk-panel/internal/metrics"
 	"github.com/bropines/rustdesk-panel/internal/store"
 	"github.com/bropines/rustdesk-panel/internal/web"
 	webdist "github.com/bropines/rustdesk-panel/web"
@@ -53,6 +55,8 @@ type App struct {
 	// TOTP verifies second factors; it implements clientapi's TOTPVerifier
 	// (Enrolled/Verify) for the client /api/login tfa step.
 	TOTP *adminapi.TOTPService
+	// Telemetry holds the login / client-token / audit counters.
+	Telemetry *metrics.Panel
 
 	httpMetrics *httpx.Metrics
 }
@@ -79,6 +83,8 @@ func New(ctx context.Context, cfg *config.Config, log *slog.Logger) (*App, error
 		collectors.NewProcessCollector(collectors.ProcessCollectorOpts{}),
 	)
 	a.httpMetrics = httpx.NewMetrics(a.Registry)
+	a.Telemetry = metrics.New(a.Registry)
+	metrics.RegisterBuildInfo(a.Registry, buildinfo.Get(), buildinfo.HBBRef())
 	a.initEvents()
 	if err := a.initHBBS(); err != nil {
 		_ = a.DB.Close()
