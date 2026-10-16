@@ -82,6 +82,53 @@ func TestSysinfoPresetsAndOwnerGuess(t *testing.T) {
 	}
 }
 
+// A device registered by `rustdesk --deploy` (no sysinfo yet) gets the
+// deployment presets on its first sysinfo, including the address book ones.
+func TestSysinfoPresetsAfterDeploy(t *testing.T) {
+	e := newEnv(t)
+	ctx := context.Background()
+	admin := e.user("admin", "pw-admin-123", func(u *store.User) { u.Role = store.RoleAdmin })
+	bob := e.user("bob", "pw-bob-12345", nil)
+	g := &store.DeviceGroup{Name: "Kiosks"}
+	_ = e.st.DeviceGroups.Create(ctx, g)
+	book := &store.AddressBook{OwnerUserID: admin.ID, Name: "Fleet"}
+	_ = e.st.AddressBooks.Create(ctx, book)
+	if err := e.st.Devices.Create(ctx, &store.Device{RustdeskID: "555000", UUID: "dQ=="}); err != nil {
+		t.Fatal(err)
+	}
+	e.mustDo("POST", "/api/sysinfo", `{"id":"555000","uuid":"dQ==","hostname":"KIOSK-1","os":"linux / Debian 12",
+		"version":"1.4.6","preset-user-name":"bob","preset-device-group-name":"Kiosks","preset-note":"lobby",
+		"preset-strategy-name":"default","preset-address-book-name":"fleet","preset-address-book-tag":"lobby",
+		"preset-address-book-alias":"Kiosk 1","preset-address-book-password":"pw","preset-address-book-note":"n",
+		"some-future-key":{"nested":[1,2]}}`, "", 200)
+	d, _ := e.st.Devices.GetByRustdeskID(ctx, "555000")
+	if d.OwnerUserID == nil || *d.OwnerUserID != bob.ID || d.DeviceGroupID == nil || *d.DeviceGroupID != g.ID ||
+		d.Note != "lobby" || d.Hostname != "KIOSK-1" || d.SysinfoAt == nil {
+		t.Fatalf("presets after deploy %+v", d)
+	}
+	en, err := e.st.AddressBooks.GetEntry(ctx, book.ID, "555000")
+	if err != nil || en.Alias != "Kiosk 1" || en.Password != "pw" || en.Note != "n" || len(en.Tags) != 1 ||
+		en.Tags[0] != "lobby" || en.Hostname != "KIOSK-1" {
+		t.Fatalf("ab entry %+v %v", en, err)
+	}
+	// Later uploads do not re-apply presets.
+	_, _ = e.st.AddressBooks.DeleteEntries(ctx, book.ID, []string{"555000"})
+	e.mustDo("POST", "/api/sysinfo", `{"id":"555000","uuid":"dQ==","preset-address-book-name":"fleet","preset-note":"x"}`, "", 200)
+	if _, err := e.st.AddressBooks.GetEntry(ctx, book.ID, "555000"); !errors.Is(err, store.ErrNotFound) {
+		t.Fatalf("address book preset re-applied: %v", err)
+	}
+	// Presets only fill unset fields; an unknown book is skipped.
+	other := &store.DeviceGroup{Name: "Other"}
+	_ = e.st.DeviceGroups.Create(ctx, other)
+	_ = e.st.Devices.Create(ctx, &store.Device{RustdeskID: "555001", UUID: "dQ==", DeviceGroupID: &other.ID, Note: "set"})
+	e.mustDo("POST", "/api/sysinfo", `{"id":"555001","uuid":"dQ==","preset-device-group-name":"Kiosks","preset-note":"lobby",
+		"preset-address-book-name":"missing"}`, "", 200)
+	d, _ = e.st.Devices.GetByRustdeskID(ctx, "555001")
+	if d.DeviceGroupID == nil || *d.DeviceGroupID != other.ID || d.Note != "set" {
+		t.Fatalf("preset overwrote admin fields %+v", d)
+	}
+}
+
 func TestSysinfoVer(t *testing.T) {
 	e := newEnv(t)
 	r := e.mustDo("POST", "/api/sysinfo_ver", "", "", 200)
@@ -136,6 +183,10 @@ func TestHeartbeat(t *testing.T) {
 	e.clk.advance(time.Second)
 	e.device("123456789", "dXVpZA==")
 	e.golden("heartbeat_empty", e.do("POST", "/api/heartbeat", `{"id":"123456789","uuid":"dXVpZA==","modified_at":1700000000}`, ""), 200)
+
+	// Unknown keys from newer clients are ignored.
+	e.golden("heartbeat_empty", e.do("POST", "/api/heartbeat", `{"id":"123456789","uuid":"dXVpZA==","modified_at":1700000000,
+		"ver":1005001,"future":{"x":[1]}}`, ""), 200)
 
 	e.golden("invalid_request", e.do("POST", "/api/heartbeat", `{"uuid":"x"}`, ""), 400)
 }

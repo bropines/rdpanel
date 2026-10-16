@@ -149,6 +149,30 @@ func TestLoginTOTP(t *testing.T) {
 
 func mustJSON(v any) []byte { b, _ := json.Marshal(v); return b }
 
+// Request shapes of the other official callers (client 1.4.6 .. master):
+// Sciter sends no autoLogin; the web client sends deviceInfo.name = null; any
+// key the server does not know is ignored.
+func TestLoginClientShapes(t *testing.T) {
+	e := newEnv(t)
+	e.user("dave", "pw-dave-1234", nil)
+	for _, body := range []string{
+		// Sciter (src/ui/index.tis).
+		`{"username":"dave","password":"pw-dave-1234","id":"123456789","uuid":"dXVpZA==","type":"account",
+			"deviceInfo":{"os":"windows","type":"client","name":"PC"}}`,
+		// Flutter web (bridge.dart mainGetLoginDeviceInfo) plus unknown keys.
+		`{"username":"dave","password":"pw-dave-1234","autoLogin":true,"type":"account","trustThisDevice":true,
+			"deviceInfo":{"os":"Mozilla/5.0, Netscape 5.0 (Win32)","type":"Web client","name":null},"future":{"a":[1]}}`,
+		// No type at all (very old clients).
+		`{"username":"dave","password":"pw-dave-1234"}`,
+	} {
+		r := e.mustDo("POST", "/api/login", body, "", 200)
+		if !strings.Contains(r.body, `"type":"access_token"`) {
+			t.Fatalf("%s: %s", body, r.body)
+		}
+	}
+	e.golden("login_unsupported_type", e.do("POST", "/api/login", `{"username":"dave","type":"sms_code"}`, ""), 400)
+}
+
 func TestCurrentUser(t *testing.T) {
 	e := newEnv(t)
 	ctx := context.Background()
