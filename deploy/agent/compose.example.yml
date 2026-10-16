@@ -4,7 +4,9 @@
 # from the panel and keeps an outbound WebSocket session to the panel.
 #
 #   1. Panel: Server -> Relays -> Add relay -> Relay agent. Copy the one-time
-#      token (valid 1 h) or the whole generated compose snippet.
+#      token (valid 1 h) or the whole generated compose snippet. Simpler: the
+#      dialog's one-line installer (curl .../agent/install.sh | sudo sh -s -- --token ...)
+#      writes this file to /opt/rdpanel-agent and starts it.
 #   2. Relay host:
 #        mkdir relay && cd relay && cp .../compose.example.yml compose.yml   # edit
 #        docker compose up -d && docker compose logs -f
@@ -13,7 +15,8 @@
 #
 # Only TCP 21117 (relay) must be reachable from clients. No inbound management
 # port: the agent dials out to RDPANEL_AGENT_PANEL_URL (the public client-API
-# host; the reverse proxy must pass /agent/v1/ there, WebSocket included).
+# host; the reverse proxy must pass /agent/v1/ there, WebSocket included,
+# and /agent/install.sh for the one-line installer).
 # Never publish or proxy the hbbr port from loopback: its admin channel
 # answers loopback peers.
 services:

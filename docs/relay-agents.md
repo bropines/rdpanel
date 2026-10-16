@@ -79,41 +79,72 @@ management port, only the relay port (TCP 21117) for clients.
 
 1. **Panel:** Server → Relays → *Add relay* → *Relay agent*: name, public host
    (`relay-de.example.com[:21117]` as clients will reach it), region, weight.
-   The panel shows a **one-time enrollment token** (valid 1 hour, stored only as
-   a sha256) and a ready-made compose file. The dialog follows the agent live:
-   enrolled → approved → connected → probe passed.
-2. **Relay host** (Docker with host networking; example:
-   [`deploy/agent/compose.example.yml`](../deploy/agent/compose.example.yml)):
+   The dialog shows a **one-time enrollment token** (single use, valid 1 hour,
+   stored only as a sha256) inside ready-to-copy commands, and follows the agent
+   live: enrolled → approved → connected → probe passed.
+2. **Relay host** (Linux with Docker and the Compose plugin), as root:
 
-   ```yaml
-   services:
-     relay:
-       image: ghcr.io/bropines/rdpanel:latest
-       network_mode: host        # hbbr must see real client IPs
-       restart: unless-stopped
-       environment:
-         RDPANEL_MODE: agent
-         RDPANEL_AGENT_PANEL_URL: https://desk-api.example.com
-         RDPANEL_AGENT_ENROLL_TOKEN: "<one-time token>"
-       volumes:
-         - ./relay-data:/data
+   ```sh
+   curl -fsSL https://desk-api.example.com/agent/install.sh | sudo sh -s -- --token <TOKEN>
    ```
 
-   `docker compose up -d`. The agent creates its identity key
-   (`/data/agent.key`), enrolls, and connects. After enrollment the token is no
-   longer used, so it can stay in the file.
+   That's it. The installer writes `/opt/rdpanel-agent/compose.yml` (host
+   networking, the panel's image version), puts the token into
+   `/opt/rdpanel-agent/agent.env` (mode 600, not on a command line), keeps the
+   agent identity in `/opt/rdpanel-agent/data`, runs `docker compose up -d` and
+   waits until the container is healthy.
 3. **Panel:** *Approve* the relay (Relays tab, row menu). New agents need an
    admin's approval by default ("Approve new agents" on the Relays tab; turn it
    off only if every relay host is yours and tokens never leave your hands).
    Only an approved agent gets its configuration and starts hbbr. It joins the
    relay list as soon as the probe passes.
 
-### Reverse proxy: expose `/agent/v1/` on the public host
+Installer options (`sh -s -- --help`):
+
+| Option | Default | |
+|---|---|---|
+| `--token TOKEN` | — | enrollment token; needed for the first install and after *New enrollment token* |
+| `--panel URL` | the panel's `RDPANEL_PUBLIC_URL` | panel public URL |
+| `--dir DIR` | `/opt/rdpanel-agent` | install directory |
+| `--image IMAGE` | `ghcr.io/bropines/rdpanel:<panel version>` (`latest` for dev builds) | container image |
+| `--port PORT` | `21117` | relay port (`RDPANEL_AGENT_RELAY_PORT`) |
+| `--name NAME` | host name | name reported to the panel (`RDPANEL_AGENT_HOSTNAME`) |
+| `--install-docker` | off | install Docker from the official `https://get.docker.com` script when it is missing (otherwise the installer only says how) |
+| `--uninstall [--purge]` | | stop and remove the container; `--purge` also deletes the directory and the agent identity |
+
+Re-running the one-liner (the token may be left out) updates the image and
+keeps the identity, port and name. The panel fills in the defaults when it
+serves the script; the script itself is static and contains no secrets.
+
+**Without the installer**, the dialog's other tabs give the same setup as a
+plain `docker run` command or as a compose file (see also
+[`deploy/agent/compose.example.yml`](../deploy/agent/compose.example.yml)):
+
+```yaml
+services:
+  relay:
+    image: ghcr.io/bropines/rdpanel:latest
+    network_mode: host        # hbbr must see real client IPs
+    restart: unless-stopped
+    environment:
+      RDPANEL_MODE: agent
+      RDPANEL_AGENT_PANEL_URL: https://desk-api.example.com
+      RDPANEL_AGENT_ENROLL_TOKEN: "<one-time token>"
+    volumes:
+      - ./relay-data:/data
+```
+
+The agent creates its identity key (`/data/agent.key`), enrolls, and connects.
+After enrollment the token is no longer used, so it can stay in the file.
+
+### Reverse proxy: expose `/agent/v1/` and `/agent/install.sh` on the public host
 
 Agents talk to `<RDPANEL_AGENT_PANEL_URL>/agent/v1/enroll` (POST) and
-`/agent/v1/connect` (WebSocket). Use the **public client-API host** (the one in
+`/agent/v1/connect` (WebSocket); the installer is downloaded from
+`/agent/install.sh`. Use the **public client-API host** (the one in
 `RDPANEL_PUBLIC_URL`); the admin host can stay internal. Next to the
-`location /api/` block of [docs/deploy.md](deploy.md#split-hosts-public-client-api--internal-admin-panel):
+`location /api/` block of [docs/deploy.md](deploy.md#split-hosts-public-client-api--internal-admin-panel)
+(nginx and Angie):
 
 ```nginx
 # Public host: relay agents (enrollment + WebSocket session). No cookies, no
@@ -123,6 +154,10 @@ location ^~ /agent/v1/ {
     proxy_set_header Upgrade $http_upgrade;
     proxy_set_header Connection "upgrade";
     proxy_read_timeout 1h;                 # long-lived session (pinged every 30 s)
+}
+# The relay agent installer (static script, no secrets).
+location = /agent/install.sh {
+    include rdpanel-proxy.conf;
 }
 ```
 
@@ -192,7 +227,7 @@ Static relays cannot be configured: their admin channel only answers loopback.
 | *Drain* | out of hbbs' list, running sessions continue; *Enable* brings it back |
 | *Disable* | out of the list and, for an agent, hbbr is stopped |
 | *Probe now* | immediate end-to-end probe |
-| *New enrollment token* | the agent's key stops working and it is disconnected; put the new token into `RDPANEL_AGENT_ENROLL_TOKEN` and restart the agent: it re-enrolls by itself (its old identity is dropped when the panel refuses it) |
+| *New enrollment token* | the agent's key stops working and it is disconnected; re-run the installer with `--token <new>` (or put the new token into `RDPANEL_AGENT_ENROLL_TOKEN` and restart the agent): it re-enrolls by itself (its old identity is dropped when the panel refuses it) |
 | *Revoke agent* | the key stops working, the session is closed and the agent stops hbbr; a new token re-enables the relay |
 | Delete | removes a static or agent relay; the local relay can only be disabled |
 | hbbs key rotation | the panel sends the new public key; agents restart hbbr with it (short relay outage) |

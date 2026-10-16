@@ -138,6 +138,7 @@ server {
     location ^~ /api/v1/ { return 404; }               # panel API + SSE: internal only
     location = /api/oidc/callback { include rdpanel-proxy.conf; }
     location /api/ { include rdpanel-proxy.conf; }      # RustDesk client API
+    # Relay agents: /agent/v1/ (WebSocket) and /agent/install.sh, see relay-agents.md.
     location = /metrics { return 404; }
     location / { return 302 https://desk-admin.internal.example.com$request_uri; }
 }
