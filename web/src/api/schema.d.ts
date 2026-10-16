@@ -122,6 +122,97 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/auth/passkey/begin": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Start a usernameless passkey sign-in (discoverable credential, user verification required).
+         * @description Returns request options without `allowCredentials`; the authenticator picks
+         *     the account. 409 `passkeys_unavailable` when no relying party is configured;
+         *     429 when the IP is backing off after failures (shared with password login)
+         *     or too many sign-ins are pending.
+         */
+        post: operations["beginPasskeyLogin"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/passkey/finish": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Complete a usernameless passkey sign-in.
+         * @description Verifies the assertion (origin, RP id, signature, user verification, user
+         *     handle) and issues a full session: a verified passkey satisfies 2FA by
+         *     itself (`mfa_required` is always false). A signature counter that did not
+         *     advance flags the passkey as possibly cloned (`clone_warning`) and the
+         *     sign-in is refused until the user removes it. Failures answer 401
+         *     `passkey_failed`, are logged as `passkey` login events and count toward
+         *     the per-IP/per-user backoff of password login.
+         */
+        post: operations["finishPasskeyLogin"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/mfa/passkey/begin": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Start a passkey second factor for the pending login (instead of TOTP).
+         * @description Requires the pending session of `/auth/login` or an OIDC login. Lists the
+         *     user's passkeys in `allowCredentials` (user verification preferred).
+         *     409 `no_passkeys` when the user has none.
+         */
+        post: operations["beginPasskeyMfa"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/mfa/passkey/finish": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Complete the pending login with a passkey assertion. Rotates the session.
+         * @description The ceremony is bound to the pending session that started it.
+         */
+        post: operations["finishPasskeyMfa"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/auth/oidc/{slug}/start": {
         parameters: {
             query?: never;
@@ -408,6 +499,85 @@ export interface paths {
         options?: never;
         head?: never;
         patch?: never;
+        trace?: never;
+    };
+    "/me/security/passkeys": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** My passkeys (panel sign-in). */
+        get: operations["listMyPasskeys"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/security/passkeys/register/begin": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Start adding a passkey (requires re-authentication).
+         * @description Re-authenticate with the password or a TOTP/recovery code (401
+         *     `reauth_failed`). Accounts with neither (OIDC-only) may add a passkey only
+         *     within 10 minutes of signing in (401 `reauth_required` otherwise).
+         *     Requests a discoverable credential; already registered authenticators are
+         *     excluded. 409 `passkey_limit` beyond 20 passkeys, `passkeys_unavailable`
+         *     when no relying party is configured.
+         */
+        post: operations["beginPasskeyRegistration"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/security/passkeys/register/finish": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Store the new passkey (ceremony bound to the session that began it). */
+        post: operations["finishPasskeyRegistration"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/security/passkeys/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Remove one of my passkeys. */
+        delete: operations["deleteMyPasskey"];
+        options?: never;
+        head?: never;
+        /** Rename one of my passkeys. */
+        patch: operations["renameMyPasskey"];
         trace?: never;
     };
     "/identity-providers": {
@@ -829,6 +999,40 @@ export interface paths {
         post?: never;
         /** Unlink an IdP identity from a user (admin). 409 `last_login_method` if it is the only way to log in. */
         delete: operations["unlinkUserIdentity"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/users/{user_id}/passkeys": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Passkeys of a user (admin). */
+        get: operations["listUserPasskeys"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/users/{user_id}/passkeys/{passkey_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Revoke (delete) a passkey of a user (admin). */
+        delete: operations["revokeUserPasskey"];
         options?: never;
         head?: never;
         patch?: never;
@@ -1515,8 +1719,10 @@ export interface components {
             totp_code?: string;
         };
         LoginResponse: {
-            /** @description True when the password was accepted and `POST /auth/mfa` must follow (a 5 min pending session was issued). */
+            /** @description True when the password was accepted and `POST /auth/mfa` (or `/auth/mfa/passkey/*`) must follow (a 5 min pending session was issued). */
             mfa_required: boolean;
+            /** @description Usable second factors when `mfa_required` (`passkey` when the user has passkeys). */
+            mfa_methods?: ("totp" | "passkey")[];
             me?: components["schemas"]["Me"];
         };
         CodeRequest: {
@@ -1564,6 +1770,56 @@ export interface components {
             totp_required: boolean;
             must_enroll_totp: boolean;
             recovery_codes_remaining: number;
+            /** @description The server has a WebAuthn relying party configured. */
+            passkeys_available: boolean;
+            passkey_count: number;
+        };
+        PasskeyCeremony: {
+            /** @description Opaque single-use id to post back to the matching finish call. */
+            ceremony_id: string;
+            /**
+             * @description JSON form of `CredentialCreationOptions` / `CredentialRequestOptions`:
+             *     `{publicKey: {...}, mediation?}`, binary members (challenge, user.id,
+             *     credential ids) base64url without padding.
+             */
+            options: {
+                [key: string]: unknown;
+            };
+        };
+        PasskeyFinishRequest: {
+            ceremony_id: string;
+            /** @description `PublicKeyCredential.toJSON()` (id, rawId, type, response with base64url members). */
+            credential: {
+                [key: string]: unknown;
+            };
+        };
+        PasskeyRegisterFinishRequest: {
+            ceremony_id: string;
+            /** @description Display name ("Passkey" when empty). */
+            name?: string;
+            /** @description `PublicKeyCredential.toJSON()` of the attestation. */
+            credential: {
+                [key: string]: unknown;
+            };
+        };
+        PasskeyRename: {
+            name: string;
+        };
+        Passkey: {
+            /** Format: int64 */
+            id: number;
+            name: string;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            last_used_at: string | null;
+            /** @description Multi-device (syncable) credential. */
+            backup_eligible: boolean;
+            /** @description The credential is backed up / synced (backup state flag). */
+            synced: boolean;
+            /** @description The signature counter went backwards; sign-in with it is refused. */
+            clone_warning: boolean;
+            transports: string[];
         };
         TotpEnrollment: {
             /** @description Base32 seed for manual entry. */
@@ -2280,7 +2536,7 @@ export interface components {
             items: components["schemas"]["AlarmAudit"][];
         };
         /** @enum {string} */
-        LoginMethod: "password" | "oidc" | "webauth";
+        LoginMethod: "password" | "oidc" | "webauth" | "passkey";
         LoginEvent: {
             /** Format: int64 */
             id: number;
@@ -2818,9 +3074,127 @@ export interface operations {
                 content: {
                     "application/json": {
                         items: components["schemas"]["LoginProvider"][];
+                        /** @description "Sign in with a passkey" is available (WebAuthn relying party configured). */
+                        passkey: boolean;
                     };
                 };
             };
+        };
+    };
+    beginPasskeyLogin: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Must equal the rdpanel_csrf cookie. */
+                "X-CSRF-Token": components["parameters"]["CsrfHeader"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Ceremony. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PasskeyCeremony"];
+                };
+            };
+            403: components["responses"]["Forbidden"];
+            409: components["responses"]["Conflict"];
+            429: components["responses"]["RateLimited"];
+        };
+    };
+    finishPasskeyLogin: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Must equal the rdpanel_csrf cookie. */
+                "X-CSRF-Token": components["parameters"]["CsrfHeader"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PasskeyFinishRequest"];
+            };
+        };
+        responses: {
+            /** @description Logged in. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LoginResponse"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            409: components["responses"]["Conflict"];
+            429: components["responses"]["RateLimited"];
+        };
+    };
+    beginPasskeyMfa: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Must equal the rdpanel_csrf cookie. */
+                "X-CSRF-Token": components["parameters"]["CsrfHeader"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Ceremony. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PasskeyCeremony"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    finishPasskeyMfa: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Must equal the rdpanel_csrf cookie. */
+                "X-CSRF-Token": components["parameters"]["CsrfHeader"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PasskeyFinishRequest"];
+            };
+        };
+        responses: {
+            /** @description Logged in. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LoginResponse"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            409: components["responses"]["Conflict"];
+            429: components["responses"]["RateLimited"];
         };
     };
     startOidcLogin: {
@@ -3224,6 +3598,146 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
+        };
+    };
+    listMyPasskeys: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Passkeys, oldest first. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        items: components["schemas"]["Passkey"][];
+                    };
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+        };
+    };
+    beginPasskeyRegistration: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Must equal the rdpanel_csrf cookie. */
+                "X-CSRF-Token": components["parameters"]["CsrfHeader"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["ReauthRequest"];
+            };
+        };
+        responses: {
+            /** @description Ceremony. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PasskeyCeremony"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            409: components["responses"]["Conflict"];
+            429: components["responses"]["RateLimited"];
+        };
+    };
+    finishPasskeyRegistration: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Must equal the rdpanel_csrf cookie. */
+                "X-CSRF-Token": components["parameters"]["CsrfHeader"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PasskeyRegisterFinishRequest"];
+            };
+        };
+        responses: {
+            /** @description Added. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Passkey"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["Unauthorized"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    deleteMyPasskey: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Must equal the rdpanel_csrf cookie. */
+                "X-CSRF-Token": components["parameters"]["CsrfHeader"];
+            };
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Removed. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    renameMyPasskey: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Must equal the rdpanel_csrf cookie. */
+                "X-CSRF-Token": components["parameters"]["CsrfHeader"];
+            };
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PasskeyRename"];
+            };
+        };
+        responses: {
+            /** @description Renamed. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Passkey"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
         };
     };
     listIdentityProviders: {
@@ -4095,6 +4609,60 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
+        };
+    };
+    listUserPasskeys: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                user_id: components["parameters"]["UserId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Passkeys. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        items: components["schemas"]["Passkey"][];
+                    };
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    revokeUserPasskey: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Must equal the rdpanel_csrf cookie. */
+                "X-CSRF-Token": components["parameters"]["CsrfHeader"];
+            };
+            path: {
+                user_id: components["parameters"]["UserId"];
+                passkey_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Revoked. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
         };
     };
     listUserGroups: {

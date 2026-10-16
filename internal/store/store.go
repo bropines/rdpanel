@@ -49,6 +49,9 @@ type Store struct {
 	RecoveryCodes     *RecoveryCodes
 	// PunchRequests holds hbbs punch requests collected by the panel (stream B2b).
 	PunchRequests *PunchRequests
+	// Passkeys (WebAuthn) for panel login.
+	WebAuthnCredentials *WebAuthnCredentials
+	WebAuthnChallenges  *WebAuthnChallenges
 }
 
 // Option configures a Store.
@@ -107,6 +110,8 @@ func build(d *db.DB, q db.Querier, o options) *Store {
 	s.TOTPSecrets = &TOTPSecrets{q: q, now: now}
 	s.RecoveryCodes = &RecoveryCodes{q: q, now: now}
 	s.PunchRequests = &PunchRequests{q: q, d: d, now: now}
+	s.WebAuthnCredentials = &WebAuthnCredentials{q: q, now: now}
+	s.WebAuthnChallenges = &WebAuthnChallenges{q: q, now: now}
 	return s
 }
 

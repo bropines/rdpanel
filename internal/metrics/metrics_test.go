@@ -41,6 +41,10 @@ func TestCountersAndLabelSanitising(t *testing.T) {
 	if v := testutil.ToFloat64(p.logins.WithLabelValues(SurfacePanel, MethodOIDC, ResultSuccess)); v != 0 {
 		t.Fatalf("panel oidc = %v", v)
 	}
+	p.Login(SurfacePanel, MethodPasskey, ResultSuccess)
+	if v := testutil.ToFloat64(p.logins.WithLabelValues(SurfacePanel, MethodPasskey, ResultSuccess)); v != 1 {
+		t.Fatalf("panel passkey = %v", v)
+	}
 }
 
 func TestBuildInfo(t *testing.T) {

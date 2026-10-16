@@ -99,7 +99,13 @@
     "server_unavailable": "hbbs/hbbr is not reachable right now.",
     "internal": "Server error. Please try again.",
     "invalid_password": "The password is wrong.",
-    "totp_invalid": "The code is wrong or expired."
+    "totp_invalid": "The code is wrong or expired.",
+    "passkey_failed": "The passkey was not accepted. Please try again.",
+    "passkeys_unavailable": "Passkeys are not configured on this server.",
+    "no_passkeys": "No passkey is registered for this account.",
+    "passkey_limit": "You have too many passkeys. Remove one first.",
+    "reauth_failed": "The password or code is wrong.",
+    "reauth_required": "For your security, sign in again and retry."
   },
   "validation": {
     "required": "Required",
@@ -169,7 +175,12 @@
       "ambiguous": "Several accounts use this email address; ask an administrator to link your identity.",
       "already_linked": "This identity is already linked to another account, or your account already has one from this provider.",
       "session_mismatch": "Sign-in was started in another browser or tab. Please start again."
-    }
+    },
+    "passkey": "Sign in with a passkey",
+    "usePasskey": "Use a passkey instead",
+    "passkeyFailed": "The passkey was not accepted. Try again or use another sign-in method.",
+    "passkeysUnavailable": "Passkeys are not configured on this server.",
+    "noPasskeys": "No passkey is registered for this account."
   },
   "placeholder": {
     "notFound": "Page not found",
@@ -615,7 +626,8 @@
     "methods": {
       "password": "Password",
       "oidc": "Identity provider",
-      "webauth": "Web approval"
+      "webauth": "Web approval",
+      "passkey": "Passkey"
     },
     "client": "Client",
     "clientKind": {
@@ -933,5 +945,39 @@
     "revokedCount_other": "{{count}} sessions signed out",
     "recentLogins": "Recent sign-ins",
     "empty": "No active sessions"
+  },
+  "passkeys": {
+    "title": "Passkeys",
+    "hint": "Sign in to the panel with Touch ID, Windows Hello, your phone or a security key instead of a password and code.",
+    "none": "No passkeys yet.",
+    "add": "Add a passkey",
+    "addTitle": "Add a passkey",
+    "addHint": "Confirm it is you, then follow your browser's prompt.",
+    "name": "Name",
+    "nameHint": "Helps you recognise it later, e.g. “MacBook” or “YubiKey”.",
+    "create": "Create passkey",
+    "addedToast": "Passkey added",
+    "added": "added",
+    "lastUsed": "last used",
+    "never": "never",
+    "synced": "Synced",
+    "cloneWarning": "Possibly cloned",
+    "cloneWarningHint": "Its signature counter went backwards. Sign-in with it is blocked; remove it and add it again.",
+    "rename": "Rename",
+    "renameTitle": "Rename passkey",
+    "remove": "Remove",
+    "removeTitle": "Remove passkey “{{name}}”?",
+    "removeDescription": "You will no longer be able to sign in with it.",
+    "removed": "Passkey removed",
+    "revoke": "Revoke",
+    "revokeTitle": "Revoke passkey “{{name}}” of {{user}}?",
+    "revokeDescription": "The user can no longer sign in with this passkey.",
+    "revoked": "Passkey revoked",
+    "unavailable": "Passkeys are not configured on this server: it needs the panel's https address (RDPANEL_ADMIN_URL).",
+    "unsupported": "This browser does not support passkeys.",
+    "clientNote": "The RustDesk app cannot use passkeys directly. To use them there, sign in through an identity provider that supports passkeys (e.g. Pocket ID or Authentik).",
+    "cancelled": "The passkey prompt was cancelled or timed out.",
+    "alreadyRegistered": "This authenticator already holds a passkey for your account.",
+    "securityError": "The browser refused the request: this address does not match the server's passkey domain."
   }
 }

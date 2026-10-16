@@ -2,6 +2,8 @@
  * MSW handlers implementing api/openapi.yaml against the in-memory dataset.
  * Mock credentials: admin/admin (TOTP 123456 or recovery code AAAA-BBBB),
  * ivan/ivan (TOTP 123456), maria/maria (no 2FA; must enrol).
+ * Passkeys: registering one stores its credential id; "Sign in with a passkey"
+ * accepts any credential registered in this browser session (no crypto checks).
  */
 import { delay, http, HttpResponse, type JsonBodyType } from "msw";
 
@@ -232,6 +234,56 @@ function audit(actor: db.MockUser, action: string, targetType: string, target: s
 let nextId = 10_000;
 const newId = () => ++nextId;
 
+/* ── passkeys (mock: credential ids are matched, nothing is verified) ─── */
+
+const passkeysByUser: Record<number, S["Passkey"][]> = {
+  1: [
+    {
+      id: 1,
+      name: "MacBook Pro",
+      created_at: new Date(db.NOW - 40 * 86400_000).toISOString(),
+      last_used_at: new Date(db.NOW - 2 * 3600_000).toISOString(),
+      backup_eligible: true,
+      synced: true,
+      clone_warning: false,
+      transports: ["internal", "hybrid"],
+    },
+    {
+      id: 2,
+      name: "YubiKey 5C",
+      created_at: new Date(db.NOW - 120 * 86400_000).toISOString(),
+      last_used_at: null,
+      backup_eligible: false,
+      synced: false,
+      clone_warning: false,
+      transports: ["usb", "nfc"],
+    },
+  ],
+};
+/** Credential id (base64url) → owner, for credentials created in this session. */
+const passkeyOwners = new Map<string, { userId: number; passkeyId: number }>();
+
+function randomB64url(n = 32) {
+  const bytes = crypto.getRandomValues(new Uint8Array(n));
+  return btoa(String.fromCharCode(...bytes)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+const rpId = () => globalThis.location?.hostname ?? "localhost";
+
+function passkeyCeremony(publicKey: Record<string, unknown>) {
+  return { ceremony_id: randomB64url(16), options: { publicKey: { challenge: randomB64url(), timeout: 300_000, ...publicKey } } };
+}
+
+function passkeyLoginAs(credentialId: string | undefined, userId?: number): db.MockUser | null {
+  const owner = credentialId ? passkeyOwners.get(credentialId) : undefined;
+  if (!owner || (userId !== undefined && owner.userId !== userId)) return null;
+  const u = db.users.find((x) => x.id === owner.userId);
+  if (!u || u.status !== "active") return null;
+  const pk = passkeysByUser[u.id]?.find((p) => p.id === owner.passkeyId);
+  if (!pk) return null;
+  pk.last_used_at = nowIso();
+  return u;
+}
+
 /* ── handlers ─────────────────────────────────────────────────────────── */
 
 export const handlers = [
@@ -243,7 +295,7 @@ export const handlers = [
   /* auth (api/openapi.yaml tag auth) */
   http.get(`${B}/auth/csrf`, () => ok({ csrf_token: "mock-csrf" })),
   http.get(`${B}/auth/providers`, () =>
-    ok({ items: db.providers.filter((p) => p.enabled).map((p) => ({ slug: p.slug, display_name: p.display_name, kind: p.kind })) }),
+    ok({ items: db.providers.filter((p) => p.enabled).map((p) => ({ slug: p.slug, display_name: p.display_name, kind: p.kind })), passkey: true }),
   ),
   http.get(`${B}/auth/me`, () => {
     const u = me();
@@ -255,7 +307,7 @@ export const handlers = [
     if (!u || u.password !== b.password || u.status !== "active") return err(401, "invalid_credentials", "invalid username or password");
     if (u.totp_enabled) {
       pendingMfaUser = u.id;
-      return ok({ mfa_required: true });
+      return ok({ mfa_required: true, mfa_methods: passkeysByUser[u.id]?.length ? ["totp", "passkey"] : ["totp"] });
     }
     setCurrentUser(u.id);
     return ok({ mfa_required: false, me: meBody(u) });
@@ -265,6 +317,29 @@ export const handlers = [
     if (pendingMfaUser === null) return err(401, "unauthorized", "no pending login");
     if (b.code !== "123456" && b.code?.toUpperCase() !== "AAAA-BBBB") return err(401, "totp_invalid", "invalid verification code");
     const u = db.users.find((x) => x.id === pendingMfaUser)!;
+    pendingMfaUser = null;
+    setCurrentUser(u.id);
+    return ok({ mfa_required: false, me: meBody(u) });
+  }),
+  http.post(`${B}/auth/passkey/begin`, () => ok(passkeyCeremony({ rpId: rpId(), userVerification: "required" }))),
+  http.post(`${B}/auth/passkey/finish`, async ({ request }) => {
+    const b = await body<{ credential?: { id?: string } }>(request);
+    const u = passkeyLoginAs(b.credential?.id);
+    if (!u) return err(401, "passkey_failed", "passkey verification failed or timed out; try again");
+    setCurrentUser(u.id);
+    return ok({ mfa_required: false, me: meBody(u) });
+  }),
+  http.post(`${B}/auth/mfa/passkey/begin`, () => {
+    if (pendingMfaUser === null) return err(401, "unauthorized", "no pending login");
+    const ids = [...passkeyOwners].filter(([, o]) => o.userId === pendingMfaUser).map(([id]) => ({ type: "public-key", id }));
+    if (!passkeysByUser[pendingMfaUser]?.length) return err(409, "no_passkeys", "no passkey is registered for this account");
+    return ok(passkeyCeremony({ rpId: rpId(), userVerification: "preferred", allowCredentials: ids }));
+  }),
+  http.post(`${B}/auth/mfa/passkey/finish`, async ({ request }) => {
+    if (pendingMfaUser === null) return err(401, "unauthorized", "no pending login");
+    const b = await body<{ credential?: { id?: string } }>(request);
+    const u = passkeyLoginAs(b.credential?.id, pendingMfaUser);
+    if (!u) return err(401, "passkey_failed", "passkey verification failed or timed out; try again");
     pendingMfaUser = null;
     setCurrentUser(u.id);
     return ok({ mfa_required: false, me: meBody(u) });
@@ -356,6 +431,82 @@ export const handlers = [
     return noContent();
   }),
   http.post(`${B}/me/security/identities/link/:slug`, ({ params }) => ok({ url: `/my/profile?linked=${String(params.slug)}` })),
+  http.get(`${B}/me/security`, () => {
+    const u = requireAuth();
+    if (u instanceof Response) return u;
+    return ok({
+      has_password: u.has_password,
+      totp_enabled: u.totp_enabled,
+      totp_pending: false,
+      totp_required: !!u.totp_required,
+      must_enroll_totp: !!u.totp_required && !u.totp_enabled,
+      recovery_codes_remaining: u.totp_enabled ? 8 : 0,
+      passkeys_available: true,
+      passkey_count: passkeysByUser[u.id]?.length ?? 0,
+    } satisfies S["SecurityOverview"]);
+  }),
+  http.get(`${B}/me/security/passkeys`, () => {
+    const u = requireAuth();
+    if (u instanceof Response) return u;
+    return ok({ items: passkeysByUser[u.id] ?? [] });
+  }),
+  http.post(`${B}/me/security/passkeys/register/begin`, async ({ request }) => {
+    const u = requireAuth();
+    if (u instanceof Response) return u;
+    const b = await body<{ password?: string; code?: string }>(request);
+    if (b.password !== u.password && b.code !== "123456") return err(401, "reauth_failed", "password or verification code is incorrect");
+    const exclude = [...passkeyOwners].filter(([, o]) => o.userId === u.id).map(([id]) => ({ type: "public-key", id }));
+    return ok(
+      passkeyCeremony({
+        rp: { id: rpId(), name: "RustDesk Panel" },
+        user: { id: btoa(`mock-user-${u.id}`).replace(/=+$/, ""), name: u.username, displayName: u.display_name || u.username },
+        pubKeyCredParams: [
+          { type: "public-key", alg: -7 },
+          { type: "public-key", alg: -257 },
+        ],
+        authenticatorSelection: { residentKey: "required", requireResidentKey: true, userVerification: "preferred" },
+        attestation: "none",
+        excludeCredentials: exclude,
+      }),
+    );
+  }),
+  http.post(`${B}/me/security/passkeys/register/finish`, async ({ request }) => {
+    const u = requireAuth();
+    if (u instanceof Response) return u;
+    const b = await body<{ name?: string; credential?: { id?: string; response?: { transports?: string[] } } }>(request);
+    if (!b.credential?.id) return err(401, "passkey_failed", "passkey verification failed or timed out; try again");
+    const pk: S["Passkey"] = {
+      id: newId(),
+      name: b.name?.trim() || "Passkey",
+      created_at: nowIso(),
+      last_used_at: null,
+      backup_eligible: false,
+      synced: false,
+      clone_warning: false,
+      transports: b.credential.response?.transports ?? [],
+    };
+    (passkeysByUser[u.id] ??= []).push(pk);
+    passkeyOwners.set(b.credential.id, { userId: u.id, passkeyId: pk.id });
+    return ok(pk, 201);
+  }),
+  http.patch(`${B}/me/security/passkeys/:id`, async ({ params, request }) => {
+    const u = requireAuth();
+    if (u instanceof Response) return u;
+    const pk = passkeysByUser[u.id]?.find((p) => p.id === Number(params.id));
+    if (!pk) return err(404, "not_found", "not found");
+    const b = await body<{ name?: string }>(request);
+    if (!b.name?.trim()) return err(400, "validation_failed", "invalid passkey", { name: "must be 1 to 64 characters" });
+    pk.name = b.name.trim();
+    return ok(pk);
+  }),
+  http.delete(`${B}/me/security/passkeys/:id`, ({ params }) => {
+    const u = requireAuth();
+    if (u instanceof Response) return u;
+    const list = passkeysByUser[u.id] ?? [];
+    if (!list.some((p) => p.id === Number(params.id))) return err(404, "not_found", "not found");
+    passkeysByUser[u.id] = list.filter((p) => p.id !== Number(params.id));
+    return noContent();
+  }),
 
   /* branding / dashboard / lookups */
   http.get(`${B}/branding`, () =>
@@ -696,6 +847,22 @@ export const handlers = [
     if (u instanceof Response) return u;
     const id = Number(params.id);
     db.sessionsByUser[id] = (db.sessionsByUser[id] ?? []).filter((s) => s.id !== Number(params.sid));
+    return noContent();
+  }),
+  http.get(`${B}/users/:id/passkeys`, ({ params }) => {
+    const u = requireAdmin();
+    if (u instanceof Response) return u;
+    return ok({ items: passkeysByUser[Number(params.id)] ?? [] });
+  }),
+  http.delete(`${B}/users/:id/passkeys/:pid`, ({ params }) => {
+    const u = requireAdmin();
+    if (u instanceof Response) return u;
+    const id = Number(params.id);
+    const x = db.users.find((y) => y.id === id);
+    const list = passkeysByUser[id] ?? [];
+    if (!x || !list.some((p) => p.id === Number(params.pid))) return err(404, "not_found", "not found");
+    passkeysByUser[id] = list.filter((p) => p.id !== Number(params.pid));
+    audit(u, "user.passkey_revoke", "user", x.username);
     return noContent();
   }),
   http.delete(`${B}/users/:id/identities/:iid`, ({ params }) => {

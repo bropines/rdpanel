@@ -269,3 +269,64 @@ test("2FA enrolment, language and logout", async ({ page }) => {
   await expect(page).toHaveURL(/\/login/);
   expect(errors).toEqual([]);
 });
+
+test("passkeys: add on profile, usernameless sign-in, second factor, admin revoke", async ({ page }) => {
+  const errors = watchErrors(page);
+  await start(page);
+  // Chromium's virtual authenticator (CDP) answers navigator.credentials.
+  const cdp = await page.context().newCDPSession(page);
+  await cdp.send("WebAuthn.enable");
+  await cdp.send("WebAuthn.addVirtualAuthenticator", {
+    options: { protocol: "ctap2", transport: "internal", hasResidentKey: true, hasUserVerification: true, isUserVerified: true, automaticPresenceSimulation: true },
+  });
+
+  await page.goto("/my/profile");
+  await expect(page.getByText("YubiKey 5C")).toBeVisible();
+  await page.getByRole("button", { name: "Add a passkey" }).click();
+  let dialog = page.getByRole("dialog");
+  await dialog.getByLabel("Name").fill("Smoke key");
+  await dialog.getByLabel("Current password").fill("wrong");
+  await dialog.getByRole("button", { name: "Create passkey" }).click();
+  await expect(dialog.getByRole("alert")).toHaveText("The password or code is wrong.");
+  await dialog.getByLabel("Current password").fill("admin");
+  await dialog.getByRole("button", { name: "Create passkey" }).click();
+  await toast(page, "Passkey added");
+  await expect(page.getByText("Smoke key")).toBeVisible();
+
+  // Rename it.
+  await page.getByRole("listitem").filter({ hasText: "Smoke key" }).getByRole("button", { name: "Rename" }).click();
+  dialog = page.getByRole("dialog");
+  await dialog.getByLabel("Name").fill("Smoke passkey");
+  await dialog.getByRole("button", { name: "Save" }).click();
+  await expect(page.getByText("Smoke passkey")).toBeVisible();
+
+  // Usernameless sign-in (client-side logout keeps the mock state).
+  await page.getByRole("button", { name: "Account menu" }).click();
+  await page.getByRole("menuitem", { name: "Log out" }).click();
+  await page.getByRole("button", { name: "Sign in with a passkey" }).click();
+  await expect(page).toHaveURL(/\/$|\/dashboard/);
+  await expect(page.getByRole("button", { name: "Account menu" })).toBeVisible();
+
+  // Passkey instead of TOTP after the password.
+  await page.getByRole("button", { name: "Account menu" }).click();
+  await page.getByRole("menuitem", { name: "Log out" }).click();
+  await page.getByLabel("Username").fill("admin");
+  await page.getByLabel("Password").fill("admin");
+  await page.getByRole("button", { name: "Sign in", exact: true }).click();
+  await expect(page.getByText("Two-factor authentication")).toBeVisible();
+  await page.getByRole("button", { name: "Use a passkey instead" }).click();
+  await expect(page.getByRole("button", { name: "Account menu" })).toBeVisible();
+
+  // Admin view: the user drawer lists and revokes passkeys.
+  await page.getByRole("link", { name: "Users" }).first().click();
+  await page.getByRole("row", { name: /Alexei Volkov/ }).click();
+  const drawer = page.getByRole("dialog");
+  await drawer.getByRole("tab", { name: "Security" }).click();
+  await expect(drawer.getByText("Smoke passkey")).toBeVisible();
+  await drawer.getByRole("listitem").filter({ hasText: "YubiKey 5C" }).getByRole("button", { name: "Revoke" }).click();
+  await page.getByRole("alertdialog").getByRole("button", { name: "Revoke" }).click();
+  await toast(page, "Passkey revoked");
+  await expect(drawer.getByText("YubiKey 5C")).toHaveCount(0);
+  // 401s are expected here: the wrong re-auth password and /auth/me after logging out.
+  expect(errors.filter((e) => !e.includes("status of 401"))).toEqual([]);
+});

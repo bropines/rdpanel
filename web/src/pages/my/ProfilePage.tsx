@@ -19,6 +19,7 @@ import { Skeleton } from "@/components/ui/misc";
 import { useMe } from "@/lib/session";
 import { useTableSearch } from "@/lib/use-table";
 import { oidcErrorKey } from "@/pages/login-errors";
+import { PasskeysSection } from "@/pages/my/PasskeysSection";
 import { TotpSection } from "@/pages/my/TotpSection";
 
 function Section({ title, description, children }: { title: string; description?: string; children: ReactNode }) {
@@ -232,6 +233,9 @@ export function ProfilePage() {
       </Section>
       <Section title={t("security.twoFactor")} description={t("security.twoFactorHint")}>
         <TotpSection autoEnroll={autoEnroll} />
+      </Section>
+      <Section title={t("passkeys.title")} description={t("passkeys.hint")}>
+        <PasskeysSection />
       </Section>
       <Section title={t("security.password")}>
         <PasswordForm />

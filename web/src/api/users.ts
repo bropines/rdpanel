@@ -25,6 +25,9 @@ export const usersApi = {
     api.request<Schemas["RevokeResult"]>(`/users/${id}/sessions/revoke`, { method: "POST", body: { kind } }),
   unlinkIdentity: (id: number, identityId: number) =>
     api.request<void>(`/users/${id}/identities/${identityId}`, { method: "DELETE" }),
+  passkeys: (id: number) => api.request<{ items: Schemas["Passkey"][] }>(`/users/${id}/passkeys`),
+  revokePasskey: (id: number, passkeyId: number) =>
+    api.request<void>(`/users/${id}/passkeys/${passkeyId}`, { method: "DELETE" }),
 };
 
 export const groupsApi = {
@@ -54,6 +57,7 @@ export const userKeys = {
   list: (q: UserListQuery) => ["users", "list", q] as const,
   detail: (id: number) => ["users", "detail", id] as const,
   sessions: (id: number) => ["users", "sessions", id] as const,
+  passkeys: (id: number) => ["users", "passkeys", id] as const,
 };
 
 export const groupKeys = {

@@ -113,6 +113,8 @@ func registerResources(r chi.Router, c *authCore) {
 		r.Post("/users/{user_id}/sessions/revoke", a.handleRevokeUserSessions)
 		r.Delete("/users/{user_id}/sessions/{session_id}", a.handleRevokeUserSession)
 		r.Delete("/users/{user_id}/identities/{identity_id}", a.handleUnlinkUserIdentity)
+		r.Get("/users/{user_id}/passkeys", a.handleListUserPasskeys)
+		r.Delete("/users/{user_id}/passkeys/{passkey_id}", a.handleDeleteUserPasskey)
 
 		r.Get("/user-groups", a.handleListUserGroups)
 		r.Post("/user-groups", a.handleCreateUserGroup)

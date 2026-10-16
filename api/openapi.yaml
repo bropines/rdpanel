@@ -19,7 +19,8 @@ info:
     `not_found`, `conflict`, `validation_failed`, `rate_limited`, `totp_required`,
     `totp_invalid`, `internal`, `invalid_credentials`, `password_login_disabled`,
     `totp_enrollment_required`, `reauth_failed`, `oidc_not_configured`,
-    `provider_unavailable`, `last_admin`, `server_unavailable`).
+    `provider_unavailable`, `last_admin`, `server_unavailable`, `passkey_failed`,
+    `passkeys_unavailable`, `no_passkeys`, `passkey_limit`, `reauth_required`).
 
     **Route guards.** Resource routes require a full session; while an admin-forced
     2FA enrolment is pending only `/auth/*` and `/me/security/*` are reachable
@@ -29,6 +30,17 @@ info:
     (`RDPANEL_ADMIN_URL`) different from the public client-API host
     (`RDPANEL_PUBLIC_URL`); OIDC flows hand off between them (see
     `/auth/oidc/{slug}/start`).
+
+    **Passkeys (WebAuthn).** Panel login only (RustDesk clients cannot do
+    WebAuthn; use an OIDC IdP with passkeys, e.g. Pocket ID or Authentik). The
+    relying party id and allowed origins come from `RDPANEL_ADMIN_URL` (fallback
+    `RDPANEL_PUBLIC_URL`), overridable with `RDPANEL_WEBAUTHN_RP_ID` /
+    `RDPANEL_WEBAUTHN_ORIGINS`. Every ceremony is two calls: `.../begin` returns
+    `{ceremony_id, options}` where `options` is the JSON form of
+    `CredentialCreationOptions`/`CredentialRequestOptions` (`{publicKey: ...}`,
+    binary fields base64url); the SPA calls `navigator.credentials.create/get`
+    and posts the JSON-serialised `PublicKeyCredential` to `.../finish`.
+    Ceremonies are single use and expire after 5 minutes.
 
     **Timestamps** are RFC 3339 UTC strings. **Ids** are integers.
 
@@ -191,9 +203,110 @@ paths:
             application/json:
               schema:
                 type: object
-                required: [items]
+                required: [items, passkey]
                 properties:
                   items: { type: array, items: { $ref: "#/components/schemas/LoginProvider" } }
+                  passkey: { type: boolean, description: '"Sign in with a passkey" is available (WebAuthn relying party configured).' }
+  /auth/passkey/begin:
+    post:
+      tags: [auth]
+      operationId: beginPasskeyLogin
+      summary: Start a usernameless passkey sign-in (discoverable credential, user verification required).
+      description: |
+        Returns request options without `allowCredentials`; the authenticator picks
+        the account. 409 `passkeys_unavailable` when no relying party is configured;
+        429 when the IP is backing off after failures (shared with password login)
+        or too many sign-ins are pending.
+      security: []
+      parameters:
+        - $ref: "#/components/parameters/CsrfHeader"
+      responses:
+        "200":
+          description: Ceremony.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PasskeyCeremony" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+  /auth/passkey/finish:
+    post:
+      tags: [auth]
+      operationId: finishPasskeyLogin
+      summary: Complete a usernameless passkey sign-in.
+      description: |
+        Verifies the assertion (origin, RP id, signature, user verification, user
+        handle) and issues a full session: a verified passkey satisfies 2FA by
+        itself (`mfa_required` is always false). A signature counter that did not
+        advance flags the passkey as possibly cloned (`clone_warning`) and the
+        sign-in is refused until the user removes it. Failures answer 401
+        `passkey_failed`, are logged as `passkey` login events and count toward
+        the per-IP/per-user backoff of password login.
+      security: []
+      parameters:
+        - $ref: "#/components/parameters/CsrfHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/PasskeyFinishRequest" }
+      responses:
+        "200":
+          description: Logged in.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/LoginResponse" }
+        "400": { $ref: "#/components/responses/ValidationFailed" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+  /auth/mfa/passkey/begin:
+    post:
+      tags: [auth]
+      operationId: beginPasskeyMfa
+      summary: Start a passkey second factor for the pending login (instead of TOTP).
+      description: |
+        Requires the pending session of `/auth/login` or an OIDC login. Lists the
+        user's passkeys in `allowCredentials` (user verification preferred).
+        409 `no_passkeys` when the user has none.
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - $ref: "#/components/parameters/CsrfHeader"
+      responses:
+        "200":
+          description: Ceremony.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PasskeyCeremony" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409": { $ref: "#/components/responses/Conflict" }
+  /auth/mfa/passkey/finish:
+    post:
+      tags: [auth]
+      operationId: finishPasskeyMfa
+      summary: Complete the pending login with a passkey assertion. Rotates the session.
+      description: The ceremony is bound to the pending session that started it.
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - $ref: "#/components/parameters/CsrfHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/PasskeyFinishRequest" }
+      responses:
+        "200":
+          description: Logged in.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/LoginResponse" }
+        "400": { $ref: "#/components/responses/ValidationFailed" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "429": { $ref: "#/components/responses/RateLimited" }
   /auth/oidc/{slug}/start:
     post:
       tags: [auth]
@@ -466,6 +579,103 @@ paths:
         "401": { $ref: "#/components/responses/Unauthorized" }
         "404": { $ref: "#/components/responses/NotFound" }
         "409": { $ref: "#/components/responses/Conflict" }
+  /me/security/passkeys:
+    get:
+      tags: [security]
+      operationId: listMyPasskeys
+      summary: My passkeys (panel sign-in).
+      responses:
+        "200":
+          description: Passkeys, oldest first.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items: { type: array, items: { $ref: "#/components/schemas/Passkey" } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+  /me/security/passkeys/register/begin:
+    post:
+      tags: [security]
+      operationId: beginPasskeyRegistration
+      summary: Start adding a passkey (requires re-authentication).
+      description: |
+        Re-authenticate with the password or a TOTP/recovery code (401
+        `reauth_failed`). Accounts with neither (OIDC-only) may add a passkey only
+        within 10 minutes of signing in (401 `reauth_required` otherwise).
+        Requests a discoverable credential; already registered authenticators are
+        excluded. 409 `passkey_limit` beyond 20 passkeys, `passkeys_unavailable`
+        when no relying party is configured.
+      parameters:
+        - $ref: "#/components/parameters/CsrfHeader"
+      requestBody:
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ReauthRequest" }
+      responses:
+        "200":
+          description: Ceremony.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PasskeyCeremony" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+  /me/security/passkeys/register/finish:
+    post:
+      tags: [security]
+      operationId: finishPasskeyRegistration
+      summary: Store the new passkey (ceremony bound to the session that began it).
+      parameters:
+        - $ref: "#/components/parameters/CsrfHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/PasskeyRegisterFinishRequest" }
+      responses:
+        "201":
+          description: Added.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Passkey" }
+        "400": { $ref: "#/components/responses/ValidationFailed" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "409": { $ref: "#/components/responses/Conflict" }
+  /me/security/passkeys/{id}:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: integer, format: int64 } }
+    patch:
+      tags: [security]
+      operationId: renameMyPasskey
+      summary: Rename one of my passkeys.
+      parameters:
+        - $ref: "#/components/parameters/CsrfHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/PasskeyRename" }
+      responses:
+        "200":
+          description: Renamed.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Passkey" }
+        "400": { $ref: "#/components/responses/ValidationFailed" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    delete:
+      tags: [security]
+      operationId: deleteMyPasskey
+      summary: Remove one of my passkeys.
+      parameters:
+        - $ref: "#/components/parameters/CsrfHeader"
+      responses:
+        "204": { description: Removed. }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
   /identity-providers:
     get:
       tags: [identity-providers]
@@ -1034,6 +1244,40 @@ paths:
         "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/NotFound" }
         "409": { $ref: "#/components/responses/Conflict" }
+  /users/{user_id}/passkeys:
+    get:
+      tags: [users]
+      operationId: listUserPasskeys
+      summary: Passkeys of a user (admin).
+      parameters:
+        - $ref: "#/components/parameters/UserId"
+      responses:
+        "200":
+          description: Passkeys.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items: { type: array, items: { $ref: "#/components/schemas/Passkey" } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /users/{user_id}/passkeys/{passkey_id}:
+    delete:
+      tags: [users]
+      operationId: revokeUserPasskey
+      summary: Revoke (delete) a passkey of a user (admin).
+      parameters:
+        - $ref: "#/components/parameters/UserId"
+        - { name: passkey_id, in: path, required: true, schema: { type: integer, format: int64 } }
+        - $ref: "#/components/parameters/CsrfHeader"
+      responses:
+        "204": { description: Revoked. }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
 
   /user-groups:
     get:
@@ -2260,7 +2504,11 @@ components:
       properties:
         mfa_required:
           type: boolean
-          description: True when the password was accepted and `POST /auth/mfa` must follow (a 5 min pending session was issued).
+          description: True when the password was accepted and `POST /auth/mfa` (or `/auth/mfa/passkey/*`) must follow (a 5 min pending session was issued).
+        mfa_methods:
+          type: array
+          items: { type: string, enum: [totp, passkey] }
+          description: Usable second factors when `mfa_required` (`passkey` when the user has passkeys).
         me: { $ref: "#/components/schemas/Me" }
     CodeRequest:
       type: object
@@ -2312,7 +2560,7 @@ components:
         url: { type: string, format: uri }
     SecurityOverview:
       type: object
-      required: [has_password, totp_enabled, totp_pending, totp_required, must_enroll_totp, recovery_codes_remaining]
+      required: [has_password, totp_enabled, totp_pending, totp_required, must_enroll_totp, recovery_codes_remaining, passkeys_available, passkey_count]
       properties:
         has_password: { type: boolean }
         totp_enabled: { type: boolean }
@@ -2320,6 +2568,59 @@ components:
         totp_required: { type: boolean, description: Policy (user flag or admin policy) requires 2FA. }
         must_enroll_totp: { type: boolean }
         recovery_codes_remaining: { type: integer }
+        passkeys_available: { type: boolean, description: The server has a WebAuthn relying party configured. }
+        passkey_count: { type: integer }
+    PasskeyCeremony:
+      type: object
+      required: [ceremony_id, options]
+      properties:
+        ceremony_id: { type: string, description: Opaque single-use id to post back to the matching finish call. }
+        options:
+          type: object
+          additionalProperties: true
+          description: |
+            JSON form of `CredentialCreationOptions` / `CredentialRequestOptions`:
+            `{publicKey: {...}, mediation?}`, binary members (challenge, user.id,
+            credential ids) base64url without padding.
+    PasskeyFinishRequest:
+      type: object
+      required: [ceremony_id, credential]
+      additionalProperties: false
+      properties:
+        ceremony_id: { type: string }
+        credential:
+          type: object
+          additionalProperties: true
+          description: "`PublicKeyCredential.toJSON()` (id, rawId, type, response with base64url members)."
+    PasskeyRegisterFinishRequest:
+      type: object
+      required: [ceremony_id, credential]
+      additionalProperties: false
+      properties:
+        ceremony_id: { type: string }
+        name: { type: string, maxLength: 64, description: 'Display name ("Passkey" when empty).' }
+        credential:
+          type: object
+          additionalProperties: true
+          description: "`PublicKeyCredential.toJSON()` of the attestation."
+    PasskeyRename:
+      type: object
+      required: [name]
+      additionalProperties: false
+      properties:
+        name: { type: string, minLength: 1, maxLength: 64 }
+    Passkey:
+      type: object
+      required: [id, name, created_at, last_used_at, backup_eligible, synced, clone_warning, transports]
+      properties:
+        id: { type: integer, format: int64 }
+        name: { type: string }
+        created_at: { type: string, format: date-time }
+        last_used_at: { type: [string, "null"], format: date-time }
+        backup_eligible: { type: boolean, description: Multi-device (syncable) credential. }
+        synced: { type: boolean, description: The credential is backed up / synced (backup state flag). }
+        clone_warning: { type: boolean, description: The signature counter went backwards; sign-in with it is refused. }
+        transports: { type: array, items: { type: string } }
     TotpEnrollment:
       type: object
       required: [secret, otpauth_uri]
@@ -3111,7 +3412,7 @@ components:
             items: { type: array, items: { $ref: "#/components/schemas/AlarmAudit" } }
     LoginMethod:
       type: string
-      enum: [password, oidc, webauth]
+      enum: [password, oidc, webauth, passkey]
     LoginEvent:
       type: object
       required: [id, method, result, client_kind, created_at]

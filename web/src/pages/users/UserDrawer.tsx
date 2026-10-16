@@ -1,7 +1,7 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
-import { KeyRound, LogOut, Save, ShieldOff, Trash2, Unlink } from "lucide-react";
+import { KeyRound, LogOut, Save, ShieldOff, Trash2, Unlink, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { useTranslation } from "react-i18next";
@@ -12,6 +12,7 @@ import { addressBooksApi } from "@/api/addressBooks";
 import { devicesApi } from "@/api/devices";
 import { userKeys, usersApi, type UserDetail } from "@/api/users";
 import { ConfirmDialog, EmptyState, ErrorState, Field, KeyValue, Mono, OnlineDot, RelativeTime, SectionTitle, useToastError } from "@/components";
+import { PasskeyList } from "@/components/PasskeyList";
 import { SessionsList } from "@/components/SessionsList";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -124,7 +125,18 @@ function SecurityTab({ user }: { user: UserDetail }) {
   const [pwOpen, setPwOpen] = useState(false);
   const [confirm, setConfirm] = useState<"totp" | "revoke" | null>(null);
   const [unlinkId, setUnlinkId] = useState<number | null>(null);
+  const [revokePasskey, setRevokePasskey] = useState<{ id: number; name: string } | null>(null);
   const sessions = useQuery({ queryKey: userKeys.sessions(user.id), queryFn: () => usersApi.sessions(user.id) });
+  const passkeys = useQuery({ queryKey: userKeys.passkeys(user.id), queryFn: () => usersApi.passkeys(user.id) });
+  const revokeKey = useMutation({
+    mutationFn: (pid: number) => usersApi.revokePasskey(user.id, pid),
+    onSuccess: () => {
+      toast.success(t("passkeys.revoked"));
+      setRevokePasskey(null);
+      void qc.invalidateQueries({ queryKey: userKeys.passkeys(user.id) });
+    },
+    onError: toastError,
+  });
 
   const resetTotp = useMutation({
     mutationFn: () => usersApi.resetTotp(user.id),
@@ -191,6 +203,19 @@ function SecurityTab({ user }: { user: UserDetail }) {
       </section>
 
       <section>
+        <SectionTitle>{t("passkeys.title")}</SectionTitle>
+        <PasskeyList
+          passkeys={passkeys.data?.items}
+          isLoading={passkeys.isLoading}
+          actions={(p) => (
+            <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => setRevokePasskey(p)} aria-label={t("passkeys.revoke")}>
+              <X />
+            </Button>
+          )}
+        />
+      </section>
+
+      <section>
         <SectionTitle>{t("identities.title")}</SectionTitle>
         {user.identities.length === 0 ? (
           <p className="text-sm text-muted-foreground">{t("identities.none")}</p>
@@ -254,6 +279,16 @@ function SecurityTab({ user }: { user: UserDetail }) {
         destructive
         pending={revokeAll.isPending}
         onConfirm={() => revokeAll.mutate()}
+      />
+      <ConfirmDialog
+        open={revokePasskey !== null}
+        onOpenChange={(o) => !o && setRevokePasskey(null)}
+        title={t("passkeys.revokeTitle", { name: revokePasskey?.name ?? "", user: user.username })}
+        description={t("passkeys.revokeDescription")}
+        confirmLabel={t("passkeys.revoke")}
+        destructive
+        pending={revokeKey.isPending}
+        onConfirm={() => revokePasskey && revokeKey.mutate(revokePasskey.id)}
       />
       <ConfirmDialog
         open={unlinkId !== null}

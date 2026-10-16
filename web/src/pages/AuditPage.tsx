@@ -489,7 +489,7 @@ function AuditTable({ kind }: { kind: Kind }) {
               value={sel("method")}
               onChange={(v) => update({ filters: { method: v } })}
               placeholder={t("audit.method")}
-              options={["password", "oidc", "webauth"].map((m) => ({ value: m, label: t(`audit.methods.${m}`) }))}
+              options={["password", "passkey", "oidc", "webauth"].map((m) => ({ value: m, label: t(`audit.methods.${m}`) }))}
             />
             <FilterSelect
               value={sel("client_kind")}

@@ -49,10 +49,11 @@ type Config struct {
 	// release on GitHub (server-side, cached for 6 h; never blocks anything).
 	UpdateCheck bool `yaml:"update_check"`
 
-	Auth AuthConfig `yaml:"auth"`
-	HTTP HTTPConfig `yaml:"http"`
-	HBBS HBBSConfig `yaml:"hbbs"`
-	Log  LogConfig  `yaml:"log"`
+	Auth     AuthConfig     `yaml:"auth"`
+	WebAuthn WebAuthnConfig `yaml:"webauthn"`
+	HTTP     HTTPConfig     `yaml:"http"`
+	HBBS     HBBSConfig     `yaml:"hbbs"`
+	Log      LogConfig      `yaml:"log"`
 }
 
 // AuthConfig holds token and session settings.
@@ -73,6 +74,20 @@ type AuthConfig struct {
 	SessionIdle time.Duration `yaml:"session_idle"`
 	// SessionAbsolute is the absolute lifetime of panel (web) sessions.
 	SessionAbsolute time.Duration `yaml:"session_absolute"`
+}
+
+// WebAuthnConfig overrides the relying party of panel passkeys. Both default
+// from AdminURL (which itself defaults to PublicURL): the RP ID is its host
+// name and the allowed origin is its origin.
+type WebAuthnConfig struct {
+	// RPID is the WebAuthn relying party id: a host name equal to, or a
+	// registrable parent domain of, every origin's host (e.g. "example.com" to
+	// share passkeys between panel.example.com and admin.example.com).
+	RPID string `yaml:"rp_id"`
+	// Origins are the exact origins (scheme://host[:port]) the panel SPA is
+	// served from. Default: the AdminURL origin, plus the PublicURL origin
+	// when its host is within the RP ID.
+	Origins []string `yaml:"origins"`
 }
 
 // HTTPConfig holds HTTP-layer settings.
@@ -238,6 +253,8 @@ func (c *Config) envVars() []envVar {
 		{"RDPANEL_JWT_LIFETIME", dur(&c.Auth.JWTLifetime)},
 		{"RDPANEL_SESSION_IDLE", dur(&c.Auth.SessionIdle)},
 		{"RDPANEL_SESSION_ABSOLUTE", dur(&c.Auth.SessionAbsolute)},
+		{"RDPANEL_WEBAUTHN_RP_ID", str(&c.WebAuthn.RPID)},
+		{"RDPANEL_WEBAUTHN_ORIGINS", list(&c.WebAuthn.Origins)},
 		{"RDPANEL_TRUSTED_PROXIES", list(&c.HTTP.TrustedProxies)},
 		{"RDPANEL_REAL_IP_HEADER", str(&c.HTTP.RealIPHeader)},
 		{"RDPANEL_METRICS_ALLOW", list(&c.HTTP.MetricsAllow)},
@@ -337,6 +354,11 @@ func (c *Config) Validate() error {
 	if c.DataDir == "" {
 		add("data_dir must not be empty")
 	}
+	if c.WebAuthn.RPID != "" || len(c.WebAuthn.Origins) > 0 {
+		if _, _, err := c.WebAuthnRP(); err != nil {
+			add("webauthn: %v", err)
+		}
+	}
 	if c.SecretKey.IsSet() {
 		if n := decodedLen(c.SecretKey.Reveal()); n != 32 {
 			add("RDPANEL_SECRET_KEY must be base64 of exactly 32 bytes")
@@ -418,6 +440,75 @@ func (c *Config) HTTPS() bool {
 // AdminHTTPS reports whether the panel (admin) URL uses https: panel cookies
 // (session, CSRF, OIDC binding) get the Secure attribute.
 func (c *Config) AdminHTTPS() bool { return strings.HasPrefix(c.AdminURL, "https://") }
+
+// ErrWebAuthnUnconfigured means no panel URL is known, so passkeys are off.
+var ErrWebAuthnUnconfigured = errors.New("no admin_url/public_url and no webauthn.origins: passkeys are disabled")
+
+// WebAuthnRP returns the effective passkey relying party id and allowed
+// origins (see WebAuthnConfig). Browsers reject IP addresses as RP ids, so a
+// panel reached only by IP cannot use passkeys.
+func (c *Config) WebAuthnRP() (rpID string, origins []string, err error) {
+	seen := map[string]bool{}
+	addOrigin := func(raw string) error {
+		u, err := url.Parse(strings.TrimSpace(raw))
+		switch {
+		case err != nil:
+			return fmt.Errorf("origin %q: %v", raw, err)
+		case u.Scheme != "http" && u.Scheme != "https":
+			return fmt.Errorf("origin %q: scheme must be http or https", raw)
+		case u.Hostname() == "":
+			return fmt.Errorf("origin %q: missing host", raw)
+		case u.User != nil || u.RawQuery != "" || u.Fragment != "":
+			return fmt.Errorf("origin %q: must not contain userinfo, query or fragment", raw)
+		}
+		o := strings.ToLower(u.Scheme + "://" + u.Host)
+		if !seen[o] {
+			seen[o] = true
+			origins = append(origins, o)
+		}
+		return nil
+	}
+	explicit := len(c.WebAuthn.Origins) > 0
+	if explicit {
+		for _, o := range c.WebAuthn.Origins {
+			if err := addOrigin(o); err != nil {
+				return "", nil, err
+			}
+		}
+	} else if c.AdminURL != "" {
+		// Only the panel host serves the SPA; the public URL may be a different
+		// (client API) host.
+		if err := addOrigin(c.AdminURL); err != nil {
+			return "", nil, err
+		}
+	}
+	if len(origins) == 0 {
+		return "", nil, ErrWebAuthnUnconfigured
+	}
+	hostOf := func(o string) string { u, _ := url.Parse(o); return u.Hostname() }
+	rpID = strings.ToLower(strings.TrimSuffix(strings.TrimSpace(c.WebAuthn.RPID), "."))
+	if rpID == "" {
+		rpID = hostOf(origins[0])
+	}
+	if strings.ContainsAny(rpID, ":/ ") {
+		return "", nil, fmt.Errorf("rp_id %q must be a bare host name (no scheme, port or path)", rpID)
+	}
+	if _, err := netip.ParseAddr(strings.Trim(rpID, "[]")); err == nil {
+		return "", nil, fmt.Errorf("rp_id %q: an IP address cannot be a WebAuthn relying party id; serve the panel on a host name", rpID)
+	}
+	within := func(h string) bool { return h == rpID || strings.HasSuffix(h, "."+rpID) }
+	for _, o := range origins {
+		if h := hostOf(o); !within(h) {
+			return "", nil, fmt.Errorf("origin %q is not within rp_id %q", o, rpID)
+		}
+	}
+	if !explicit && c.PublicURL != "" {
+		if u, err := url.Parse(c.PublicURL); err == nil && within(u.Hostname()) {
+			_ = addOrigin(c.PublicURL)
+		}
+	}
+	return rpID, origins, nil
+}
 
 // Redacted renders the effective configuration as YAML with secrets redacted.
 func (c *Config) Redacted() ([]byte, error) {
