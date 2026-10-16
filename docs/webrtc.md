@@ -109,11 +109,31 @@ the fork's README, section `WEBRTC`.
 
 ## Checking that it works
 
-- RustDesk logs show the punch type with `WebRTC` in it, for example `#1 UDP+WebRTC punch attempt`, and later
+- **Client:** the connection indicator in the session toolbar says
+  *Direct and encrypted connection (WebRTC)*.
+- **Client log** (desktop `%APPDATA%\RustDesk\log\RustDesk_rCURRENT.log`): the punch type
+  contains `WebRTC`, for example `#1 UDP+TCP+WebRTC punch attempt`, and later
   `used to establish WebRTC connection`.
-- `RUST_LOG=debug` on hbbs logs `dropped ICE candidate … no WebRTC route` when candidates
-  arrive without an offer forwarded for that connection.
+- **hbbs:** every WebRTC session ends with one INFO line in **Server → Logs**:
+  `WebRTC session <controller> -> <id>: … offers forwarded, answer: …, ICE to peer: n, ICE to controller: m`.
+  With `RUST_LOG=info,hbbs=debug` each offer, answer and candidate is logged (sizes and counts
+  only, never SDP contents).
 - **Server → Console**: `webrtc` prints `WEBRTC: true|false`.
+
+## Troubleshooting: the client never tries WebRTC
+
+If the client log shows `#1 TCP punch attempt` (no `WebRTC` in the list), the client did not
+create an offer at all. Check, on the **controlling** device:
+
+| cause | fix |
+|---|---|
+| "Enable WebRTC P2P connection" is off (default for self-hosted servers) | Settings → General → Other (desktop) or Settings (mobile) |
+| **"Always connect via relay"** is on for that peer (`force-always-relay`) | uncheck it in the peer's menu (⋮ / long tap). With it on, WebRTC is only allowed through a TURN server from `ice-servers` |
+| A SOCKS5/HTTP proxy is configured in the client | the client never offers WebRTC through a proxy |
+| A TUN VPN on the device (e.g. own address `198.18.0.1`) | ICE may only see the tunnel address; exclude RustDesk from the VPN |
+
+Peers behind the same public IP (one LAN) get the offer too since fork `d74a26a`; the classic
+LAN path (`FetchLocalAddr`) is kept for the parallel offer-less request.
 
 ## Limitations
 
