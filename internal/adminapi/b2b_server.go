@@ -53,6 +53,7 @@ func (c *b2bCore) registerServer(r chi.Router) {
 		r.Get("/server/console/commands", c.handleConsoleCommands)
 		r.Post("/server/console", c.handleConsole)
 		r.Get("/server/console/history", c.handleConsoleHistory)
+		c.registerLogs(r)
 	})
 }
 

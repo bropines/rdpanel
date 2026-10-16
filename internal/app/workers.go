@@ -31,6 +31,9 @@ func (a *App) startWorkers(ctx context.Context, wg *sync.WaitGroup) {
 		}()
 	}
 	run("janitor", a.runJanitor)
+	for name, fn := range a.logTailers() {
+		run(name, fn)
+	}
 	run("limiter-prune", func(ctx context.Context) { a.Limiter.RunPruner(ctx, time.Minute) })
 	if p := a.HBBS.Presence; p != nil {
 		run("hbbs-presence", p.Run)

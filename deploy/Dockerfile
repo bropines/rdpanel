@@ -132,6 +132,7 @@ ENV PATH=/command:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin \
     RDPANEL_MODE=panel \
     RDPANEL_DATA_DIR=/data/panel \
     RDPANEL_HBBS_PUBLIC_KEY_FILE=/data/id_ed25519.pub \
+    RDPANEL_LOGS_DIR=/run/rdpanel/logs \
     RDPANEL_HBB_REF=${HBB_REF}
 
 EXPOSE 21114 21115 21116 21116/udp 21117 21118 21119

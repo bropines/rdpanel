@@ -22,6 +22,7 @@ import (
 	"github.com/bropines/rdpanel/internal/db"
 	"github.com/bropines/rdpanel/internal/events"
 	"github.com/bropines/rdpanel/internal/httpx"
+	"github.com/bropines/rdpanel/internal/logs"
 	"github.com/bropines/rdpanel/internal/mailauth"
 	"github.com/bropines/rdpanel/internal/metrics"
 	"github.com/bropines/rdpanel/internal/relays"
@@ -76,13 +77,21 @@ type App struct {
 	// Telemetry holds the login / client-token / audit counters.
 	Telemetry *metrics.Panel
 
+	// Logs is the in-memory buffer behind Server -> Logs (never nil after New).
+	Logs *logs.Buffer
+
 	httpMetrics *httpx.Metrics
+	// keySecrets are encodings of loaded key material, hidden from Logs.
+	keySecrets []string
 }
 
 // New opens the database (applying migrations), loads keys and builds the App.
 // Call Close when done.
-func New(ctx context.Context, cfg *config.Config, log *slog.Logger) (*App, error) {
+func New(ctx context.Context, cfg *config.Config, log *slog.Logger, opts ...Option) (*App, error) {
 	a := &App{Config: cfg, Log: log, Hasher: auth.NewHasher(), StartedAt: time.Now()}
+	for _, o := range opts {
+		o(a)
+	}
 	if cfg.UpdateCheck {
 		a.Updates = updatecheck.New("rdpanel/" + buildinfo.Version + " (+https://github.com/bropines/rdpanel)")
 	}
@@ -110,6 +119,7 @@ func New(ctx context.Context, cfg *config.Config, log *slog.Logger) (*App, error
 	bi := buildinfo.Get()
 	metrics.RegisterBuildInfo(a.Registry, bi, bi.HBBRef)
 	a.initEvents()
+	a.initLogs()
 	if err := a.initRelays(); err != nil {
 		_ = a.DB.Close()
 		return nil, err
@@ -163,6 +173,7 @@ func (a *App) loadKeys() error {
 			"Set the same value as RUSTDESK_API_JWT_KEY for hbbs if MUST_LOGIN is used.",
 			slog.String("source", string(src)), slog.String("file", cfg.Auth.JWTKeyFile))
 	}
+	a.keySecrets = keyLogSecrets(key, jwtKey)
 	if a.JWT, err = auth.NewClientJWT(jwtKey, nil); err != nil {
 		return err
 	}

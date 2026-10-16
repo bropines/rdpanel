@@ -2415,6 +2415,97 @@ paths:
         "401": { $ref: "#/components/responses/Unauthorized" }
         "403": { $ref: "#/components/responses/Forbidden" }
 
+  /server/logs:
+    get:
+      tags: [server]
+      operationId: listServerLogs
+      summary: Recent hbbs/hbbr/panel log lines from the in-memory buffer (admin).
+      description: |
+        Newest `limit` matching entries, returned oldest first. Page back with
+        `before=<next_before>`. Lines are redacted (keys, tokens, passwords) before
+        they are stored. In the s6 image hbbs, hbbr and panel lines are captured
+        (`capture: files`); a plain `rdpanel serve` captures only its own lines
+        (`capture: panel`). With `RDPANEL_LOGS_BUFFER=0` the buffer is off
+        (`enabled: false`, `capture: off`, no items).
+      parameters:
+        - $ref: "#/components/parameters/LogSource"
+        - $ref: "#/components/parameters/LogLevel"
+        - $ref: "#/components/parameters/Q"
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 2000, default: 500 }
+        - name: before
+          in: query
+          description: Only entries with `seq` below this (the previous page's `next_before`).
+          schema: { type: integer, format: int64, minimum: 1 }
+        - $ref: "#/components/parameters/LogAfter"
+      responses:
+        "200":
+          description: Page.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/LogPage" }
+        "400": { $ref: "#/components/responses/ValidationFailed" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /server/logs/download:
+    get:
+      tags: [server]
+      operationId: downloadServerLogs
+      summary: All buffered lines matching the filters as text (admin).
+      description: |
+        `Content-Disposition: attachment; filename="rdpanel-logs-<UTC time>.txt"`; one line per entry,
+        oldest first, `[<source>] <raw line>` (redacted).
+      parameters:
+        - $ref: "#/components/parameters/LogSource"
+        - $ref: "#/components/parameters/LogLevel"
+        - $ref: "#/components/parameters/Q"
+        - $ref: "#/components/parameters/LogAfter"
+      responses:
+        "200":
+          description: Log text.
+          content:
+            text/plain: { schema: { type: string } }
+        "400": { $ref: "#/components/responses/ValidationFailed" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "503": { description: "The buffer is disabled (`logs_disabled`)." }
+  /server/logs/stream:
+    get:
+      tags: [server]
+      operationId: streamServerLogs
+      summary: Live log lines as Server-Sent Events (admin).
+      description: |
+        `text/event-stream`, same session cookie (no CSRF, GET). With `after=<seq>` buffered
+        matching entries newer than `seq` are replayed first. Events:
+
+        ```
+        id: 1234
+        event: log
+        data: {<LogEntry>}
+
+        event: dropped
+        data: {"dropped":17}      # lines skipped because this client was too slow
+
+        event: unauthenticated    # the session ended; the stream closes
+        data: {}
+        ```
+
+        A `: keepalive` comment is sent every 15 s; the session is re-checked then.
+      parameters:
+        - $ref: "#/components/parameters/LogSource"
+        - $ref: "#/components/parameters/LogLevel"
+        - $ref: "#/components/parameters/Q"
+        - $ref: "#/components/parameters/LogAfter"
+      responses:
+        "200":
+          description: Event stream (never ends on its own).
+          content:
+            text/event-stream: { schema: { type: string } }
+        "400": { $ref: "#/components/responses/ValidationFailed" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "503": { description: "The buffer is disabled (`logs_disabled`)." }
   /relays:
     get:
       tags: [relays]
@@ -2883,6 +2974,21 @@ components:
       name: page_size
       in: query
       schema: { type: integer, minimum: 1, maximum: 500, default: 50 }
+    LogSource:
+      name: source
+      in: query
+      description: Comma-separated sources (`hbbs`, `hbbr`, `panel`, `other`); empty = all.
+      schema: { type: string, example: "hbbs,hbbr" }
+    LogLevel:
+      name: level
+      in: query
+      description: Minimum level.
+      schema: { $ref: "#/components/schemas/LogLevel" }
+    LogAfter:
+      name: after
+      in: query
+      description: Only entries with `seq` above this.
+      schema: { type: integer, format: int64, minimum: 1 }
     Q:
       name: q
       in: query
@@ -4238,6 +4344,47 @@ components:
           required: [items]
           properties:
             items: { type: array, items: { $ref: "#/components/schemas/PunchRequest" } }
+    LogLevel:
+      type: string
+      enum: [debug, info, warn, error]
+      description: Normalised level (trace -> debug, fatal/panic -> error).
+    LogEntry:
+      type: object
+      required: [seq, time, source, level, message, raw]
+      properties:
+        seq: { type: integer, format: int64, description: "Process-local id, increasing across sources (restarts at 1 when rdpanel restarts)." }
+        time:
+          type: [string, "null"]
+          format: date-time
+          description: Time from the line itself (UTC); continuation lines inherit the previous line's time.
+        source: { type: string, enum: [hbbs, hbbr, panel, other] }
+        level: { $ref: "#/components/schemas/LogLevel" }
+        message: { type: string, description: "Message without timestamp/level; panel JSON attributes appended as key=value." }
+        raw: { type: string, description: "The full line as written by the service (redacted)." }
+    LogSourceInfo:
+      type: object
+      required: [name, lines]
+      properties:
+        name: { type: string, enum: [hbbs, hbbr, panel, other] }
+        lines: { type: integer, description: Lines currently buffered. }
+    LogPage:
+      type: object
+      required: [enabled, capture, capacity, sources, items, next_before]
+      properties:
+        enabled: { type: boolean }
+        capture:
+          type: string
+          enum: [files, panel, "off"]
+          description: |
+            `files`: hbbs, hbbr and panel (s6 image, RDPANEL_LOGS_DIR); `panel`: only the panel's own
+            lines (plain `rdpanel serve`); `off`: RDPANEL_LOGS_BUFFER=0.
+        capacity: { type: integer, description: Lines kept per source (RDPANEL_LOGS_BUFFER). }
+        sources: { type: array, items: { $ref: "#/components/schemas/LogSourceInfo" } }
+        items: { type: array, items: { $ref: "#/components/schemas/LogEntry" } }
+        next_before:
+          type: [integer, "null"]
+          format: int64
+          description: Pass as `before` for older entries; null when there are none.
     RelayUsage:
       type: object
       required: [peer, elapsed_s, total_mb, highest_kbps, avg_kbps, current_kbps]

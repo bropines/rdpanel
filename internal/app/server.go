@@ -60,6 +60,7 @@ func (a *App) Handler() http.Handler {
 			DeviceRate: adminapi.DeviceRateInfo{Rate: clientapi.DefaultDeviceRate.Rate, Burst: clientapi.DefaultDeviceRate.Burst},
 			StartedAt:  a.StartedAt, Schema: a.DB,
 			ClientOptions: a.ClientOptions,
+			Logs:          a.Logs, LogSources: a.logSources(), LogCapture: a.logCapture(),
 		}
 		if a.Updates != nil {
 			adminDeps.Updates = a.Updates
