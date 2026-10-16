@@ -7,6 +7,30 @@ with a **personal API token** instead of a browser session.
 The full contract (every path, parameter and schema) is [`api/openapi.yaml`](../api/openapi.yaml)
 (OpenAPI 3.1; load it into Swagger UI, Insomnia or a client generator).
 
+## Interactive docs
+
+The panel serves Swagger UI for this contract at **`/api/v1/docs`** on the admin host
+(linked from the user menu, About and Profile → API tokens), and the spec itself at
+`/api/v1/openapi.yaml` and `/api/v1/openapi.json`. Everything is bundled into the binary
+(no CDN) and works under the panel's CSP.
+
+- **Try it out** runs requests as you, with your browser session; the page adds the
+  `X-CSRF-Token` header itself. **Authorize** → `bearerAuth` takes a personal API token
+  (`rdp_…`) instead, to check what a script with that token may do.
+- When the spec is requested via the `RDPANEL_ADMIN_URL` host, its `servers` URLs are
+  absolute (`https://desk-admin.internal.example.com/api/v1/admin`), ready for client generators.
+- `RDPANEL_API_DOCS` (YAML `api_docs`): `auth` (default) requires a signed-in session or
+  an API token (browsers are redirected to the login and back, other clients get 401);
+  `public` makes the page and spec readable without login (API calls still need auth);
+  `off` answers 404.
+- The routes live under `/api/v1/`, so your reverse proxy decides where they are
+  reachable: with [split hosts](deploy.md#split-hosts-public-client-api--internal-admin-panel)
+  the public vhost 404s `/api/v1/*` and the docs stay internal.
+
+```sh
+curl -H "Authorization: Bearer $RDPANEL_TOKEN" https://desk-admin.internal.example.com/api/v1/openapi.json -o rdpanel-openapi.json
+```
+
 ## Where the API lives
 
 The admin API is served on the panel's host: `RDPANEL_ADMIN_URL` when the panel has its
