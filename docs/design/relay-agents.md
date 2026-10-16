@@ -6,6 +6,42 @@ Sources: this repo at `main` (`040325f`) and `rustdesk-server` at `merge-upstrea
 `srv:` marks paths in the server fork; unprefixed paths are in this repo. Line numbers in
 `docs/research/hbbs-integration.md` refer to the older `8a2a9fc`; line numbers here refer to the current heads.
 
+## TL;DR
+
+- **What:** run extra hbbr relays on other hosts as small "agent" containers, enrolled into and
+  managed by the central panel; hbbs's relay list is computed from their health.
+- **How:** `rdpanel agent` runs next to hbbr, **dials out** to the panel over WSS
+  (`/agent/v1/connect`), authenticates with a one-time enrollment token and then an ed25519
+  challenge, and drives hbbr through the same loopback admin channel the panel already uses.
+- **Key facts:** a remote hbbr needs only the hbbs **public** key (`hbbr -k <pubkey>`); hbbs picks
+  relays by global round-robin, so duplicates in `rs` give weights without a fork change.
+- **Health:** the panel probes each relay end to end (two `RequestRelay` legs, bytes must pass),
+  which also catches a relay running with the wrong key.
+- **Federation:** parked; share users through an external OIDC IdP instead.
+- **Effort:** MVP (static relays + agents) ≈ 8–10 days; see [§14](#14-phased-plan) and the
+  [open questions](#15-open-questions).
+
+```mermaid
+flowchart LR
+  subgraph main["Main host (one s6 container)"]
+    hbbs["hbbs<br/>rs = computed relay list"]
+    hbbr0["hbbr (local)"]
+    panel["rdpanel<br/>agent hub · prober · reconciler"]
+    panel -- "loopback admin 21115" --> hbbs
+    panel -- "loopback admin 21117" --> hbbr0
+  end
+  subgraph remote["Relay host N"]
+    agent["rdpanel agent"]
+    hbbrN["hbbr -k &lt;hbbs pubkey&gt;"]
+    agent -- "loopback admin 21117" --> hbbrN
+  end
+  agent == "WSS /agent/v1/connect<br/>status · config · ACK" ==> panel
+  panel -. "E2E relay probe (21117)" .-> hbbrN
+  clients(["RustDesk clients"]) -- "rendezvous 21116" --> hbbs
+  clients -- "relay 21117" --> hbbr0
+  clients -- "relay 21117" --> hbbrN
+```
+
 ---
 
 ## 1. Problem and goals
@@ -607,8 +643,8 @@ MVP (phases 0+1) is about **8-10 dev days**. Everything through phase 3 is about
 4. **Selection.** Is weighted round-robin enough for the MVP, or is geo selection a must-have?
    Geo needs the hbbs fork patch and a GeoIP source (MaxMind needs a licence key; DB-IP lite is
    CC-BY).
-5. **Agent endpoint.** Should it be under `/agent/v1/*` on `desk-ru-api.bropinus.ru`, or on a
-   dedicated Angie vhost with separate rate limits and logs?
+5. **Agent endpoint.** Should it be under `/agent/v1/*` on the public client-API host, or on a
+   dedicated reverse-proxy vhost with separate rate limits and logs?
 6. **WS relay (21119) on agents.** Is it needed (web client, restrictive networks), given that it
    needs a TLS reverse proxy on every relay host?
 7. **Traffic retention.** Are hourly per-relay aggregates enough, or do you want per-session
