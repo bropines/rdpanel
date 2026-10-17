@@ -713,3 +713,25 @@ The maintainer did not answer §15; these defaults were taken (2026-10) and impl
 Phase 2: hbbr `stats` patch, `relay_traffic_samples` + charts, alerts, Helm chart, auto-block,
 Grafana panels for `rdpanel_relay_*`. Phase 3: geo / prefix selection, load-aware weights,
 multi-key hbbr. WS 21119 on agents. Federation.
+
+## 17. Planned: separate public and management addresses
+
+Today a relay has one `public_host`. It is both the address hbbs hands to clients (`rs`) and
+the target of the panel's end-to-end probe. That breaks two real setups:
+
+- the agent and the probe should go over a private network (e.g. a tailnet IP), while
+  clients get a public domain or IP;
+- the relay sits behind NAT, so the probe from the panel host sees a different path than
+  clients do.
+
+Plan: split it into
+
+| field | used for | example |
+|---|---|---|
+| `public_host` | handed to clients via hbbs `rs` | `desk-nl.example.com:21117` |
+| `mgmt_host` (optional) | panel → relay probe; shown as "management address" | `100.x.y.z:21117` |
+
+The agent's own channel (`RDPANEL_AGENT_PANEL_URL`) can already point at the internal panel
+host. With `mgmt_host` empty the probe keeps using `public_host`. Optionally add a second,
+lighter "public reachability" check (TCP connect to `public_host`) so a firewall that blocks
+clients is still visible when the probe goes over the private network.
