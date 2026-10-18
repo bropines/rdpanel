@@ -121,7 +121,16 @@ type Service struct {
 	statusAt  map[int64]time.Time
 	liveStats map[int64]agentproto.Status
 
+	lastTraffic map[int64]trafficState
+	lastPurge   time.Time
+
 	installScript []byte // install.sh with this panel's URL and image
+}
+
+type trafficState struct {
+	at             time.Time
+	totalMB        float64
+	activeSessions int
 }
 
 // New builds a Service.
@@ -163,6 +172,7 @@ func New(cfg Config) (*Service, error) {
 		installScript: renderInstallScript(cfg.PublicURL, cfg.Image),
 		fails:         map[int64]int{}, probedAt: map[int64]time.Time{}, conns: map[int64]*agentConn{},
 		statusAt: map[int64]time.Time{}, liveStats: map[int64]agentproto.Status{},
+		lastTraffic: map[int64]trafficState{},
 	}, nil
 }
 
@@ -293,6 +303,7 @@ func (s *Service) Pass(ctx context.Context, probeAll bool) {
 	}
 	rot := ComputeRotation(rs)
 	s.updateMetrics(rs, rot)
+	s.sampleTraffic(ctx, rs)
 	key := strings.Join(rot.Servers, ",")
 	s.mu.Lock()
 	changed := key != s.lastPush
@@ -901,6 +912,7 @@ func (s *Service) Delete(ctx context.Context, id int64) error {
 	delete(s.fails, id)
 	delete(s.probedAt, id)
 	delete(s.liveStats, id)
+	delete(s.lastTraffic, id)
 	s.mu.Unlock()
 	s.Notify()
 	return nil
@@ -1092,4 +1104,108 @@ func (s *Service) audit(ctx context.Context, id int64, ip, action string, detail
 // run hbbr with ("" when unknown).
 func (s *Service) HBBSKeyFingerprint() string {
 	return agentproto.KeyFingerprint(s.publicKey())
+}
+
+// Traffic returns hourly traffic samples for relay id since `since`.
+func (s *Service) Traffic(ctx context.Context, id int64, since time.Time) ([]TrafficSample, error) {
+	if _, err := s.st.Get(ctx, id); err != nil {
+		return nil, err
+	}
+	return s.st.TrafficSince(ctx, id, since)
+}
+
+func (s *Service) sampleTraffic(ctx context.Context, rs []Relay) {
+	now := s.now()
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	for _, r := range rs {
+		prev := s.lastTraffic[r.ID]
+		if prev.at.IsZero() {
+			s.lastTraffic[r.ID] = trafficState{at: now}
+			continue
+		}
+		elapsed := now.Sub(prev.at).Seconds()
+		if elapsed < 5 {
+			continue
+		}
+
+		var (
+			bytesDelta     int64
+			sessionsDelta  int
+			activeSessions int
+		)
+
+		switch r.Kind {
+		case KindAgent:
+			st, ok := s.liveStats[r.ID]
+			if !ok {
+				continue
+			}
+			activeSessions = st.Usage.RelaysActive
+			rateBps := st.Host.RxBps + st.Host.TxBps
+			if rateBps <= 0 && st.Usage.CurrentKbps > 0 {
+				rateBps = st.Usage.CurrentKbps * 1000
+			}
+			bytesDelta = int64(rateBps / 8 * elapsed)
+			if st.Usage.TotalMB > prev.totalMB && prev.totalMB > 0 {
+				mbDelta := int64((st.Usage.TotalMB - prev.totalMB) * 1024 * 1024)
+				if mbDelta > bytesDelta {
+					bytesDelta = mbDelta
+				}
+			}
+			if activeSessions > prev.activeSessions {
+				sessionsDelta = activeSessions - prev.activeSessions
+			}
+			s.lastTraffic[r.ID] = trafficState{
+				at:             now,
+				totalMB:        st.Usage.TotalMB,
+				activeSessions: activeSessions,
+			}
+
+		case KindLocal:
+			l, _ := s.local()
+			if l == nil {
+				continue
+			}
+			uCtx, cancel := context.WithTimeout(ctx, time.Second)
+			usage, err := l.Usage(uCtx)
+			cancel()
+			if err != nil {
+				continue
+			}
+			activeSessions = len(usage)
+			var totalMB, sumKbps float64
+			for _, u := range usage {
+				totalMB += u.TotalMB
+				sumKbps += float64(u.CurrentKbps)
+			}
+			rateBps := sumKbps * 1000
+			bytesDelta = int64(rateBps / 8 * elapsed)
+			if totalMB > prev.totalMB && prev.totalMB > 0 {
+				mbDelta := int64((totalMB - prev.totalMB) * 1024 * 1024)
+				if mbDelta > bytesDelta {
+					bytesDelta = mbDelta
+				}
+			}
+			if activeSessions > prev.activeSessions {
+				sessionsDelta = activeSessions - prev.activeSessions
+			}
+			s.lastTraffic[r.ID] = trafficState{
+				at:             now,
+				totalMB:        totalMB,
+				activeSessions: activeSessions,
+			}
+		}
+
+		if bytesDelta > 0 || sessionsDelta > 0 || activeSessions > 0 {
+			_ = s.st.RecordTraffic(ctx, r.ID, now, bytesDelta, sessionsDelta, activeSessions)
+		}
+	}
+
+	// Purge samples older than 30 days once an hour
+	if now.Sub(s.lastPurge) >= time.Hour {
+		s.lastPurge = now
+		_, _ = s.st.PurgeTrafficBefore(ctx, now.Add(-30*24*time.Hour))
+	}
 }

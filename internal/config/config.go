@@ -61,7 +61,17 @@ type Config struct {
 	Log      LogConfig      `yaml:"log"`
 	Logs     LogsConfig     `yaml:"logs"`
 	SMTP     SMTPConfig     `yaml:"smtp"`
+	Webhook  WebhookConfig  `yaml:"webhook"`
 }
+
+// WebhookConfig specifies an optional webhook endpoint for critical alerts.
+type WebhookConfig struct {
+	URL    string `yaml:"url"`
+	Secret Secret `yaml:"secret"`
+}
+
+// Enabled reports whether webhooks are configured.
+func (w WebhookConfig) Enabled() bool { return w.URL != "" }
 
 // SMTP encryption modes.
 const (
@@ -374,6 +384,8 @@ func (c *Config) envVars() []envVar {
 		{"RDPANEL_SMTP_FROM", str(&c.SMTP.From)},
 		{"RDPANEL_SMTP_ENCRYPTION", str(&c.SMTP.Encryption)},
 		{"RDPANEL_SMTP_INSECURE_SKIP_VERIFY", boolean(&c.SMTP.InsecureSkipVerify)},
+		{"RDPANEL_WEBHOOK_URL", str(&c.Webhook.URL)},
+		{"RDPANEL_WEBHOOK_SECRET", sec(&c.Webhook.Secret)},
 	}
 }
 
@@ -564,6 +576,12 @@ func (c *Config) Validate() error {
 			add("smtp.from is required when smtp.host is set")
 		} else if _, err := mail.ParseAddress(c.SMTP.From); err != nil {
 			add("smtp.from %q: %v", c.SMTP.From, err)
+		}
+	}
+	if c.Webhook.Enabled() {
+		u, err := url.ParseRequestURI(c.Webhook.URL)
+		if err != nil || (u.Scheme != "http" && u.Scheme != "https") {
+			add("webhook.url %q: must be an http or https URL", c.Webhook.URL)
 		}
 	}
 	if len(errs) > 0 {

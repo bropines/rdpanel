@@ -250,6 +250,7 @@ Summary:
 | `RDPANEL_LOGS_BUFFER`, `RDPANEL_LOGS_DIR` | panel, log pipelines | `2000`, `/run/rdpanel/logs` | Server → Logs: lines kept per source (`0` = off) and the s6-log capture dir (see [Server logs](#server-logs)) |
 | `RDPANEL_UPDATE_CHECK` | panel | `true` | About page release check against the GitHub API (see [below](#about-page-and-update-check)); `false` = no outbound request |
 | `RDPANEL_API_DOCS` | panel | `auth` | Swagger UI at `/api/v1/docs` + spec: `auth`, `public` or `off` (see [api.md](api.md#interactive-docs)); being under `/api/v1/`, a public vhost that 404s `/api/v1/*` keeps it internal |
+| `RDPANEL_WEBHOOK_URL`, `_SECRET` | panel | off | alerts for critical events (relay degraded/offline, hbbs down) sent via HTTP POST with optional HMAC-SHA256 signature |
 | `RDPANEL_SMTP_HOST`, `_PORT`, `_ENCRYPTION`, `_USERNAME`, `_PASSWORD`, `_PASSWORD_FILE`, `_FROM`, `_INSECURE_SKIP_VERIFY` | panel | off | outgoing e-mail (see [E-mail](#e-mail-verification-codes-and-password-reset)); otherwise configurable in Settings → E-mail |
 | `HEALTHCHECK_PORTS` | healthcheck | `21115 21116 21117 21118 21119` | ports that must listen |
 

@@ -432,3 +432,57 @@ func TestSeparateMgmtHost(t *testing.T) {
 		t.Fatalf("expected empty mgmt_host, got %q", v.MgmtHost)
 	}
 }
+
+func TestRelayTrafficRecordingAndQuery(t *testing.T) {
+	ctx := context.Background()
+	h := newHarness(t, nil)
+	v, _, err := h.svc.Create(ctx, CreateInput{Name: "relay-traffic-test", Kind: KindStatic, PublicHost: "127.0.0.1:21117"})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	t0 := time.Date(2026, 10, 18, 12, 15, 0, 0, time.UTC)
+	// Record two samples in the same hour: should aggregate
+	if err := h.st.RecordTraffic(ctx, v.ID, t0, 1000, 2, 5); err != nil {
+		t.Fatal(err)
+	}
+	if err := h.st.RecordTraffic(ctx, v.ID, t0.Add(10*time.Minute), 2000, 3, 8); err != nil {
+		t.Fatal(err)
+	}
+
+	// Record sample in next hour
+	t1 := t0.Add(time.Hour)
+	if err := h.st.RecordTraffic(ctx, v.ID, t1, 5000, 1, 2); err != nil {
+		t.Fatal(err)
+	}
+
+	// Query via Service
+	samples, err := h.svc.Traffic(ctx, v.ID, t0.Add(-time.Hour))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(samples) != 2 {
+		t.Fatalf("expected 2 hourly samples, got %d", len(samples))
+	}
+	// Check hour 0: 3000 bytes, 5 sessions, max 8 active
+	if samples[0].Bytes != 3000 || samples[0].Sessions != 5 || samples[0].MaxActive != 8 {
+		t.Errorf("sample[0] = %+v, want bytes=3000 sessions=5 max=8", samples[0])
+	}
+	// Check hour 1: 5000 bytes, 1 session, max 2 active
+	if samples[1].Bytes != 5000 || samples[1].Sessions != 1 || samples[1].MaxActive != 2 {
+		t.Errorf("sample[1] = %+v, want bytes=5000 sessions=1 max=2", samples[1])
+	}
+
+	// Purge before t1
+	n, err := h.st.PurgeTrafficBefore(ctx, t1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n != 1 {
+		t.Errorf("purged %d rows, want 1", n)
+	}
+	remaining, err := h.svc.Traffic(ctx, v.ID, t0.Add(-time.Hour))
+	if err != nil || len(remaining) != 1 {
+		t.Fatalf("remaining = %v, err = %v", remaining, err)
+	}
+}

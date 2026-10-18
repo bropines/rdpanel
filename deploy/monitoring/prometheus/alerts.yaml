@@ -154,3 +154,37 @@ groups:
           description: >-
             /api/audit/{{ $labels.type }} answered 5xx (clients retry, but
             records may be lost). Check disk space and the rdpanel log.
+
+      # ---------------------------------------------------------------- relays
+      - alert: RustDeskRelayOffline
+        expr: rdpanel_relay_health{job="rustdesk-panel", state="offline"} == 1
+        for: 3m
+        labels:
+          severity: warning
+        annotations:
+          summary: Relay {{ $labels.relay }} is offline on {{ $labels.instance }}
+          description: >-
+            End-to-end probes to relay {{ $labels.relay }} keep failing. It has
+            been removed from the hbbs rotation.
+
+      - alert: RustDeskRelayDegraded
+        expr: rdpanel_relay_health{job="rustdesk-panel", state="degraded"} == 1
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: Relay {{ $labels.relay }} is degraded on {{ $labels.instance }}
+          description: >-
+            Relay {{ $labels.relay }} is experiencing probe failures or high latency.
+
+      - alert: RustDeskRelayConfigLag
+        expr: rdpanel_relay_config_lag{job="rustdesk-panel"} > 0
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: Relay {{ $labels.relay }} has unapplied configuration on {{ $labels.instance }}
+          description: >-
+            Relay agent {{ $labels.relay }} has not acknowledged the desired configuration
+            version for more than 15 minutes.
+

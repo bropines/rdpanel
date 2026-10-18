@@ -51,6 +51,9 @@ func (a *App) startWorkers(ctx context.Context, wg *sync.WaitGroup) {
 	if c := a.HBBS.Control; c != nil {
 		run("hbbs-punch-requests", func(ctx context.Context) { a.runPunchCollector(ctx, c) })
 	}
+	if a.Webhook != nil {
+		run("webhook", a.Webhook.Run)
+	}
 }
 
 func (a *App) runJanitor(ctx context.Context) {

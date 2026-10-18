@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -35,6 +36,7 @@ type RelayManager interface {
 	Settings(ctx context.Context, id int64) (relays.SettingsView, error)
 	SaveSettings(ctx context.Context, id int64, ov reconcile.Settings, by *int64) (relays.SettingsView, error)
 	Usage(ctx context.Context, id int64) ([]control.RelayUsage, error)
+	Traffic(ctx context.Context, id int64, since time.Time) ([]relays.TrafficSample, error)
 	GetOptions(ctx context.Context) (relays.Options, error)
 	SetOptions(ctx context.Context, o relays.Options, by *int64) error
 	HBBSKeyFingerprint() string
@@ -58,6 +60,7 @@ func (c *b2bCore) registerRelays(r chi.Router) {
 		r.Get("/relays/{id}/settings", c.handleGetRelaySettings)
 		r.Put("/relays/{id}/settings", c.handlePutRelaySettings)
 		r.Get("/relays/{id}/usage", c.handleRelayUsageByID)
+		r.Get("/relays/{id}/traffic", c.handleRelayTraffic)
 	})
 }
 
@@ -592,4 +595,77 @@ func (c *b2bCore) handlePutRelayOptions(w http.ResponseWriter, r *http.Request) 
 	recordAudit(r.Context(), c.d, r, "relay.options.update", "settings", "relays",
 		map[string]any{"require_approval": o.RequireApproval, "allow_private_hosts": o.AllowPrivateHosts})
 	httpx.WriteJSON(w, http.StatusOK, o)
+}
+
+type relayTrafficSummaryDTO struct {
+	RelayID       int64                  `json:"relay_id"`
+	Hours         int                    `json:"hours"`
+	TotalBytes    int64                  `json:"total_bytes"`
+	TotalSessions int                    `json:"total_sessions"`
+	MaxActive     int                    `json:"max_active"`
+	Items         []relayTrafficPointDTO `json:"items"`
+}
+
+type relayTrafficPointDTO struct {
+	HourStart time.Time `json:"hour_start"`
+	Bytes     int64     `json:"bytes"`
+	Sessions  int       `json:"sessions"`
+	MaxActive int       `json:"max_active"`
+}
+
+func (c *b2bCore) handleRelayTraffic(w http.ResponseWriter, r *http.Request) {
+	id, ok := pathID(w, r, "id")
+	if !ok || !c.needRelays(w) {
+		return
+	}
+	hours := 24
+	if q := r.URL.Query().Get("hours"); q != "" {
+		if n, err := strconv.Atoi(q); err == nil && n >= 1 && n <= 168 {
+			hours = n
+		}
+	}
+	now := c.d.Store.Now().UTC()
+	start := store.HourStart(now).Add(-time.Duration(hours-1) * time.Hour)
+	samples, err := c.d.Relays.Traffic(r.Context(), id, start)
+	if err != nil {
+		c.relayErr(w, r, "relay traffic", err)
+		return
+	}
+
+	byHour := make(map[int64]relays.TrafficSample, len(samples))
+	for _, s := range samples {
+		byHour[store.HourStart(s.HourStart).UnixMilli()] = s
+	}
+
+	items := make([]relayTrafficPointDTO, hours)
+	var (
+		totalBytes    int64
+		totalSessions int
+		maxActive     int
+	)
+	for i := range items {
+		t := start.Add(time.Duration(i) * time.Hour)
+		s := byHour[t.UnixMilli()]
+		items[i] = relayTrafficPointDTO{
+			HourStart: t,
+			Bytes:     s.Bytes,
+			Sessions:  s.Sessions,
+			MaxActive: s.MaxActive,
+		}
+		totalBytes += s.Bytes
+		totalSessions += s.Sessions
+		if s.MaxActive > maxActive {
+			maxActive = s.MaxActive
+		}
+	}
+
+	out := relayTrafficSummaryDTO{
+		RelayID:       id,
+		Hours:         hours,
+		TotalBytes:    totalBytes,
+		TotalSessions: totalSessions,
+		MaxActive:     maxActive,
+		Items:         items,
+	}
+	httpx.WriteJSON(w, http.StatusOK, out)
 }
