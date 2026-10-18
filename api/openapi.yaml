@@ -2341,6 +2341,33 @@ paths:
         "400": { $ref: "#/components/responses/ValidationFailed" }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "403": { $ref: "#/components/responses/Forbidden" }
+  /server/client-options/probe:
+    post:
+      tags: [server]
+      operationId: probeIceServers
+      summary: Probe candidate ICE / STUN servers to test reachability and latency before saving.
+      parameters:
+        - $ref: "#/components/parameters/CsrfHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [ice_servers]
+              properties:
+                ice_servers:
+                  type: string
+                  description: stun:, stuns:, turn:// or turns:// URLs separated by commas or newlines.
+      responses:
+        "200":
+          description: Probe results.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/IceServerProbeList" }
+        "400": { $ref: "#/components/responses/ValidationFailed" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
   /server/client-config:
     get:
       tags: [server]
@@ -2715,6 +2742,59 @@ paths:
         "400": { $ref: "#/components/responses/ValidationFailed" }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "403": { $ref: "#/components/responses/Forbidden" }
+  /relays/prefix-rules:
+    get:
+      tags: [relays]
+      operationId: listRelayPrefixRules
+      summary: List all CIDR prefix to relay routing rules for hbbs (rg / reload-geo).
+      responses:
+        "200":
+          description: List of prefix routing rules.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/RelayPrefixRule" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+    post:
+      tags: [relays]
+      operationId: createRelayPrefixRule
+      summary: Create a CIDR prefix to relay routing rule.
+      parameters:
+        - $ref: "#/components/parameters/CsrfHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/RelayPrefixRuleInput" }
+      responses:
+        "201":
+          description: Created rule.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RelayPrefixRule" }
+        "400": { $ref: "#/components/responses/ValidationFailed" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /relays/prefix-rules/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: integer, format: int64 }
+    delete:
+      tags: [relays]
+      operationId: deleteRelayPrefixRule
+      summary: Delete a CIDR prefix to relay routing rule.
+      parameters:
+        - $ref: "#/components/parameters/CsrfHeader"
+      responses:
+        "204":
+          description: Deleted.
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
   /relays/{id}:
     parameters:
       - $ref: "#/components/parameters/RelayId"
@@ -4530,6 +4610,39 @@ components:
           maxLength: 16384
           description: stun:, stuns:, turn:// or turns:// URLs separated by commas or newlines (at most 16).
         webrtc_congestion_control: { type: [boolean, "null"] }
+    IceServerProbeItem:
+      type: object
+      required: [server, scheme, reachable]
+      properties:
+        server: { type: string }
+        scheme: { type: string }
+        reachable: { type: boolean }
+        rtt_ms: { type: number }
+        error: { type: [string, "null"] }
+    IceServerProbeList:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/IceServerProbeItem" }
+    RelayPrefixRule:
+      type: object
+      required: [id, cidr, relay_host, comment, created_at, updated_at]
+      properties:
+        id: { type: integer, format: int64 }
+        cidr: { type: string }
+        relay_host: { type: string }
+        comment: { type: string }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+    RelayPrefixRuleInput:
+      type: object
+      required: [cidr, relay_host]
+      properties:
+        cidr: { type: string }
+        relay_host: { type: string }
+        comment: { type: string }
     ServerSettingKey:
       type: string
       enum: [relay_servers, always_use_relay, must_login, tcp_keepalive, webrtc, blacklist, blocklist, limit_speed_mbps, total_bandwidth_mbps, single_bandwidth_mbps, downgrade_threshold, downgrade_start_check_s]

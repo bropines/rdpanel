@@ -489,6 +489,7 @@ func TestRelayTrafficRecordingAndQuery(t *testing.T) {
 
 type fakeLocalControl struct {
 	usage []control.RelayUsage
+	stats *control.RelayStats
 }
 
 func (f *fakeLocalControl) RelayServers(context.Context) ([]string, error) {
@@ -497,6 +498,14 @@ func (f *fakeLocalControl) RelayServers(context.Context) ([]string, error) {
 
 func (f *fakeLocalControl) Usage(context.Context) ([]control.RelayUsage, error) {
 	return f.usage, nil
+}
+
+func (f *fakeLocalControl) Stats(context.Context) (*control.RelayStats, error) {
+	return f.stats, nil
+}
+
+func (f *fakeLocalControl) ReloadGeo(context.Context) (string, error) {
+	return "ok", nil
 }
 
 func TestLocalRelaySampleTrafficNoDeadlock(t *testing.T) {

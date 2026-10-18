@@ -1688,6 +1688,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/server/client-options/probe": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Probe candidate ICE / STUN servers to test reachability and latency before saving. */
+        post: operations["probeIceServers"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/server/client-config": {
         parameters: {
             query?: never;
@@ -2020,6 +2037,43 @@ export interface paths {
         put: operations["updateRelayOptions"];
         post?: never;
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/relays/prefix-rules": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List all CIDR prefix to relay routing rules for hbbs (rg / reload-geo). */
+        get: operations["listRelayPrefixRules"];
+        put?: never;
+        /** Create a CIDR prefix to relay routing rule. */
+        post: operations["createRelayPrefixRule"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/relays/prefix-rules/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Delete a CIDR prefix to relay routing rule. */
+        delete: operations["deleteRelayPrefixRule"];
         options?: never;
         head?: never;
         patch?: never;
@@ -3472,6 +3526,32 @@ export interface components {
             /** @description stun:, stuns:, turn:// or turns:// URLs separated by commas or newlines (at most 16). */
             ice_servers?: string;
             webrtc_congestion_control?: boolean | null;
+        };
+        IceServerProbeItem: {
+            server: string;
+            scheme: string;
+            reachable: boolean;
+            rtt_ms?: number;
+            error?: string | null;
+        };
+        IceServerProbeList: {
+            items: components["schemas"]["IceServerProbeItem"][];
+        };
+        RelayPrefixRule: {
+            /** Format: int64 */
+            id: number;
+            cidr: string;
+            relay_host: string;
+            comment: string;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+        };
+        RelayPrefixRuleInput: {
+            cidr: string;
+            relay_host: string;
+            comment?: string;
         };
         /** @enum {string} */
         ServerSettingKey: "relay_servers" | "always_use_relay" | "must_login" | "tcp_keepalive" | "webrtc" | "blacklist" | "blocklist" | "limit_speed_mbps" | "total_bandwidth_mbps" | "single_bandwidth_mbps" | "downgrade_threshold" | "downgrade_start_check_s";
@@ -7250,6 +7330,39 @@ export interface operations {
             403: components["responses"]["Forbidden"];
         };
     };
+    probeIceServers: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Must equal the rdpanel_csrf cookie. */
+                "X-CSRF-Token": components["parameters"]["CsrfHeader"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @description stun:, stuns:, turn:// or turns:// URLs separated by commas or newlines. */
+                    ice_servers: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Probe results. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IceServerProbeList"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
     getClientConfig: {
         parameters: {
             query?: never;
@@ -7783,6 +7896,84 @@ export interface operations {
             400: components["responses"]["ValidationFailed"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
+        };
+    };
+    listRelayPrefixRules: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description List of prefix routing rules. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RelayPrefixRule"][];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    createRelayPrefixRule: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Must equal the rdpanel_csrf cookie. */
+                "X-CSRF-Token": components["parameters"]["CsrfHeader"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RelayPrefixRuleInput"];
+            };
+        };
+        responses: {
+            /** @description Created rule. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RelayPrefixRule"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    deleteRelayPrefixRule: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Must equal the rdpanel_csrf cookie. */
+                "X-CSRF-Token": components["parameters"]["CsrfHeader"];
+            };
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Deleted. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
         };
     };
     getRelay: {

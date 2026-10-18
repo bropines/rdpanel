@@ -40,6 +40,9 @@ type RelayManager interface {
 	GetOptions(ctx context.Context) (relays.Options, error)
 	SetOptions(ctx context.Context, o relays.Options, by *int64) error
 	HBBSKeyFingerprint() string
+	ListPrefixRules(ctx context.Context) ([]relays.PrefixRule, error)
+	CreatePrefixRule(ctx context.Context, rule *relays.PrefixRule) error
+	DeletePrefixRule(ctx context.Context, id int64) error
 }
 
 func (c *b2bCore) registerRelays(r chi.Router) {
@@ -50,6 +53,9 @@ func (c *b2bCore) registerRelays(r chi.Router) {
 		r.Get("/relays/rotation", c.handleRelayRotation)
 		r.Get("/relays/options", c.handleGetRelayOptions)
 		r.Put("/relays/options", c.handlePutRelayOptions)
+		r.Get("/relays/prefix-rules", c.handleListPrefixRules)
+		r.Post("/relays/prefix-rules", c.handleCreatePrefixRule)
+		r.Delete("/relays/prefix-rules/{id}", c.handleDeletePrefixRule)
 		r.Get("/relays/{id}", c.handleGetRelay)
 		r.Patch("/relays/{id}", c.handlePatchRelay)
 		r.Delete("/relays/{id}", c.handleDeleteRelay)
@@ -75,6 +81,8 @@ func (c *b2bCore) needRelays(w http.ResponseWriter) bool {
 // relayErr maps relays/store errors.
 func (c *b2bCore) relayErr(w http.ResponseWriter, r *http.Request, what string, err error) {
 	switch {
+	case errors.Is(err, store.ErrNotFound):
+		httpx.WriteError(w, http.StatusNotFound, "not_found", what+" not found")
 	case errors.Is(err, store.ErrInvalid):
 		msg := err.Error()
 		if i := strings.Index(msg, store.ErrInvalid.Error()+": "); i >= 0 {
@@ -669,3 +677,85 @@ func (c *b2bCore) handleRelayTraffic(w http.ResponseWriter, r *http.Request) {
 	}
 	httpx.WriteJSON(w, http.StatusOK, out)
 }
+
+type relayPrefixRuleDTO struct {
+	ID        int64  `json:"id"`
+	CIDR      string `json:"cidr"`
+	RelayHost string `json:"relay_host"`
+	Comment   string `json:"comment"`
+	CreatedAt string `json:"created_at"`
+	UpdatedAt string `json:"updated_at"`
+}
+
+type relayPrefixRuleInput struct {
+	CIDR      string `json:"cidr"`
+	RelayHost string `json:"relay_host"`
+	Comment   string `json:"comment"`
+}
+
+func newRelayPrefixRuleDTO(r relays.PrefixRule) relayPrefixRuleDTO {
+	return relayPrefixRuleDTO{
+		ID:        r.ID,
+		CIDR:      r.CIDR,
+		RelayHost: r.RelayHost,
+		Comment:   r.Comment,
+		CreatedAt: r.CreatedAt.Format(time.RFC3339),
+		UpdatedAt: r.UpdatedAt.Format(time.RFC3339),
+	}
+}
+
+func (c *b2bCore) handleListPrefixRules(w http.ResponseWriter, r *http.Request) {
+	if !c.needRelays(w) {
+		return
+	}
+	rules, err := c.d.Relays.ListPrefixRules(r.Context())
+	if err != nil {
+		c.fail(w, r, "list prefix rules", err)
+		return
+	}
+	out := make([]relayPrefixRuleDTO, 0, len(rules))
+	for _, rule := range rules {
+		out = append(out, newRelayPrefixRuleDTO(rule))
+	}
+	httpx.WriteJSON(w, http.StatusOK, out)
+}
+
+func (c *b2bCore) handleCreatePrefixRule(w http.ResponseWriter, r *http.Request) {
+	if !c.needRelays(w) {
+		return
+	}
+	var in relayPrefixRuleInput
+	if !decodeBody(w, r, &in, 64<<10) {
+		return
+	}
+	rule := relays.PrefixRule{
+		CIDR:      in.CIDR,
+		RelayHost: in.RelayHost,
+		Comment:   in.Comment,
+	}
+	if err := rule.Validate(); err != nil {
+		validationFailed(w, "invalid prefix rule", map[string]string{"cidr": err.Error()})
+		return
+	}
+	if err := c.d.Relays.CreatePrefixRule(r.Context(), &rule); err != nil {
+		c.fail(w, r, "create prefix rule", err)
+		return
+	}
+	c.audit(r, "relays.prefix_rule.create", "relay_prefix_rule", rule.ID,
+		map[string]any{"cidr": rule.CIDR, "relay_host": rule.RelayHost})
+	httpx.WriteJSON(w, http.StatusCreated, newRelayPrefixRuleDTO(rule))
+}
+
+func (c *b2bCore) handleDeletePrefixRule(w http.ResponseWriter, r *http.Request) {
+	id, ok := pathID(w, r, "id")
+	if !ok || !c.needRelays(w) {
+		return
+	}
+	if err := c.d.Relays.DeletePrefixRule(r.Context(), id); err != nil {
+		c.relayErr(w, r, "delete prefix rule", err)
+		return
+	}
+	c.audit(r, "relays.prefix_rule.delete", "relay_prefix_rule", id, nil)
+	w.WriteHeader(http.StatusNoContent)
+}
+

@@ -75,6 +75,7 @@ var specs = []CommandSpec{
 	{HBBS, "must-login", "ml", "[Y|N]", vYN},
 	{HBBS, "tcp-keepalive", "tk", "[Y|N]", vYN},
 	{HBBS, "webrtc", "wr", "[Y|N]", vYN},
+	{HBBS, "reload-geo", "rg", "", noArgsMutating},
 
 	{HBBR, "h", "", "", noArgs},
 	{HBBR, "blacklist-add", "ba", "<ip>[|<ip>...]", vIPListSet},
@@ -89,6 +90,7 @@ var specs = []CommandSpec{
 	{HBBR, "total-bandwidth", "tb", "[<Mb/s>]", vOptionalFloat},
 	{HBBR, "single-bandwidth", "sb", "[<Mb/s>]", vOptionalFloat},
 	{HBBR, "usage", "u", "", noArgs},
+	{HBBR, "stats", "", "", noArgs},
 }
 
 func errArgs(format string, a ...any) error {
@@ -100,6 +102,13 @@ func noArgs(args []string) ([]string, bool, error) {
 		return nil, false, errArgs("takes no arguments")
 	}
 	return nil, false, nil
+}
+
+func noArgsMutating(args []string) ([]string, bool, error) {
+	if len(args) != 0 {
+		return nil, false, errArgs("takes no arguments")
+	}
+	return nil, true, nil
 }
 
 func vYN(args []string) ([]string, bool, error) {

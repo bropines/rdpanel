@@ -74,3 +74,53 @@ func (c *b2bCore) handlePutClientOptions(w http.ResponseWriter, r *http.Request)
 		map[string]any{"ice_servers": n, "webrtc_congestion_control": o.WebRTCCongestion})
 	httpx.WriteJSON(w, http.StatusOK, newClientOptionsDTO(o))
 }
+
+type clientOptionsProbeInput struct {
+	ICEServers string `json:"ice_servers"`
+}
+
+type iceServerProbeDTO struct {
+	Server    string   `json:"server"`
+	Scheme    string   `json:"scheme"`
+	Reachable bool     `json:"reachable"`
+	RTTMs     *float64 `json:"rtt_ms,omitempty"`
+	Error     *string  `json:"error,omitempty"`
+}
+
+type iceServerProbeListDTO struct {
+	Items []iceServerProbeDTO `json:"items"`
+}
+
+func (c *b2bCore) handlePostClientOptionsProbe(w http.ResponseWriter, r *http.Request) {
+	var in clientOptionsProbeInput
+	if !decodeBody(w, r, &in, 64<<10) {
+		return
+	}
+	ctx := r.Context()
+	allowPrivate := false
+	if c.d.Relays != nil {
+		if opts, err := c.d.Relays.GetOptions(ctx); err == nil {
+			allowPrivate = opts.AllowPrivateHosts
+		}
+	}
+	results := clientopts.ProbeICEServers(ctx, in.ICEServers, allowPrivate)
+	items := make([]iceServerProbeDTO, 0, len(results))
+	for _, res := range results {
+		dto := iceServerProbeDTO{
+			Server:    res.Server,
+			Scheme:    res.Scheme,
+			Reachable: res.Reachable,
+		}
+		if res.Reachable {
+			rtt := res.RTTMs
+			dto.RTTMs = &rtt
+		}
+		if res.Error != "" {
+			errStr := res.Error
+			dto.Error = &errStr
+		}
+		items = append(items, dto)
+	}
+	httpx.WriteJSON(w, http.StatusOK, iceServerProbeListDTO{Items: items})
+}
+

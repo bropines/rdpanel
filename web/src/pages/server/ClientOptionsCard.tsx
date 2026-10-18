@@ -1,10 +1,10 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Save } from "lucide-react";
+import { Activity, Save } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
-import { serverApi, type ClientOptions, type ClientOptionsInput } from "@/api/system";
+import { serverApi, type ClientOptions, type ClientOptionsInput, type IceServerProbeItem } from "@/api/system";
 import { ErrorState, RelativeTime, useToastError } from "@/components";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -18,6 +18,30 @@ interface Draft {
   ice_servers: string;
   congestion: Tri;
 }
+
+interface Preset {
+  id: string;
+  servers: string;
+}
+
+const PRESETS: Preset[] = [
+  {
+    id: "global",
+    servers: "stun:stun.cloudflare.com:3478\nstun:stun.l.google.com:19302\nstun:stun1.l.google.com:19302",
+  },
+  {
+    id: "ru",
+    servers: "stun:stun.cloudflare.com:3478\nstun:stun.qq.com:3478\nstun:stun.syncthing.net:3478",
+  },
+  {
+    id: "cloudflare",
+    servers: "stun:stun.cloudflare.com:3478",
+  },
+  {
+    id: "default",
+    servers: "",
+  },
+];
 
 const MAX_ICE_SERVERS = 16;
 const STUN = /^stuns?:(\/\/)?[^\s,/@]+$/;
@@ -64,6 +88,7 @@ export function ClientOptionsCard() {
   const toastError = useToastError();
   const q = useQuery({ queryKey: ["server", "client-options"], queryFn: serverApi.clientOptions });
   const [draft, setDraft] = useState<Draft | null>(null);
+  const [probeResults, setProbeResults] = useState<IceServerProbeItem[] | null>(null);
 
   useEffect(() => {
     if (q.data) setDraft(toDraft(q.data));
@@ -78,6 +103,30 @@ export function ClientOptionsCard() {
     },
     onError: toastError,
   });
+
+  const probe = useMutation({
+    mutationFn: (servers: string) => serverApi.probeIceServers({ ice_servers: servers }),
+    onSuccess: (res) => {
+      setProbeResults(res.items);
+      const reachable = res.items.filter((x) => x.reachable).length;
+      if (reachable === res.items.length) {
+        toast.success(t("server.clientOptions.probe.success"));
+      } else {
+        toast.warning(t("server.clientOptions.probe.someFailed"));
+      }
+    },
+    onError: toastError,
+  });
+
+  const applyPreset = (presetServers: string) => {
+    if (!draft) return;
+    setProbeResults(null);
+    // Keep existing TURN servers intact, replace STUN servers
+    const turnEntries = iceEntries(draft.ice_servers).filter((e) => /^turns?:/i.test(e));
+    const newStunEntries = iceEntries(presetServers).filter((e) => !/^turns?:/i.test(e));
+    const combined = [...newStunEntries, ...turnEntries];
+    setDraft({ ...draft, ice_servers: combined.join("\n") });
+  };
 
   if (q.isError) return <ErrorState error={q.error} onRetry={() => void q.refetch()} />;
   if (!q.data || !draft) return <Skeleton className="h-48" />;
@@ -116,17 +165,67 @@ export function ClientOptionsCard() {
             <span className="font-mono text-[11px] text-muted-foreground">ice-servers</span>
           </div>
           <div className="min-w-0 space-y-1.5">
+            <div className="flex flex-wrap items-center gap-1.5 pb-1">
+              <span className="text-xs text-muted-foreground mr-0.5">{t("server.clientOptions.presets.label")}:</span>
+              {PRESETS.map((p) => (
+                <Button
+                  key={p.id}
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="h-6 text-xs px-2 rounded-full font-normal"
+                  onClick={() => applyPreset(p.servers)}
+                >
+                  {t(`server.clientOptions.presets.${p.id}`)}
+                </Button>
+              ))}
+            </div>
             <Textarea
               id="srv-ice_servers"
               rows={4}
               className="font-mono"
               value={draft.ice_servers}
-              onChange={(e) => setDraft({ ...draft, ice_servers: e.target.value })}
+              onChange={(e) => {
+                setDraft({ ...draft, ice_servers: e.target.value });
+                setProbeResults(null);
+              }}
               placeholder={"stun:stun.example.com:3478\nturn://user:pass@turn.example.com:3478"}
               autoComplete="off"
               spellCheck={false}
             />
             {error && <p className="text-xs text-destructive">{t(error)}</p>}
+            <div className="flex items-center justify-between gap-2 pt-0.5">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-7 text-xs px-2"
+                disabled={!iceEntries(draft.ice_servers).length || !!error || probe.isPending}
+                onClick={() => probe.mutate(draft.ice_servers)}
+              >
+                <Activity className="size-3.5 mr-1" />
+                {probe.isPending ? t("server.clientOptions.probe.testing") : t("server.clientOptions.probe.button")}
+              </Button>
+              {probeResults && probeResults.length > 0 && (
+                <span className="text-xs text-muted-foreground font-mono">
+                  {probeResults.filter((r) => r.reachable).length}/{probeResults.length} {t("server.clientOptions.probe.reachableCount")}
+                </span>
+              )}
+            </div>
+            {probeResults && probeResults.length > 0 && (
+              <div className="flex flex-wrap gap-1.5 pt-1">
+                {probeResults.map((r, i) => (
+                  <Badge
+                    key={i}
+                    variant={r.reachable ? "outline" : "destructive"}
+                    className={`text-[11px] font-mono font-normal ${r.reachable ? "border-emerald-500/50 text-emerald-600 dark:text-emerald-400 bg-emerald-500/10" : ""}`}
+                  >
+                    {r.server}
+                    {r.reachable ? ` · ${r.rtt_ms} ms ✓` : ` · ${r.error || "failed"} ✗`}
+                  </Badge>
+                ))}
+              </div>
+            )}
           </div>
         </div>
         <div className="grid gap-2 py-4 md:grid-cols-[minmax(12rem,16rem)_1fr]">

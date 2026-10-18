@@ -861,6 +861,20 @@
         "url": "Каждая запись — URL stun:, stuns:, turn:// или turns:// без пробелов",
         "turn": "Для TURN нужны учётные данные: turn://user:pass@host:port",
         "tooMany": "Не более 16 ICE-серверов"
+      },
+      "presets": {
+        "label": "Пресеты",
+        "global": "Весь мир (Global)",
+        "ru": "РФ / Обход блокировок",
+        "cloudflare": "Cloudflare",
+        "default": "По умолчанию"
+      },
+      "probe": {
+        "button": "Проверить серверы",
+        "testing": "Проверка...",
+        "success": "Все проверенные ICE-серверы доступны",
+        "someFailed": "Некоторые ICE-серверы недоступны или превышен таймаут",
+        "reachableCount": "доступно"
       }
     },
     "viewers": {

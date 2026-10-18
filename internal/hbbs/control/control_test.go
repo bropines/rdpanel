@@ -275,6 +275,12 @@ func TestHBBRTyped(t *testing.T) {
 		u[0].HighestKbps != 900 || u[0].AvgKbps != 850 || u[0].CurrentKbps != 800 || u[1].Addr != "[::1]:6000" {
 		t.Fatalf("usage %+v %v", u, err)
 	}
+
+	st, err := c.Stats(ctx)
+	if err != nil || st.BytesTotal != 104857600 || st.RelaysTotal != 42 || st.RelaysActive != 3 || st.Waiting != 1 ||
+		st.AuthFailed != 2 || st.Blocked != 5 || st.Downgraded != 0 || st.UptimeSeconds != 3600 || st.Version != "1.1.16" {
+		t.Fatalf("stats %+v %v", st, err)
+	}
 }
 
 func hex4(i int) string {
@@ -290,8 +296,10 @@ func TestAllowListAndValidation(t *testing.T) {
 		line string
 		err  error
 	}{
-		{HBBS, "reload-geo", ErrNotAllowed},
-		{HBBS, "rg", ErrNotAllowed},
+		{HBBS, "reload-geo extra", ErrInvalidArgs},
+		{HBBS, "rg extra", ErrInvalidArgs},
+		{HBBS, "stats", ErrNotAllowed},     // hbbr command sent to hbbs
+		{HBBR, "stats extra", ErrInvalidArgs},
 		{HBBS, "blacklist", ErrNotAllowed}, // hbbr command sent to hbbs
 		{HBBR, "must-login", ErrNotAllowed},
 		{HBBS, "", ErrNotAllowed},

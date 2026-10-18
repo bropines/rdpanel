@@ -1493,6 +1493,22 @@ export const handlers = [
     audit(u, "server.client_options.update", "client_options", "", { ice_servers: entries.length });
     return ok(db.clientOptions);
   }),
+  http.post(`${B}/server/client-options/probe`, async ({ request }) => {
+    const u = requireAdmin();
+    if (u instanceof Response) return u;
+    const b = await body<{ ice_servers: string }>(request);
+    const entries = (b.ice_servers ?? "").split(/[,\r\n]+/).map((x) => x.trim()).filter(Boolean);
+    const items = entries.map((server) => {
+      const isTurn = /^turns?:/i.test(server);
+      const isStun = /^stuns?:/i.test(server);
+      const scheme = isTurn ? "turn" : isStun ? "stun" : "unknown";
+      if (!isTurn && !isStun) {
+        return { server, scheme, reachable: false, error: "unsupported scheme" };
+      }
+      return { server, scheme, reachable: true, rtt_ms: Math.round((10 + Math.random() * 25) * 10) / 10 };
+    });
+    return ok({ items });
+  }),
   http.get(`${B}/server/client-config`, () => {
     const u = requireAdmin();
     if (u instanceof Response) return u;

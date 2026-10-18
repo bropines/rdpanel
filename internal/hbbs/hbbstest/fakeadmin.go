@@ -338,6 +338,10 @@ func (f *FakeAdmin) check(cmd string) string {
 		b.WriteString(fmtMb(f.rates[name]))
 	case "usage", "u":
 		b.WriteString("1.2.3.4:5555: 120s 12.50MB 900kb/s 850kb/s 800kb/s\n[::1]:6000: 10s 0.00MB 0kb/s 0kb/s 0kb/s\n")
+	case "reload-geo", "rg":
+		return "loaded 2 prefix rules\n"
+	case "stats":
+		return "bytes_total=104857600\nrelays_total=42\nrelays_active=3\nwaiting=1\nauth_failed=2\nblocked=5\ndowngraded=0\nuptime_s=3600\nversion=1.1.16\n"
 	}
 	return b.String()
 }

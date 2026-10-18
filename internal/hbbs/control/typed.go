@@ -697,3 +697,62 @@ func (c *Client) Usage(ctx context.Context) ([]RelayUsage, error) {
 	}
 	return res, nil
 }
+
+// RelayStats represents cumulative process-lifetime statistics reported by hbbr stats.
+type RelayStats struct {
+	BytesTotal    uint64 `json:"bytes_total"`
+	RelaysTotal   uint64 `json:"relays_total"`
+	RelaysActive  int    `json:"relays_active"`
+	Waiting       int    `json:"waiting"`
+	AuthFailed    uint64 `json:"auth_failed"`
+	Blocked       uint64 `json:"blocked"`
+	Downgraded    uint64 `json:"downgraded"`
+	UptimeSeconds uint64 `json:"uptime_s"`
+	Version       string `json:"version"`
+}
+
+func parseStats(raw string) (*RelayStats, error) {
+	st := &RelayStats{}
+	for _, line := range lines(raw) {
+		k, v, ok := strings.Cut(line, "=")
+		if !ok {
+			continue
+		}
+		switch k {
+		case "bytes_total":
+			st.BytesTotal, _ = strconv.ParseUint(v, 10, 64)
+		case "relays_total":
+			st.RelaysTotal, _ = strconv.ParseUint(v, 10, 64)
+		case "relays_active":
+			st.RelaysActive, _ = strconv.Atoi(v)
+		case "waiting":
+			st.Waiting, _ = strconv.Atoi(v)
+		case "auth_failed":
+			st.AuthFailed, _ = strconv.ParseUint(v, 10, 64)
+		case "blocked":
+			st.Blocked, _ = strconv.ParseUint(v, 10, 64)
+		case "downgraded":
+			st.Downgraded, _ = strconv.ParseUint(v, 10, 64)
+		case "uptime_s":
+			st.UptimeSeconds, _ = strconv.ParseUint(v, 10, 64)
+		case "version":
+			st.Version = v
+		}
+	}
+	return st, nil
+}
+
+// Stats returns cumulative process-lifetime statistics from hbbr.
+func (c *Client) Stats(ctx context.Context) (*RelayStats, error) {
+	out, err := c.Exec(ctx, HBBR, "stats")
+	if err != nil {
+		return nil, err
+	}
+	return parseStats(out)
+}
+
+// ReloadGeo triggers hbbs to reload its relay_map.txt prefix routing table.
+func (c *Client) ReloadGeo(ctx context.Context) (string, error) {
+	return c.Exec(ctx, HBBS, "reload-geo")
+}
+

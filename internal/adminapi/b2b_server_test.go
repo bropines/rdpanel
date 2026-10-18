@@ -248,7 +248,7 @@ func TestConsole(t *testing.T) {
 	e.fake.ResetCommands()
 	for _, bad := range []map[string]any{
 		{"target": "hbbs", "cmd": "ml"},                                     // alias
-		{"target": "hbbs", "cmd": "reload-geo"},                             // not allow-listed
+		{"target": "hbbs", "cmd": "bogus-cmd"},                              // not allow-listed
 		{"target": "hbbx", "cmd": "h"},                                      // target
 		{"target": "hbbs", "cmd": "must-login", "args": []string{"X"}},      // pattern
 		{"target": "hbbs", "cmd": "must-login", "args": []string{"Y", "Y"}}, // too many

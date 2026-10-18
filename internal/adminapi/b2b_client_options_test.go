@@ -69,3 +69,29 @@ func TestClientOptions(t *testing.T) {
 		}
 	}
 }
+
+func TestClientOptionsProbe(t *testing.T) {
+	e := newB2Env(t, b2opts{})
+	admin, _ := e.as("root", store.RoleAdmin)
+	user, _ := e.as("bob", store.RoleUser)
+
+	code, m, _ := user.do(http.MethodPost, "/server/client-options/probe", map[string]any{
+		"ice_servers": "stun:127.0.0.1:3478",
+	})
+	wantErr(t, "user probe", code, 403, m, "forbidden")
+
+	code, m, _ = admin.do(http.MethodPost, "/server/client-options/probe", map[string]any{
+		"ice_servers": "stun:127.0.0.1:3478\nbad://url",
+	})
+	want(t, "admin probe", code, 200, m)
+	items, ok := m["items"].([]any)
+	if !ok || len(items) != 2 {
+		t.Fatalf("expected 2 items, got %v", m)
+	}
+	// The 127.0.0.1 should be refused by default SSRF guard
+	item0 := items[0].(map[string]any)
+	if item0["reachable"] != false || !strings.Contains(item0["error"].(string), "SSRF guard") {
+		t.Fatalf("expected SSRF error on 127.0.0.1, got %v", item0)
+	}
+}
+
