@@ -529,7 +529,11 @@ func (c *b2bCore) handleUnblockIP(w http.ResponseWriter, r *http.Request) {
 	if !c.needControl(w) {
 		return
 	}
-	ip := chi.URLParam(r, "ip")
+	rawIP := chi.URLParam(r, "ip")
+	ip, err := url.PathUnescape(rawIP)
+	if err != nil {
+		ip = rawIP
+	}
 	if _, err := c.d.Control.IPBlockerLookup(actorCtx(r), ip, true); err != nil {
 		c.controlErr(w, r, err)
 		return
@@ -574,7 +578,12 @@ func (c *b2bCore) handleClearIPChanges(w http.ResponseWriter, r *http.Request) {
 	if !c.needControl(w) {
 		return
 	}
-	if _, err := c.d.Control.IPChangesLookup(actorCtx(r), chi.URLParam(r, "rustdesk_id"), true); err != nil {
+	rawID := chi.URLParam(r, "rustdesk_id")
+	id, err := url.PathUnescape(rawID)
+	if err != nil {
+		id = rawID
+	}
+	if _, err := c.d.Control.IPChangesLookup(actorCtx(r), id, true); err != nil {
 		c.controlErr(w, r, err)
 		return
 	}

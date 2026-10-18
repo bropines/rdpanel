@@ -158,6 +158,12 @@ func TestServerTables(t *testing.T) {
 		t.Fatalf("ip-blocker paged: %v", m)
 	}
 	e.fake.ResetCommands()
+	code, _, _ = admin.do(http.MethodDelete, "/server/ip-blocker/%3A%3Affff%3A95.165.172.169", nil)
+	want(t, "unblock percent-encoded v4-mapped", code, 204, nil)
+	if cmds := e.fake.Commands(); len(cmds) != 1 || cmds[0] != "ip-blocker ::ffff:95.165.172.169 -" {
+		t.Fatalf("unblock percent-encoded sent %q", cmds)
+	}
+	e.fake.ResetCommands()
 	code, _, _ = admin.do(http.MethodDelete, "/server/ip-blocker/1.2.3.4", nil)
 	want(t, "unblock", code, 204, nil)
 	if cmds := e.fake.Commands(); len(cmds) != 1 || cmds[0] != "ip-blocker 1.2.3.4 -" {
@@ -188,7 +194,7 @@ func TestServerTables(t *testing.T) {
 
 	// Mutating typed calls are audited with the admin as actor; reads are not.
 	rows, _, _ := e.st.AdminAudit.ListPanel(e.ctx, store.AdminAuditQuery{Action: ActionServerCommand})
-	if len(rows) != 2 || rows[0].ActorName != "root" {
+	if len(rows) != 3 || rows[0].ActorName != "root" {
 		t.Fatalf("command audit: %+v", rows)
 	}
 	for _, r := range rows {

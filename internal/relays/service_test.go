@@ -486,3 +486,64 @@ func TestRelayTrafficRecordingAndQuery(t *testing.T) {
 		t.Fatalf("remaining = %v, err = %v", remaining, err)
 	}
 }
+
+type fakeLocalControl struct {
+	usage []control.RelayUsage
+}
+
+func (f *fakeLocalControl) RelayServers(context.Context) ([]string, error) {
+	return []string{"rd.example.com"}, nil
+}
+
+func (f *fakeLocalControl) Usage(context.Context) ([]control.RelayUsage, error) {
+	return f.usage, nil
+}
+
+func TestLocalRelaySampleTrafficNoDeadlock(t *testing.T) {
+	ctx := context.Background()
+	fakeLocal := &fakeLocalControl{
+		usage: []control.RelayUsage{
+			{Addr: "1.2.3.4:1234", TotalMB: 10, CurrentKbps: 500},
+		},
+	}
+	h := newHarness(t, func(c *Config) {
+		c.LocalHost = "rd.example.com"
+		c.Local = fakeLocal
+		c.LocalUp = func() bool { return true }
+	})
+	if err := h.svc.EnsureLocal(ctx); err != nil {
+		t.Fatal(err)
+	}
+
+	// First pass initialises trafficState
+	h.svc.Pass(ctx, false)
+
+	// Advance time by 10s
+	h.clk.add(10 * time.Second)
+	fakeLocal.usage[0].TotalMB = 12
+
+	// Second pass calculates delta and records traffic without deadlocking
+	done := make(chan struct{})
+	go func() {
+		h.svc.Pass(ctx, false)
+		close(done)
+	}()
+
+	select {
+	case <-done:
+	case <-time.After(3 * time.Second):
+		t.Fatal("Pass deadlocked on local relay traffic sampling")
+	}
+
+	views, _, err := h.svc.List(ctx)
+	if err != nil || len(views) != 1 {
+		t.Fatalf("List returned err=%v views=%v", err, views)
+	}
+	samples, err := h.svc.Traffic(ctx, views[0].ID, h.clk.now().Add(-time.Hour))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(samples) == 0 || samples[0].Bytes == 0 {
+		t.Fatalf("expected recorded traffic, got %+v", samples)
+	}
+}
