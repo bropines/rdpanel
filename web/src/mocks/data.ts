@@ -524,6 +524,14 @@ export const clientOptions: S["ClientOptions"] = {
   modified_at: "2026-10-14T09:30:00Z",
 };
 
+export const clientConfig: S["ClientConfig"] = {
+  id_server: "desk.example.com",
+  relay_server: "desk.example.com:21117",
+  api_server: "https://desk.example.com",
+  public_key: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+  config_string: "Qfi02bj5SZsBXbhhXZus2clR2LvozcwRHdoJiOikGchJCLiYWZkNmYhlDO3YTN0MjMxAjZlR2YiFWO4cjN1QzMyEDMmVGZjJWY5gzN2UDNzITMwYWZkNmYhlDO3YTN0MjMxAjI6ISeltmIsIyNxETMyoTbvNmLlxGctFGel5yazVGZiojI5FGblJnIsISbvNmLlxGctFGel5yazVGZiojI0N3boJye",
+};
+
 export const consoleCommands: S["ConsoleCommand"][] = [
   { target: "hbbs", cmd: "relay-servers", alias: "rs", args_hint: "[host:port,…]", arg_pattern: "[A-Za-z0-9.:,\\[\\]-]+", max_args: 1, description: "Show or set relay servers", mutating: true },
   { target: "hbbs", cmd: "ip-blocker", alias: "ib", args_hint: "[<ip>|<offset>] [-]", arg_pattern: "[0-9a-fA-F.:]+|-", max_args: 2, description: "Show or unblock rate-limited IPs", mutating: true },

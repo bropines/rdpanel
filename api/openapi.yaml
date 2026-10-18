@@ -2341,6 +2341,22 @@ paths:
         "400": { $ref: "#/components/responses/ValidationFailed" }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "403": { $ref: "#/components/responses/Forbidden" }
+  /server/client-config:
+    get:
+      tags: [server]
+      operationId: getClientConfig
+      summary: Client connection settings and encoded configuration string for RustDesk clients (admin).
+      description: |
+        Returns host, relay, API URL, public key, and the base64-encoded reversed JSON string
+        understood by RustDesk's "Import Server Config" / "Import from clipboard" and `--config`.
+      responses:
+        "200":
+          description: Client configuration.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ClientConfig" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
   /server/settings/reapply:
     post:
       tags: [server]
@@ -4431,6 +4447,26 @@ components:
         single_bandwidth_mbps: { type: number, exclusiveMinimum: 0 }
         downgrade_threshold: { type: number, exclusiveMinimum: 0 }
         downgrade_start_check_s: { type: integer, minimum: 1 }
+    ClientConfig:
+      type: object
+      required: [id_server, relay_server, api_server, public_key, config_string]
+      description: Connection settings and encoded configuration string for RustDesk clients.
+      properties:
+        id_server:
+          type: string
+          description: Host or address of the hbbs ID server.
+        relay_server:
+          type: string
+          description: Host or address of the hbbr relay server.
+        api_server:
+          type: string
+          description: Public API URL for clients.
+        public_key:
+          type: string
+          description: Server public key from id_ed25519.pub.
+        config_string:
+          type: string
+          description: Base64-encoded reversed JSON string for RustDesk's Import Server Config or --config.
     ClientOptions:
       type: object
       required: [ice_servers, webrtc_congestion_control, pushed, modified_at]

@@ -1493,6 +1493,11 @@ export const handlers = [
     audit(u, "server.client_options.update", "client_options", "", { ice_servers: entries.length });
     return ok(db.clientOptions);
   }),
+  http.get(`${B}/server/client-config`, () => {
+    const u = requireAdmin();
+    if (u instanceof Response) return u;
+    return ok(db.clientConfig);
+  }),
   http.get(`${B}/server/ip-blocker`, ({ request }) => {
     const u = requireAdmin();
     if (u instanceof Response) return u;

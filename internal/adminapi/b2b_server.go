@@ -2,10 +2,14 @@ package adminapi
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"log/slog"
+	"net"
 	"net/http"
+	"net/url"
+	"os"
 	"regexp"
 	"sort"
 	"strings"
@@ -44,6 +48,7 @@ func (c *b2bCore) registerServer(r chi.Router) {
 		r.Post("/server/settings/reapply", c.handleReapplyServerSettings)
 		r.Get("/server/client-options", c.handleGetClientOptions)
 		r.Put("/server/client-options", c.handlePutClientOptions)
+		r.Get("/server/client-config", c.handleGetClientConfig)
 		r.Get("/server/ip-blocker", c.handleIPBlocker)
 		r.Delete("/server/ip-blocker/{ip}", c.handleUnblockIP)
 		r.Get("/server/ip-changes", c.handleIPChanges)
@@ -938,4 +943,120 @@ func (a *CommandAudit) RecordCommand(ctx context.Context, rec control.CommandRec
 	if err := a.Store.AdminAudit.Record(context.WithoutCancel(ctx), e); err != nil && a.Log != nil {
 		a.Log.WarnContext(ctx, "admin audit: server command", slog.Any("err", err))
 	}
+}
+
+// clientConfigDTO is components.schemas.ClientConfig.
+type clientConfigDTO struct {
+	IDServer     string `json:"id_server"`
+	RelayServer  string `json:"relay_server"`
+	APIServer    string `json:"api_server"`
+	PublicKey    string `json:"public_key"`
+	ConfigString string `json:"config_string"`
+}
+
+type rustdeskCustomServer struct {
+	Host  string `json:"host,omitempty"`
+	Relay string `json:"relay,omitempty"`
+	Key   string `json:"key,omitempty"`
+	API   string `json:"api,omitempty"`
+}
+
+// EncodeRustdeskConfig serializes the connection parameters into RustDesk's
+// URL-safe base64 reversed JSON config string format.
+func EncodeRustdeskConfig(host, relay, api, key string) (string, error) {
+	b, err := json.Marshal(rustdeskCustomServer{
+		Host:  host,
+		Relay: relay,
+		Key:   key,
+		API:   api,
+	})
+	if err != nil {
+		return "", err
+	}
+	b64 := base64.RawURLEncoding.EncodeToString(b)
+	runes := []rune(b64)
+	for i, j := 0, len(runes)-1; i < j; i, j = i+1, j-1 {
+		runes[i], runes[j] = runes[j], runes[i]
+	}
+	return string(runes), nil
+}
+
+// DecodeRustdeskConfig decodes a RustDesk config string back into its parameters.
+func DecodeRustdeskConfig(s string) (host, relay, api, key string, err error) {
+	runes := []rune(s)
+	for i, j := 0, len(runes)-1; i < j; i, j = i+1, j-1 {
+		runes[i], runes[j] = runes[j], runes[i]
+	}
+	b, err := base64.RawURLEncoding.DecodeString(string(runes))
+	if err != nil {
+		b, err = base64.URLEncoding.DecodeString(string(runes))
+		if err != nil {
+			return "", "", "", "", err
+		}
+	}
+	var cs rustdeskCustomServer
+	if err := json.Unmarshal(b, &cs); err != nil {
+		return "", "", "", "", err
+	}
+	return cs.Host, cs.Relay, cs.API, cs.Key, nil
+}
+
+func (c *b2bCore) handleGetClientConfig(w http.ResponseWriter, r *http.Request) {
+	var publicKey string
+	if c.d.Config != nil && c.d.Config.HBBS.PublicKeyFile != "" {
+		if raw, err := os.ReadFile(c.d.Config.HBBS.PublicKeyFile); err == nil {
+			publicKey = strings.TrimSpace(string(raw))
+		}
+	}
+
+	var apiServer, idServer, relayServer string
+	if c.d.Config != nil && c.d.Config.PublicURL != "" {
+		apiServer = strings.TrimRight(c.d.Config.PublicURL, "/")
+		if u, err := url.Parse(apiServer); err == nil && u.Hostname() != "" {
+			idServer = u.Hostname()
+		}
+	}
+	if apiServer == "" {
+		scheme := "http"
+		if r.TLS != nil || r.Header.Get("X-Forwarded-Proto") == "https" {
+			scheme = "https"
+		}
+		host := r.Host
+		if host == "" {
+			host = "127.0.0.1:21114"
+		}
+		apiServer = scheme + "://" + host
+		if h, _, err := net.SplitHostPort(host); err == nil {
+			idServer = h
+		} else {
+			idServer = host
+		}
+	}
+
+	if idServer == "" {
+		if c.d.Config != nil && c.d.Config.HBBS.IDServer != "" {
+			if h, _, err := net.SplitHostPort(c.d.Config.HBBS.IDServer); err == nil && h != "127.0.0.1" && h != "localhost" && h != "::1" {
+				idServer = h
+			}
+		}
+	}
+	if idServer == "" {
+		idServer = "127.0.0.1"
+	}
+
+	if c.d.Config != nil && c.d.Config.HBBS.RelayPublicHost != "" {
+		relayServer = c.d.Config.HBBS.RelayPublicHost
+	} else {
+		relayServer = idServer
+	}
+
+	configStr, _ := EncodeRustdeskConfig(idServer, relayServer, apiServer, publicKey)
+
+	httpx.WriteJSON(w, http.StatusOK, clientConfigDTO{
+		IDServer:     idServer,
+		RelayServer:  relayServer,
+		APIServer:    apiServer,
+		PublicKey:    publicKey,
+		ConfigString: configStr,
+	})
 }

@@ -1,0 +1,167 @@
+import { useQuery } from "@tanstack/react-query";
+import { AlertTriangle, ChevronDown, ChevronUp, Copy, KeyRound, Monitor, Terminal } from "lucide-react";
+import { useState } from "react";
+import { useTranslation } from "react-i18next";
+import { toast } from "sonner";
+
+import { serverApi } from "@/api/system";
+import { CopyButton, copyText, ErrorState, Mono } from "@/components";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/misc";
+
+/**
+ * Builds the executable filename for Windows portable client auto-configuration.
+ * RustDesk parses `host=` and `key=` from the binary filename.
+ */
+export function windowsExeName(host: string, key: string): string {
+  const parts: string[] = [];
+  if (host) parts.push(`host=${host}`);
+  if (key) parts.push(`key=${key}`);
+  return parts.length ? `rustdesk-${parts.join(",")}.exe` : "rustdesk.exe";
+}
+
+/**
+ * Formats the CLI invocation command for automated deployment or scripting.
+ */
+export function cliCommand(configString: string): string {
+  return `rustdesk --config "${configString}"`;
+}
+
+export function ClientConfigCard() {
+  const { t } = useTranslation();
+  const q = useQuery({ queryKey: ["server", "client-config"], queryFn: serverApi.clientConfig });
+  const [showManual, setShowManual] = useState(false);
+
+  if (q.isError) return <ErrorState error={q.error} onRetry={() => void q.refetch()} />;
+  if (!q.data) return <Skeleton className="h-48" />;
+
+  const c = q.data;
+  const cmd = cliCommand(c.config_string);
+  const exeName = windowsExeName(c.id_server, c.public_key);
+
+  const handleCopyMain = async () => {
+    if (await copyText(c.config_string)) {
+      toast.success(t("server.clientConfig.copiedToast"));
+    }
+  };
+
+  return (
+    <Card>
+      <CardHeader className="pb-3">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <CardTitle className="flex items-center gap-2 text-base">
+              <Monitor className="h-4 w-4" />
+              {t("server.clientConfig.title")}
+            </CardTitle>
+            <CardDescription className="mt-1">{t("server.clientConfig.description")}</CardDescription>
+          </div>
+          <Button type="button" onClick={handleCopyMain} className="gap-2">
+            <Copy className="h-4 w-4" />
+            {t("server.clientConfig.copyButton")}
+          </Button>
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {!c.public_key && (
+          <div className="flex items-start gap-2 rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-sm text-amber-800 dark:text-amber-300">
+            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+            <span>{t("server.clientConfig.noKeyWarning")}</span>
+          </div>
+        )}
+
+        {/* Encoded config string */}
+        <div className="space-y-1.5">
+          <label className="text-xs font-medium text-muted-foreground">{t("server.clientConfig.configStringLabel")}</label>
+          <div className="relative">
+            <pre className="max-h-28 overflow-auto whitespace-pre-wrap break-all rounded-md border bg-muted/50 p-2.5 pr-10 font-mono text-xs leading-relaxed">
+              {c.config_string}
+            </pre>
+            <CopyButton value={c.config_string} label={t("server.clientConfig.copyString")} className="absolute right-2 top-2" />
+          </div>
+          <p className="text-xs text-muted-foreground">{t("server.clientConfig.instructions")}</p>
+        </div>
+
+        {/* CLI command and Windows exe naming */}
+        <div className="grid gap-3 sm:grid-cols-2">
+          <div className="rounded-md border p-3 space-y-1.5">
+            <div className="flex items-center justify-between gap-2 text-xs font-medium">
+              <span className="flex items-center gap-1.5">
+                <Terminal className="h-3.5 w-3.5 text-muted-foreground" />
+                {t("server.clientConfig.cliLabel")}
+              </span>
+              <CopyButton value={cmd} label={t("common.copy")} />
+            </div>
+            <Mono className="block truncate text-xs text-muted-foreground">
+              {cmd}
+            </Mono>
+          </div>
+
+          <div className="rounded-md border p-3 space-y-1.5">
+            <div className="flex items-center justify-between gap-2 text-xs font-medium">
+              <span className="flex items-center gap-1.5">
+                <KeyRound className="h-3.5 w-3.5 text-muted-foreground" />
+                {t("server.clientConfig.exeLabel")}
+              </span>
+              <CopyButton value={exeName} label={t("common.copy")} />
+            </div>
+            <Mono className="block truncate text-xs text-muted-foreground">
+              {exeName}
+            </Mono>
+          </div>
+        </div>
+
+        {/* Manual parameters accordion */}
+        <div className="border-t pt-3">
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={() => setShowManual((v) => !v)}
+            className="flex w-full items-center justify-between p-0 h-auto font-medium text-xs text-muted-foreground hover:text-foreground"
+          >
+            <span>{t("server.clientConfig.manualToggle")}</span>
+            {showManual ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+          </Button>
+
+          {showManual && (
+            <div className="mt-3 grid gap-2.5 rounded-md border bg-muted/20 p-3 sm:grid-cols-2">
+              <div className="space-y-1">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-xs font-medium">{t("server.clientConfig.idServer")}</span>
+                  <CopyButton value={c.id_server} />
+                </div>
+                <Mono className="block truncate text-xs">{c.id_server || "—"}</Mono>
+              </div>
+
+              <div className="space-y-1">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-xs font-medium">{t("server.clientConfig.relayServer")}</span>
+                  <CopyButton value={c.relay_server} />
+                </div>
+                <Mono className="block truncate text-xs">{c.relay_server || "—"}</Mono>
+              </div>
+
+              <div className="space-y-1">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-xs font-medium">{t("server.clientConfig.apiServer")}</span>
+                  <CopyButton value={c.api_server} />
+                </div>
+                <Mono className="block truncate text-xs">{c.api_server || "—"}</Mono>
+              </div>
+
+              <div className="space-y-1">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-xs font-medium">{t("server.clientConfig.publicKey")}</span>
+                  <CopyButton value={c.public_key} />
+                </div>
+                <Mono className="block truncate text-xs">{c.public_key || "—"}</Mono>
+              </div>
+            </div>
+          )}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}

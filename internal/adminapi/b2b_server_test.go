@@ -315,3 +315,60 @@ func TestCommandAuditSink(t *testing.T) {
 		t.Fatalf("system row: %+v", rows[1])
 	}
 }
+
+func TestEncodeRustdeskConfig(t *testing.T) {
+	host := "rd.example.com"
+	relay := "relay.example.com"
+	api := "https://panel.example.com"
+	key := "test-pubkey-abc123xyz"
+
+	encoded, err := EncodeRustdeskConfig(host, relay, api, key)
+	if err != nil {
+		t.Fatalf("encode failed: %v", err)
+	}
+	if encoded == "" || strings.Contains(encoded, "=") {
+		t.Fatalf("unexpected encoded string: %q", encoded)
+	}
+
+	dHost, dRelay, dAPI, dKey, err := DecodeRustdeskConfig(encoded)
+	if err != nil {
+		t.Fatalf("decode failed: %v", err)
+	}
+	if dHost != host || dRelay != relay || dAPI != api || dKey != key {
+		t.Fatalf("mismatch after decode: got (%q, %q, %q, %q), want (%q, %q, %q, %q)",
+			dHost, dRelay, dAPI, dKey, host, relay, api, key)
+	}
+}
+
+func TestServerClientConfig(t *testing.T) {
+	e := newB2Env(t, b2opts{})
+	admin, _ := e.as("root", store.RoleAdmin)
+	user, _ := e.as("bob", store.RoleUser)
+
+	code, m, _ := user.do(http.MethodGet, "/server/client-config", nil)
+	wantErr(t, "user client-config", code, 403, m, "forbidden")
+
+	code, m, _ = e.client().do(http.MethodGet, "/server/client-config", nil)
+	wantErr(t, "anon client-config", code, 401, m, "unauthorized")
+
+	code, m, _ = admin.do(http.MethodGet, "/server/client-config", nil)
+	want(t, "admin client-config", code, 200, m)
+
+	idSrv, _ := m["id_server"].(string)
+	relaySrv, _ := m["relay_server"].(string)
+	apiSrv, _ := m["api_server"].(string)
+	cfgStr, _ := m["config_string"].(string)
+
+	if idSrv == "" || relaySrv == "" || apiSrv == "" || cfgStr == "" {
+		t.Fatalf("empty fields in client-config: %+v", m)
+	}
+
+	dHost, dRelay, dAPI, _, err := DecodeRustdeskConfig(cfgStr)
+	if err != nil {
+		t.Fatalf("decode config_string failed: %v", err)
+	}
+	if dHost != idSrv || dRelay != relaySrv || dAPI != apiSrv {
+		t.Fatalf("config_string mismatch: got (%q, %q, %q), want (%q, %q, %q)",
+			dHost, dRelay, dAPI, idSrv, relaySrv, apiSrv)
+	}
+}

@@ -776,6 +776,23 @@
     "saved": "Saved and applied",
     "savedWithErrors_one": "Saved, but {{count}} setting failed to apply",
     "savedWithErrors_other": "Saved, but {{count}} settings failed to apply",
+    "clientConfig": {
+      "title": "RustDesk client configuration",
+      "description": "Connection parameters and configuration string to import into RustDesk clients or apply via command line.",
+      "copyButton": "Copy config string",
+      "copiedToast": "Configuration string copied to clipboard",
+      "noKeyWarning": "Server public key (id_ed25519.pub) is missing or unreadable. Check the hbbs data volume.",
+      "configStringLabel": "Configuration string (for clipboard import or --config)",
+      "copyString": "Copy configuration string",
+      "instructions": "In RustDesk: Settings (⋮) → Network → Import Server Config, then Apply. Or use with --config in scripts.",
+      "cliLabel": "Command line (--config)",
+      "exeLabel": "Windows portable filename",
+      "manualToggle": "Show manual connection parameters",
+      "idServer": "ID server",
+      "relayServer": "Relay server",
+      "apiServer": "API server",
+      "publicKey": "Public key"
+    },
     "clientOptions": {
       "title": "Client options (WebRTC)",
       "hint": "Pushed to every RustDesk client that uses this panel as its API server, on its next heartbeat. Nothing is pushed until you save once; after that, an empty value removes the option on clients.",
