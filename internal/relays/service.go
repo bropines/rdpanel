@@ -1116,9 +1116,35 @@ func (s *Service) Traffic(ctx context.Context, id int64, since time.Time) ([]Tra
 
 func (s *Service) sampleTraffic(ctx context.Context, rs []Relay) {
 	now := s.now()
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	l, _ := s.local()
 
+	type trafficDelta struct {
+		id             int64
+		bytesDelta     int64
+		sessionsDelta  int
+		activeSessions int
+	}
+	var deltas []trafficDelta
+
+	// Fetch local usage outside the mutex if needed
+	var (
+		localUsage    []control.RelayUsage
+		hasLocalUsage bool
+	)
+	for _, r := range rs {
+		if r.Kind == KindLocal && l != nil {
+			uCtx, cancel := context.WithTimeout(ctx, time.Second)
+			u, err := l.Usage(uCtx)
+			cancel()
+			if err == nil {
+				localUsage = u
+				hasLocalUsage = true
+			}
+			break
+		}
+	}
+
+	s.mu.Lock()
 	for _, r := range rs {
 		prev := s.lastTraffic[r.ID]
 		if prev.at.IsZero() {
@@ -1164,19 +1190,12 @@ func (s *Service) sampleTraffic(ctx context.Context, rs []Relay) {
 			}
 
 		case KindLocal:
-			l, _ := s.local()
-			if l == nil {
+			if !hasLocalUsage {
 				continue
 			}
-			uCtx, cancel := context.WithTimeout(ctx, time.Second)
-			usage, err := l.Usage(uCtx)
-			cancel()
-			if err != nil {
-				continue
-			}
-			activeSessions = len(usage)
+			activeSessions = len(localUsage)
 			var totalMB, sumKbps float64
-			for _, u := range usage {
+			for _, u := range localUsage {
 				totalMB += u.TotalMB
 				sumKbps += float64(u.CurrentKbps)
 			}
@@ -1199,13 +1218,25 @@ func (s *Service) sampleTraffic(ctx context.Context, rs []Relay) {
 		}
 
 		if bytesDelta > 0 || sessionsDelta > 0 || activeSessions > 0 {
-			_ = s.st.RecordTraffic(ctx, r.ID, now, bytesDelta, sessionsDelta, activeSessions)
+			deltas = append(deltas, trafficDelta{
+				id:             r.ID,
+				bytesDelta:     bytesDelta,
+				sessionsDelta:  sessionsDelta,
+				activeSessions: activeSessions,
+			})
 		}
 	}
-
-	// Purge samples older than 30 days once an hour
-	if now.Sub(s.lastPurge) >= time.Hour {
+	purgeDue := now.Sub(s.lastPurge) >= time.Hour
+	if purgeDue {
 		s.lastPurge = now
+	}
+	s.mu.Unlock()
+
+	for _, d := range deltas {
+		_ = s.st.RecordTraffic(ctx, d.id, now, d.bytesDelta, d.sessionsDelta, d.activeSessions)
+	}
+
+	if purgeDue {
 		_, _ = s.st.PurgeTrafficBefore(ctx, now.Add(-30*24*time.Hour))
 	}
 }
