@@ -3663,6 +3663,8 @@ export interface components {
             last_probe_at?: string | null;
             last_probe_ms?: number | null;
             last_probe_error?: string | null;
+            /** @description Whether the lightweight TCP connect to public_host succeeded during the last probe (when mgmt_host is configured). */
+            public_reachable?: boolean | null;
             /** @description Entries in hbbs' computed list (0 = not in rotation). */
             rotation_weight: number;
             /** Format: date-time */

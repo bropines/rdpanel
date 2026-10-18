@@ -5,6 +5,7 @@ import (
 	"crypto/ed25519"
 	"crypto/rand"
 	"errors"
+	"net"
 	"net/netip"
 	"path/filepath"
 	"strings"
@@ -393,10 +394,31 @@ func TestSeparateMgmtHost(t *testing.T) {
 	if err != nil || v.Health != HealthActive {
 		t.Fatalf("expected healthy relay via mgmt_host, got: %+v (err: %v)", v, err)
 	}
+	// Public host was unreachable, so PublicReachable should be false.
+	if v.PublicReachable == nil || *v.PublicReachable != false {
+		t.Fatalf("expected PublicReachable=false, got: %v", v.PublicReachable)
+	}
+
+	// Now start a listener on public_host to make it reachable.
+	pubLn, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer pubLn.Close()
+	pubAddr := pubLn.Addr().String()
+	v, err = h.svc.Update(ctx, v.ID, Patch{PublicHost: &pubAddr})
+	if err != nil {
+		t.Fatal(err)
+	}
+	h.svc.Pass(ctx, true)
+	v, err = h.svc.Get(ctx, v.ID)
+	if err != nil || v.PublicReachable == nil || *v.PublicReachable != true {
+		t.Fatalf("expected PublicReachable=true after listener started, got: %v", v.PublicReachable)
+	}
 
 	// Rotation: clients receive PublicHost, NOT MgmtHost.
 	servers := h.svc.RelayServers(ctx)
-	if len(servers) != 1 || servers[0] != "desk-nl.example.com:21117" {
+	if len(servers) != 1 || servers[0] != pubAddr {
 		t.Fatalf("expected public_host in rotation, got: %v", servers)
 	}
 

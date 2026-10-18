@@ -393,6 +393,21 @@ func (s *Service) probeOne(ctx context.Context, r Relay) ProbeResult {
 	if ctx.Err() != nil {
 		return res
 	}
+	var pubReachable *bool
+	if r.HasSeparateMgmt() {
+		err := s.cfg.Prober.TCPCheck(ctx, r.PublicHost, allow)
+		ok := err == nil
+		pubReachable = &ok
+		if err != nil {
+			s.log.Debug("relays: public host TCP check failed", slog.String("relay", r.Name), slog.String("public_host", r.PublicHost), slog.Any("err", err))
+		}
+	} else if res.OK() {
+		ok := true
+		pubReachable = &ok
+	} else if res.Err != nil {
+		ok := false
+		pubReachable = &ok
+	}
 	var msPtr *float64
 	errStr := ""
 	s.mu.Lock()
@@ -413,7 +428,7 @@ func (s *Service) probeOne(ctx context.Context, r Relay) ProbeResult {
 		s.m.probe.WithLabelValues(r.Name).Set(res.RTT.Seconds())
 	}
 	s.m.probes.WithLabelValues(r.Name, result).Inc()
-	if err := s.st.SetHealth(ctx, r.ID, r.Health, false, res.At, msPtr, errStr); err != nil && ctx.Err() == nil {
+	if err := s.st.SetHealth(ctx, r.ID, r.Health, false, res.At, msPtr, errStr, pubReachable); err != nil && ctx.Err() == nil {
 		s.log.Warn("relays: save probe", slog.Any("err", err))
 	}
 	return res

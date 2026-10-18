@@ -205,3 +205,25 @@ func (p *Prober) pair(ctx context.Context, addr, key string) (time.Duration, err
 	}
 	return time.Since(start), nil
 }
+
+// TCPCheck attempts a lightweight TCP connect to hostPort to verify reachability.
+// It applies the SSRF guard via Resolve and closes the connection immediately.
+// See docs/design/relay-agents.md §17.
+func (p *Prober) TCPCheck(ctx context.Context, hostPort string, allowPrivate bool) error {
+	timeout := p.Timeout
+	if timeout <= 0 {
+		timeout = 5 * time.Second
+	}
+	ctx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+	addr, err := p.Resolve(ctx, hostPort, allowPrivate)
+	if err != nil {
+		return err
+	}
+	conn, err := p.dial(ctx, addr)
+	if err != nil {
+		return err
+	}
+	_ = conn.Close()
+	return nil
+}

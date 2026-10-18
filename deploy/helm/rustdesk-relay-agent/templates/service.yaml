@@ -1,0 +1,27 @@
+{{- if .Values.service.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "rustdesk-relay-agent.fullname" . }}
+  labels:
+    {{- include "rustdesk-relay-agent.labels" . | nindent 4 }}
+  {{- with .Values.service.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  type: {{ .Values.service.type }}
+  {{- if and (eq .Values.service.type "LoadBalancer") .Values.service.externalTrafficPolicy }}
+  externalTrafficPolicy: {{ .Values.service.externalTrafficPolicy }}
+  {{- end }}
+  ports:
+    - name: relay
+      port: {{ .Values.service.port }}
+      targetPort: 21117
+      protocol: TCP
+      {{- if and (or (eq .Values.service.type "NodePort") (eq .Values.service.type "LoadBalancer")) .Values.service.nodePort }}
+      nodePort: {{ .Values.service.nodePort }}
+      {{- end }}
+  selector:
+    {{- include "rustdesk-relay-agent.selectorLabels" . | nindent 4 }}
+{{- end }}

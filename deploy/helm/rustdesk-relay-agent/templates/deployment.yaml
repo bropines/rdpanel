@@ -1,0 +1,123 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "rustdesk-relay-agent.fullname" . }}
+  labels:
+    {{- include "rustdesk-relay-agent.labels" . | nindent 4 }}
+spec:
+  # Do NOT increase replicas: hbbr pairing state is local to each process.
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      {{- include "rustdesk-relay-agent.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "rustdesk-relay-agent.selectorLabels" . | nindent 8 }}
+        {{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "rustdesk-relay-agent.serviceAccountName" . }}
+      hostNetwork: {{ .Values.hostNetwork }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: relay-agent
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          env:
+            - name: RDPANEL_MODE
+              value: "agent"
+            - name: RDPANEL_AGENT_PANEL_URL
+              value: {{ .Values.agent.panelUrl | quote }}
+            {{- if or .Values.agent.token .Values.agent.existingSecret }}
+            - name: RDPANEL_AGENT_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "rustdesk-relay-agent.secretName" . }}
+                  key: {{ .Values.agent.tokenSecretKey | default "token" }}
+            {{- end }}
+            {{- if .Values.agent.publicHost }}
+            - name: RDPANEL_AGENT_PUBLIC_HOST
+              value: {{ .Values.agent.publicHost | quote }}
+            {{- end }}
+            {{- if .Values.agent.mgmtHost }}
+            - name: RDPANEL_AGENT_MGMT_HOST
+              value: {{ .Values.agent.mgmtHost | quote }}
+            {{- end }}
+            {{- if .Values.agent.panelCA }}
+            - name: RDPANEL_AGENT_PANEL_CA
+              value: "/etc/ssl/certs/panel-ca.crt"
+            {{- end }}
+          ports:
+            - name: relay
+              containerPort: 21117
+              protocol: TCP
+          livenessProbe:
+            exec:
+              command:
+                - /usr/libexec/rdpanel/healthcheck
+            initialDelaySeconds: 15
+            periodSeconds: 20
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            exec:
+              command:
+                - /usr/libexec/rdpanel/healthcheck
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 2
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          volumeMounts:
+            - name: data
+              mountPath: /data
+            {{- if .Values.agent.panelCA }}
+            - name: panel-ca
+              mountPath: /etc/ssl/certs/panel-ca.crt
+              subPath: panel-ca.crt
+              readOnly: true
+            {{- end }}
+      volumes:
+        - name: data
+          {{- if .Values.persistence.enabled }}
+          persistentVolumeClaim:
+            claimName: {{ .Values.persistence.existingClaim | default (include "rustdesk-relay-agent.fullname" .) }}
+          {{- else }}
+          emptyDir: {}
+          {{- end }}
+        {{- if .Values.agent.panelCA }}
+        - name: panel-ca
+          secret:
+            secretName: {{ include "rustdesk-relay-agent.secretName" . }}
+            items:
+              - key: panel-ca.crt
+                path: panel-ca.crt
+        {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

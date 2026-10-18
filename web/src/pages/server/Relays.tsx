@@ -576,7 +576,19 @@ function RelayDrawer({ r, onClose }: { r: Relay | undefined; onClose: () => void
                 <HealthBadge health={r.health} />
               </SheetTitle>
               <SheetDescription className="space-y-0.5">
-                <Mono className="block">{r.public_host}</Mono>
+                <div className="flex items-center gap-1.5">
+                  <Mono>{r.public_host}</Mono>
+                  {r.mgmt_host && r.mgmt_host !== r.public_host && r.public_reachable === false && (
+                    <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-amber-500/50 text-amber-700 dark:text-amber-400 font-normal" title={t("relays.publicUnreachable")}>
+                      {t("relays.publicUnreachable")}
+                    </Badge>
+                  )}
+                  {r.mgmt_host && r.mgmt_host !== r.public_host && r.public_reachable === true && (
+                    <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-emerald-500/50 text-emerald-700 dark:text-emerald-400 font-normal" title={t("relays.publicReachable")}>
+                      {t("relays.publicReachable")}
+                    </Badge>
+                  )}
+                </div>
                 {r.mgmt_host && (
                   <span className="block text-xs text-muted-foreground">
                     {t("relays.mgmtShort")}: <Mono>{r.mgmt_host}</Mono>
@@ -765,7 +777,19 @@ export function RelaysTab() {
                       {r.region && <Badge variant="outline" className="font-normal">{r.region}</Badge>}
                       {r.admin_state !== "enabled" && <Badge variant="outline" className="font-normal text-amber-700 dark:text-amber-400">{t(`relays.state.${r.admin_state}`)}</Badge>}
                     </div>
-                    <Mono className="block text-xs text-muted-foreground">{r.public_host}</Mono>
+                    <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                      <Mono className="truncate">{r.public_host}</Mono>
+                      {r.mgmt_host && r.mgmt_host !== r.public_host && r.public_reachable === false && (
+                        <Badge variant="outline" className="text-[10px] px-1 py-0 border-amber-500/50 text-amber-700 dark:text-amber-400 font-normal shrink-0" title={t("relays.publicUnreachable")}>
+                          {t("relays.publicUnreachableShort")}
+                        </Badge>
+                      )}
+                      {r.mgmt_host && r.mgmt_host !== r.public_host && r.public_reachable === true && (
+                        <Badge variant="outline" className="text-[10px] px-1 py-0 border-emerald-500/50 text-emerald-700 dark:text-emerald-400 font-normal shrink-0" title={t("relays.publicReachable")}>
+                          {t("relays.publicReachableShort")}
+                        </Badge>
+                      )}
+                    </div>
                     {r.mgmt_host && (
                       <div className="text-xs text-muted-foreground">
                         {t("relays.mgmtShort")}: <Mono>{r.mgmt_host}</Mono>

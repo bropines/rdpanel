@@ -4704,6 +4704,7 @@ components:
         last_probe_at: { type: [string, "null"], format: date-time }
         last_probe_ms: { type: [number, "null"] }
         last_probe_error: { type: [string, "null"] }
+        public_reachable: { type: [boolean, "null"], description: "Whether the lightweight TCP connect to public_host succeeded during the last probe (when mgmt_host is configured)." }
         rotation_weight: { type: integer, description: Entries in hbbs' computed list (0 = not in rotation). }
         created_at: { type: string, format: date-time }
         updated_at: { type: string, format: date-time }

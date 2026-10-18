@@ -1,0 +1,93 @@
+# Default values for rustdesk-relay-agent.
+# This chart deploys an RD Panel relay agent (hbbr + rdpanel agent) connecting to an RD Panel instance.
+
+image:
+  repository: ghcr.io/bropines/rdpanel
+  pullPolicy: IfNotPresent
+  # Overrides the image tag whose default is the chart appVersion.
+  tag: ""
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+commonLabels: {}
+commonAnnotations: {}
+
+agent:
+  # Base URL of the RD Panel instance (e.g. "https://panel.example.com" or internal address).
+  # The agent dials ${panelUrl}/agent/v1/enroll and ${panelUrl}/agent/v1/connect (WebSocket).
+  panelUrl: ""
+
+  # One-time enrollment token issued by the panel (Server -> Relays -> Add Agent).
+  # Stored in a Kubernetes Secret. Ignored if existingSecret is set.
+  token: ""
+
+  # Reference to an existing Secret containing the enrollment token.
+  existingSecret: ""
+  # Key inside existingSecret containing the token.
+  tokenSecretKey: "token"
+
+  # Optional public host[:port] advertised to RustDesk clients (hbbs rs).
+  # If omitted, uses the value configured in the panel at agent creation.
+  publicHost: ""
+
+  # Optional management host[:port] used by the panel for reachability probes.
+  mgmtHost: ""
+
+  # Optional PEM certificate bundle to trust a self-signed or internal panel CA.
+  panelCA: ""
+
+# State persistence for the agent: stores agent.key (ed25519 identity), hbbr key, and state.
+persistence:
+  enabled: true
+  existingClaim: ""
+  storageClassName: ""
+  accessModes:
+    - ReadWriteOnce
+  size: 1Gi
+  annotations: {}
+
+# Run with host networking if hbbr should bind directly to node network interfaces.
+hostNetwork: false
+
+# Kubernetes Service exposing hbbr (TCP port 21117).
+# Note: when hostNetwork is true, Service is usually disabled or internal only.
+service:
+  enabled: true
+  type: LoadBalancer
+  # Preserves client IP for geo-routing / logging when supported by the cloud provider.
+  externalTrafficPolicy: Local
+  port: 21117
+  nodePort: null
+  annotations: {}
+
+serviceAccount:
+  create: true
+  annotations: {}
+  name: ""
+
+podAnnotations: {}
+podLabels: {}
+
+podSecurityContext: {}
+
+securityContext: {}
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 1000m
+    memory: 512Mi
+
+nodeSelector: {}
+tolerations: []
+affinity: {}
+
+# Prometheus Operator ServiceMonitor.
+serviceMonitor:
+  enabled: false
+  interval: 30s
+  labels: {}
