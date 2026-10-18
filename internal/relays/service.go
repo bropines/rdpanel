@@ -331,7 +331,7 @@ func (s *Service) probeable(r Relay) bool {
 }
 
 func (s *Service) localLoopback(r Relay) bool {
-	host, _, err := SplitHost(r.PublicHost)
+	host, _, err := SplitHost(r.TargetHost())
 	if err != nil {
 		return true
 	}
@@ -389,7 +389,7 @@ func (s *Service) publicKey() string {
 func (s *Service) probeOne(ctx context.Context, r Relay) ProbeResult {
 	// The local relay is ours: no SSRF guard (it may well be a private address).
 	allow := r.Kind == KindLocal || s.allowPrivate(ctx)
-	res := s.cfg.Prober.Probe(ctx, r.PublicHost, s.publicKey(), allow)
+	res := s.cfg.Prober.Probe(ctx, r.TargetHost(), s.publicKey(), allow)
 	if ctx.Err() != nil {
 		return res
 	}
@@ -702,6 +702,7 @@ type CreateInput struct {
 	Kind       Kind
 	Name       string
 	PublicHost string
+	MgmtHost   string
 	Region     string
 	Weight     int
 	InRotation bool
@@ -756,13 +757,18 @@ func (s *Service) SetOptions(ctx context.Context, o Options, by *int64) error {
 
 // Create adds a static or agent relay. Agents get their enrollment material.
 func (s *Service) Create(ctx context.Context, in CreateInput) (View, *Enrollment, error) {
-	n := NewRelay{Name: in.Name, Kind: in.Kind, PublicHost: in.PublicHost, Region: in.Region, Weight: in.Weight,
+	n := NewRelay{Name: in.Name, Kind: in.Kind, PublicHost: in.PublicHost, MgmtHost: in.MgmtHost, Region: in.Region, Weight: in.Weight,
 		InRotation: in.InRotation, CreatedBy: in.CreatedBy}
 	var enr *Enrollment
 	switch in.Kind {
 	case KindStatic:
 		if err := s.checkHost(ctx, in.PublicHost); err != nil {
 			return View{}, nil, err
+		}
+		if in.MgmtHost != "" {
+			if err := s.checkHost(ctx, in.MgmtHost); err != nil {
+				return View{}, nil, err
+			}
 		}
 	case KindAgent:
 		opts, err := s.GetOptions(ctx)
@@ -836,6 +842,11 @@ func (s *Service) Update(ctx context.Context, id int64, p Patch) (View, error) {
 			return View{}, err
 		}
 	}
+	if p.MgmtHost != nil && *p.MgmtHost != "" && cur.Kind == KindStatic && *p.MgmtHost != cur.MgmtHost {
+		if err := s.checkHost(ctx, *p.MgmtHost); err != nil {
+			return View{}, err
+		}
+	}
 	if err := s.st.Update(ctx, id, p); err != nil {
 		return View{}, err
 	}
@@ -843,7 +854,7 @@ func (s *Service) Update(ctx context.Context, id int64, p Patch) (View, error) {
 		s.m.probes.DeletePartialMatch(prometheus.Labels{"relay": cur.Name})
 		s.m.probe.DeletePartialMatch(prometheus.Labels{"relay": cur.Name})
 	}
-	if p.PublicHost != nil && *p.PublicHost != cur.PublicHost {
+	if (p.PublicHost != nil && *p.PublicHost != cur.PublicHost) || (p.MgmtHost != nil && *p.MgmtHost != cur.MgmtHost) {
 		s.mu.Lock()
 		delete(s.probedAt, id) // probe the new host on the next pass
 		s.fails[id] = 0

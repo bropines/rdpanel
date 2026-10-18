@@ -57,6 +57,7 @@ type Relay struct {
 	Name           string     `json:"name"`
 	Kind           Kind       `json:"kind"`
 	PublicHost     string     `json:"public_host"`
+	MgmtHost       string     `json:"mgmt_host,omitempty"`
 	Region         string     `json:"region,omitempty"`
 	Weight         int        `json:"weight"`
 	InRotation     bool       `json:"in_rotation"`
@@ -70,6 +71,14 @@ type Relay struct {
 	CreatedAt      time.Time  `json:"created_at"`
 	UpdatedAt      time.Time  `json:"updated_at"`
 	Agent          *Agent     `json:"agent,omitempty"`
+}
+
+// TargetHost returns MgmtHost if non-empty, otherwise PublicHost.
+func (r Relay) TargetHost() string {
+	if r.MgmtHost != "" {
+		return r.MgmtHost
+	}
+	return r.PublicHost
 }
 
 // Agent is the relay_agents row of an agent relay.
@@ -148,7 +157,7 @@ func mapErr(err error) error {
 	return err
 }
 
-const relayCols = `r.id, r.name, r.kind, r.public_host, r.region, r.weight, r.in_rotation, r.admin_state, r.health,
+const relayCols = `r.id, r.name, r.kind, r.public_host, r.mgmt_host, r.region, r.weight, r.in_rotation, r.admin_state, r.health,
 	r.health_since, r.last_probe_at, r.last_probe_ms, r.last_probe_error, r.created_by, r.created_at, r.updated_at,
 	a.relay_id, a.enroll_token_hash IS NOT NULL, a.enroll_expires_at, a.require_approval, a.agent_pubkey,
 	a.enrolled_at, a.enrolled_from_ip, a.approved_at, a.revoked_at, a.hostname, a.agent_version, a.hbbr_version,
@@ -163,7 +172,7 @@ func scanRelay(sc scanner) (Relay, error) {
 	var (
 		r                                         Relay
 		kind, state, health                       string
-		region, probeErr                          sql.NullString
+		mgmtHost, region, probeErr                sql.NullString
 		healthSince, probeAt, createdBy           sql.NullInt64
 		probeMs                                   sql.NullFloat64
 		created, updated                          int64
@@ -175,7 +184,7 @@ func scanRelay(sc scanner) (Relay, error) {
 		ackErrors, lastStatus                     sql.NullString
 		desiredV, ackedV                          sql.NullInt64
 	)
-	if err := sc.Scan(&r.ID, &r.Name, &kind, &r.PublicHost, &region, &r.Weight, &r.InRotation, &state, &health,
+	if err := sc.Scan(&r.ID, &r.Name, &kind, &r.PublicHost, &mgmtHost, &region, &r.Weight, &r.InRotation, &state, &health,
 		&healthSince, &probeAt, &probeMs, &probeErr, &createdBy, &created, &updated,
 		&aID, &tokenPending, &enrollExp, &requireApproval, &pubkey,
 		&enrolledAt, &ip, &approvedAt, &revokedAt, &host, &ver, &hver,
@@ -184,6 +193,7 @@ func scanRelay(sc scanner) (Relay, error) {
 		return Relay{}, mapErr(err)
 	}
 	r.Kind, r.AdminState, r.Health = Kind(kind), AdminState(state), Health(health)
+	r.MgmtHost = mgmtHost.String
 	r.Region, r.LastProbeError = region.String, probeErr.String
 	r.HealthSince, r.LastProbeAt = tm(healthSince), tm(probeAt)
 	if probeMs.Valid {
@@ -243,6 +253,7 @@ type NewRelay struct {
 	Name       string
 	Kind       Kind
 	PublicHost string
+	MgmtHost   string
 	Region     string
 	Weight     int
 	InRotation bool
@@ -267,6 +278,20 @@ func ValidateHost(h string) error {
 	return nil
 }
 
+// ValidateMgmtHost checks an optional relay management host.
+func ValidateMgmtHost(h string) error {
+	if h == "" {
+		return nil
+	}
+	if strings.TrimSpace(h) != h {
+		return fmt.Errorf("%w: mgmt_host cannot have leading or trailing spaces", store.ErrInvalid)
+	}
+	if _, err := control.NormalizeRelayServers([]string{h}); err != nil {
+		return fmt.Errorf("%w: mgmt_host: %v", store.ErrInvalid, err)
+	}
+	return nil
+}
+
 // ValidateName checks a relay name.
 func ValidateName(n string) error {
 	if n == "" || len(n) > 64 || strings.TrimSpace(n) != n {
@@ -283,6 +308,9 @@ func (s *Store) Create(ctx context.Context, n NewRelay) (int64, error) {
 	if err := ValidateHost(n.PublicHost); err != nil {
 		return 0, err
 	}
+	if err := ValidateMgmtHost(n.MgmtHost); err != nil {
+		return 0, err
+	}
 	if n.Weight < 0 || n.Weight > MaxWeight {
 		return 0, fmt.Errorf("%w: weight must be 0-%d", store.ErrInvalid, MaxWeight)
 	}
@@ -292,10 +320,10 @@ func (s *Store) Create(ctx context.Context, n NewRelay) (int64, error) {
 	now := ms(s.now())
 	var id int64
 	err := s.DB.WithTx(ctx, func(tx *sql.Tx) error {
-		res, err := tx.ExecContext(ctx, `INSERT INTO relays (name, kind, public_host, region, weight, in_rotation,
+		res, err := tx.ExecContext(ctx, `INSERT INTO relays (name, kind, public_host, mgmt_host, region, weight, in_rotation,
 			admin_state, health, health_since, created_by, created_at, updated_at)
-			VALUES (?, ?, ?, ?, ?, ?, 'enabled', ?, ?, ?, ?, ?)`,
-			n.Name, string(n.Kind), n.PublicHost, nullStr(n.Region), n.Weight, n.InRotation, string(n.Health), now,
+			VALUES (?, ?, ?, ?, ?, ?, ?, 'enabled', ?, ?, ?, ?, ?)`,
+			n.Name, string(n.Kind), n.PublicHost, nullStr(n.MgmtHost), nullStr(n.Region), n.Weight, n.InRotation, string(n.Health), now,
 			n.CreatedBy, now, now)
 		if err != nil {
 			return mapErr(err)
@@ -318,6 +346,7 @@ func (s *Store) Create(ctx context.Context, n NewRelay) (int64, error) {
 type Patch struct {
 	Name       *string
 	PublicHost *string
+	MgmtHost   *string
 	Region     *string
 	Weight     *int
 	InRotation *bool
@@ -339,6 +368,12 @@ func (s *Store) Update(ctx context.Context, id int64, p Patch) error {
 			return err
 		}
 		set, args = append(set, "public_host = ?"), append(args, *p.PublicHost)
+	}
+	if p.MgmtHost != nil {
+		if err := ValidateMgmtHost(*p.MgmtHost); err != nil {
+			return err
+		}
+		set, args = append(set, "mgmt_host = ?"), append(args, nullStr(*p.MgmtHost))
 	}
 	if p.Region != nil {
 		if len(*p.Region) > 32 {

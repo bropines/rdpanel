@@ -138,7 +138,7 @@ export function createClient(deps: Partial<ClientDeps> = {}) {
       headers,
       body,
       credentials: "same-origin",
-      signal: opts.signal ?? null,
+      ...(opts.signal ? { signal: opts.signal } : {}),
     });
   }
 

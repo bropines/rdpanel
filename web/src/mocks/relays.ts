@@ -60,6 +60,7 @@ function agentRow(over: Partial<S["RelayAgent"]> = {}): S["RelayAgent"] {
 
 function relay(over: Partial<S["Relay"]> & Pick<S["Relay"], "id" | "name" | "kind" | "public_host">): S["Relay"] {
   return {
+    mgmt_host: null,
     region: null,
     weight: 1,
     in_rotation: true,
@@ -85,6 +86,7 @@ export const relays: S["Relay"][] = [
     name: "hel-2",
     kind: "agent",
     public_host: "relay-fi.example.com:21117",
+    mgmt_host: "100.64.0.2:21117",
     region: "FI",
     health: "degraded",
     agent: agentRow({ hostname: "hel-2", connected: false, connected_at: null, last_seen_at: iso(240_000), status: null }),
@@ -181,6 +183,7 @@ export const relayHandlers = [
       name: b.name,
       kind: b.kind,
       public_host: b.public_host,
+      mgmt_host: b.mgmt_host ?? null,
       region: b.region ?? null,
       weight: b.weight ?? 1,
       in_rotation: b.in_rotation ?? true,
@@ -211,6 +214,7 @@ export const relayHandlers = [
     const b = (await request.json()) as S["RelayPatch"];
     if (b.weight !== undefined && (b.weight < 0 || b.weight > 5)) return err(400, "validation_failed", "weight must be 0-5");
     Object.assign(r, b, { updated_at: nowIso() });
+    if (b.mgmt_host === null) r.mgmt_host = null;
     rotation();
     return ok(r);
   }),

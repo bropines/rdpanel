@@ -184,23 +184,27 @@ function AddRelayDialog({
   const onError = useRelayError();
   const [name, setName] = useState("");
   const [host, setHost] = useState("");
+  const [mgmtHost, setMgmtHost] = useState("");
   const [region, setRegion] = useState("");
   const [weight, setWeight] = useState("1");
   useEffect(() => {
     if (kind) {
       setName("");
       setHost("");
+      setMgmtHost("");
       setRegion("");
       setWeight("1");
     }
   }, [kind]);
   const hostOk = isHostPort(host.trim());
+  const mgmtHostOk = !mgmtHost.trim() || isHostPort(mgmtHost.trim());
   const save = useMutation({
     mutationFn: () =>
       relaysApi.create({
         kind: kind ?? "static",
         name: name.trim(),
         public_host: host.trim(),
+        mgmt_host: mgmtHost.trim() || null,
         region: region.trim() || null,
         weight: Number(weight),
         in_rotation: true,
@@ -221,7 +225,7 @@ function AddRelayDialog({
           noValidate
           onSubmit={(e) => {
             e.preventDefault();
-            if (name.trim() && hostOk) save.mutate();
+            if (name.trim() && hostOk && mgmtHostOk) save.mutate();
           }}
         >
           <DialogHeader>
@@ -238,6 +242,14 @@ function AddRelayDialog({
             error={host && !hostOk ? t("server.errors.hostPort") : undefined}
           >
             <Input id="relay-host" className="font-mono" value={host} onChange={(e) => setHost(e.target.value)} placeholder="relay-de.example.com:21117" />
+          </Field>
+          <Field
+            label={t("relays.mgmtHost")}
+            htmlFor="relay-mgmt-host"
+            hint={t("relays.mgmtHostHint")}
+            error={mgmtHost.trim() && !mgmtHostOk ? t("server.errors.hostPort") : undefined}
+          >
+            <Input id="relay-mgmt-host" className="font-mono" value={mgmtHost} onChange={(e) => setMgmtHost(e.target.value)} placeholder="100.64.0.12:21117" />
           </Field>
           <div className="grid grid-cols-2 gap-3">
             <Field label={t("relays.region")} htmlFor="relay-region">
@@ -262,7 +274,7 @@ function AddRelayDialog({
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
               {t("common.cancel")}
             </Button>
-            <Button type="submit" disabled={save.isPending || !name.trim() || !hostOk}>
+            <Button type="submit" disabled={save.isPending || !name.trim() || !hostOk || !mgmtHostOk}>
               {t("common.create")}
             </Button>
           </DialogFooter>
@@ -358,19 +370,28 @@ function EditSection({ r }: { r: Relay }) {
   const onError = useRelayError();
   const [name, setName] = useState(r.name);
   const [host, setHost] = useState(r.public_host);
+  const [mgmtHost, setMgmtHost] = useState(r.mgmt_host ?? "");
   const [region, setRegion] = useState(r.region ?? "");
   const [weight, setWeight] = useState(String(r.weight));
   const [inRotation, setInRotation] = useState(r.in_rotation);
   useEffect(() => {
     setName(r.name);
     setHost(r.public_host);
+    setMgmtHost(r.mgmt_host ?? "");
     setRegion(r.region ?? "");
     setWeight(String(r.weight));
     setInRotation(r.in_rotation);
-  }, [r.id, r.name, r.public_host, r.region, r.weight, r.in_rotation]);
+  }, [r.id, r.name, r.public_host, r.mgmt_host, r.region, r.weight, r.in_rotation]);
   const save = useMutation({
     mutationFn: () =>
-      relaysApi.update(r.id, { name: name.trim(), public_host: host.trim(), region: region.trim() || null, weight: Number(weight), in_rotation: inRotation }),
+      relaysApi.update(r.id, {
+        name: name.trim(),
+        public_host: host.trim(),
+        mgmt_host: mgmtHost.trim() || null,
+        region: region.trim() || null,
+        weight: Number(weight),
+        in_rotation: inRotation,
+      }),
     onSuccess: () => {
       toast.success(t("common.saved"));
       void qc.invalidateQueries({ queryKey: relayKeys.all });
@@ -378,6 +399,7 @@ function EditSection({ r }: { r: Relay }) {
     onError,
   });
   const hostOk = isHostPort(host.trim());
+  const mgmtHostOk = !mgmtHost.trim() || isHostPort(mgmtHost.trim());
   return (
     <div className="space-y-3">
       <SectionTitle>{t("relays.drawer.settings")}</SectionTitle>
@@ -390,6 +412,15 @@ function EditSection({ r }: { r: Relay }) {
         </Field>
         <Field label={t("relays.publicHost")} htmlFor="rd-host" error={!hostOk ? t("server.errors.hostPort") : undefined} className="sm:col-span-2">
           <Input id="rd-host" className="font-mono" value={host} onChange={(e) => setHost(e.target.value)} />
+        </Field>
+        <Field
+          label={t("relays.mgmtHost")}
+          htmlFor="rd-mgmt-host"
+          hint={t("relays.mgmtHostHint")}
+          error={mgmtHost.trim() && !mgmtHostOk ? t("server.errors.hostPort") : undefined}
+          className="sm:col-span-2"
+        >
+          <Input id="rd-mgmt-host" className="font-mono" value={mgmtHost} onChange={(e) => setMgmtHost(e.target.value)} placeholder="100.64.0.12:21117" />
         </Field>
         <Field label={t("relays.weight")} htmlFor="rd-weight" hint={t("relays.weightHint")}>
           <Select value={weight} onValueChange={setWeight}>
@@ -410,7 +441,7 @@ function EditSection({ r }: { r: Relay }) {
           <Switch checked={inRotation} onCheckedChange={setInRotation} />
         </label>
       </div>
-      <Button size="sm" onClick={() => save.mutate()} disabled={save.isPending || !name.trim() || !hostOk}>
+      <Button size="sm" onClick={() => save.mutate()} disabled={save.isPending || !name.trim() || !hostOk || !mgmtHostOk}>
         {t("common.save")}
       </Button>
     </div>
@@ -544,8 +575,13 @@ function RelayDrawer({ r, onClose }: { r: Relay | undefined; onClose: () => void
                 </Badge>
                 <HealthBadge health={r.health} />
               </SheetTitle>
-              <SheetDescription>
-                <Mono>{r.public_host}</Mono>
+              <SheetDescription className="space-y-0.5">
+                <Mono className="block">{r.public_host}</Mono>
+                {r.mgmt_host && (
+                  <span className="block text-xs text-muted-foreground">
+                    {t("relays.mgmtShort")}: <Mono>{r.mgmt_host}</Mono>
+                  </span>
+                )}
               </SheetDescription>
             </SheetHeader>
             <SheetBody className="space-y-6">
@@ -730,6 +766,11 @@ export function RelaysTab() {
                       {r.admin_state !== "enabled" && <Badge variant="outline" className="font-normal text-amber-700 dark:text-amber-400">{t(`relays.state.${r.admin_state}`)}</Badge>}
                     </div>
                     <Mono className="block text-xs text-muted-foreground">{r.public_host}</Mono>
+                    {r.mgmt_host && (
+                      <div className="text-xs text-muted-foreground">
+                        {t("relays.mgmtShort")}: <Mono>{r.mgmt_host}</Mono>
+                      </div>
+                    )}
                   </TableCell>
                   <TableCell>
                     <HealthBadge health={r.health} />
