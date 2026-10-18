@@ -8,7 +8,7 @@ import { serverApi } from "@/api/system";
 import { CopyButton, copyText, ErrorState, Mono } from "@/components";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Skeleton } from "@/components/ui/misc";
+import { Skeleton, Switch } from "@/components/ui/misc";
 
 /**
  * Builds the executable filename for Windows portable client auto-configuration.
@@ -32,16 +32,22 @@ export function ClientConfigCard() {
   const { t } = useTranslation();
   const q = useQuery({ queryKey: ["server", "client-config"], queryFn: serverApi.clientConfig });
   const [showManual, setShowManual] = useState(false);
+  const [useIp, setUseIp] = useState(false);
 
   if (q.isError) return <ErrorState error={q.error} onRetry={() => void q.refetch()} />;
   if (!q.data) return <Skeleton className="h-48" />;
 
   const c = q.data;
-  const cmd = cliCommand(c.config_string);
-  const exeName = windowsExeName(c.id_server, c.public_key);
+  const hasIp = !!(c.config_string_ip && (c.id_server_ip || c.relay_server_ip));
+  const activeIdServer = useIp && c.id_server_ip ? c.id_server_ip : c.id_server;
+  const activeRelayServer = useIp && c.relay_server_ip ? c.relay_server_ip : c.relay_server;
+  const activeConfigString = useIp && c.config_string_ip ? c.config_string_ip : c.config_string;
+
+  const cmd = cliCommand(activeConfigString);
+  const exeName = windowsExeName(activeIdServer, c.public_key);
 
   const handleCopyMain = async () => {
-    if (await copyText(c.config_string)) {
+    if (await copyText(activeConfigString)) {
       toast.success(t("server.clientConfig.copiedToast"));
     }
   };
@@ -49,7 +55,7 @@ export function ClientConfigCard() {
   return (
     <Card>
       <CardHeader className="pb-3">
-        <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <CardTitle className="flex items-center gap-2 text-base">
               <Monitor className="h-4 w-4" />
@@ -57,10 +63,24 @@ export function ClientConfigCard() {
             </CardTitle>
             <CardDescription className="mt-1">{t("server.clientConfig.description")}</CardDescription>
           </div>
-          <Button type="button" onClick={handleCopyMain} className="gap-2">
-            <Copy className="h-4 w-4" />
-            {t("server.clientConfig.copyButton")}
-          </Button>
+          <div className="flex flex-wrap items-center gap-2">
+            {hasIp && (
+              <label
+                className="flex items-center gap-2 rounded-md border bg-muted/40 px-2.5 py-1.5 text-xs font-medium cursor-pointer hover:bg-muted/70 transition-colors select-none"
+                title={t("server.clientConfig.useIpHint")}
+              >
+                <Switch checked={useIp} onCheckedChange={setUseIp} aria-label={t("server.clientConfig.useIp")} />
+                <span>{t("server.clientConfig.useIp")}</span>
+                {c.id_server_ip && (
+                  <Mono className="text-[11px] text-muted-foreground hidden sm:inline">({c.id_server_ip})</Mono>
+                )}
+              </label>
+            )}
+            <Button type="button" onClick={handleCopyMain} className="gap-2">
+              <Copy className="h-4 w-4" />
+              {t("server.clientConfig.copyButton")}
+            </Button>
+          </div>
         </div>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -76,9 +96,9 @@ export function ClientConfigCard() {
           <label className="text-xs font-medium text-muted-foreground">{t("server.clientConfig.configStringLabel")}</label>
           <div className="relative">
             <pre className="max-h-28 overflow-auto whitespace-pre-wrap break-all rounded-md border bg-muted/50 p-2.5 pr-10 font-mono text-xs leading-relaxed">
-              {c.config_string}
+              {activeConfigString}
             </pre>
-            <CopyButton value={c.config_string} label={t("server.clientConfig.copyString")} className="absolute right-2 top-2" />
+            <CopyButton value={activeConfigString} label={t("server.clientConfig.copyString")} className="absolute right-2 top-2" />
           </div>
           <p className="text-xs text-muted-foreground">{t("server.clientConfig.instructions")}</p>
         </div>
@@ -130,17 +150,17 @@ export function ClientConfigCard() {
               <div className="space-y-1">
                 <div className="flex items-center justify-between gap-2">
                   <span className="text-xs font-medium">{t("server.clientConfig.idServer")}</span>
-                  <CopyButton value={c.id_server} />
+                  <CopyButton value={activeIdServer} />
                 </div>
-                <Mono className="block truncate text-xs">{c.id_server || "—"}</Mono>
+                <Mono className="block truncate text-xs">{activeIdServer || "—"}</Mono>
               </div>
 
               <div className="space-y-1">
                 <div className="flex items-center justify-between gap-2">
                   <span className="text-xs font-medium">{t("server.clientConfig.relayServer")}</span>
-                  <CopyButton value={c.relay_server} />
+                  <CopyButton value={activeRelayServer} />
                 </div>
-                <Mono className="block truncate text-xs">{c.relay_server || "—"}</Mono>
+                <Mono className="block truncate text-xs">{activeRelayServer || "—"}</Mono>
               </div>
 
               <div className="space-y-1">

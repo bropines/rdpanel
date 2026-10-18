@@ -3421,6 +3421,12 @@ export interface components {
             public_key: string;
             /** @description Base64-encoded reversed JSON string for RustDesk's Import Server Config or --config. */
             config_string: string;
+            /** @description Resolved IPv4 address of the hbbs ID server, if different from id_server. */
+            id_server_ip?: string;
+            /** @description Resolved IPv4 address with port of the hbbr relay server, if different from relay_server. */
+            relay_server_ip?: string;
+            /** @description Base64-encoded configuration string with resolved IP addresses. */
+            config_string_ip?: string;
         };
         /**
          * @description RustDesk client options pushed to every device in heartbeat responses (strategy `config_options`).

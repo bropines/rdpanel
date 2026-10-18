@@ -781,6 +781,8 @@
       "description": "Connection parameters and configuration string to import into RustDesk clients or apply via command line.",
       "copyButton": "Copy config string",
       "copiedToast": "Configuration string copied to clipboard",
+      "useIp": "Use IP address",
+      "useIpHint": "Substitute domain names with resolved IP addresses",
       "noKeyWarning": "Server public key (id_ed25519.pub) is missing or unreadable. Check the hbbs data volume.",
       "configStringLabel": "Configuration string (for clipboard import or --config)",
       "copyString": "Copy configuration string",

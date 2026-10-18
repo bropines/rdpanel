@@ -530,6 +530,9 @@ export const clientConfig: S["ClientConfig"] = {
   api_server: "https://desk.example.com",
   public_key: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
   config_string: "Qfi02bj5SZsBXbhhXZus2clR2LvozcwRHdoJiOikGchJCLiYWZkNmYhlDO3YTN0MjMxAjZlR2YiFWO4cjN1QzMyEDMmVGZjJWY5gzN2UDNzITMwYWZkNmYhlDO3YTN0MjMxAjI6ISeltmIsIyNxETMyoTbvNmLlxGctFGel5yazVGZiojI5FGblJnIsISbvNmLlxGctFGel5yazVGZiojI0N3boJye",
+  id_server_ip: "198.51.100.1",
+  relay_server_ip: "198.51.100.1:21117",
+  config_string_ip: "0nIt92YuUGbw1WY4VmLrNXZk9yL6MHc0RHaiojIpBXYiwiImVGZjJWY5gzN2UDNzITMwYWZkNmYhlDO3YTN0MjMxAjZlR2YiFWO4cjN1QzMyEDMmVGZjJWY5gzN2UDNzITMwIiOikXZrJCLicTMxEjM6EjLwATMuETNugTOxIiOikXYsVmciwiIx4CMwEjLxUjL4kTMiojI0N3boJye",
 };
 
 export const consoleCommands: S["ConsoleCommand"][] = [

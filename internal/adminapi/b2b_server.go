@@ -947,11 +947,14 @@ func (a *CommandAudit) RecordCommand(ctx context.Context, rec control.CommandRec
 
 // clientConfigDTO is components.schemas.ClientConfig.
 type clientConfigDTO struct {
-	IDServer     string `json:"id_server"`
-	RelayServer  string `json:"relay_server"`
-	APIServer    string `json:"api_server"`
-	PublicKey    string `json:"public_key"`
-	ConfigString string `json:"config_string"`
+	IDServer       string `json:"id_server"`
+	RelayServer    string `json:"relay_server"`
+	APIServer      string `json:"api_server"`
+	PublicKey      string `json:"public_key"`
+	ConfigString   string `json:"config_string"`
+	IDServerIP     string `json:"id_server_ip,omitempty"`
+	RelayServerIP  string `json:"relay_server_ip,omitempty"`
+	ConfigStringIP string `json:"config_string_ip,omitempty"`
 }
 
 type rustdeskCustomServer struct {
@@ -1052,11 +1055,54 @@ func (c *b2bCore) handleGetClientConfig(w http.ResponseWriter, r *http.Request) 
 
 	configStr, _ := EncodeRustdeskConfig(idServer, relayServer, apiServer, publicKey)
 
+	idIP := resolveHostIP(r.Context(), idServer)
+	relayIP := resolveHostIP(r.Context(), relayServer)
+	var configStrIP string
+	if idIP != "" || relayIP != "" {
+		effID := idServer
+		if idIP != "" {
+			effID = idIP
+		}
+		effRelay := relayServer
+		if relayIP != "" {
+			effRelay = relayIP
+		}
+		configStrIP, _ = EncodeRustdeskConfig(effID, effRelay, apiServer, publicKey)
+	}
+
 	httpx.WriteJSON(w, http.StatusOK, clientConfigDTO{
-		IDServer:     idServer,
-		RelayServer:  relayServer,
-		APIServer:    apiServer,
-		PublicKey:    publicKey,
-		ConfigString: configStr,
+		IDServer:       idServer,
+		RelayServer:    relayServer,
+		APIServer:      apiServer,
+		PublicKey:      publicKey,
+		ConfigString:   configStr,
+		IDServerIP:     idIP,
+		RelayServerIP:  relayIP,
+		ConfigStringIP: configStrIP,
 	})
+}
+
+func resolveHostIP(ctx context.Context, hostPort string) string {
+	if hostPort == "" {
+		return ""
+	}
+	h, p, err := net.SplitHostPort(hostPort)
+	if err != nil {
+		h = hostPort
+		p = ""
+	}
+	if ip := net.ParseIP(h); ip != nil {
+		return ""
+	}
+	c, cancel := context.WithTimeout(ctx, 2*time.Second)
+	defer cancel()
+	ips, err := net.DefaultResolver.LookupIP(c, "ip4", h)
+	if err != nil || len(ips) == 0 {
+		return ""
+	}
+	ipStr := ips[0].String()
+	if p != "" {
+		return net.JoinHostPort(ipStr, p)
+	}
+	return ipStr
 }

@@ -4467,6 +4467,15 @@ components:
         config_string:
           type: string
           description: Base64-encoded reversed JSON string for RustDesk's Import Server Config or --config.
+        id_server_ip:
+          type: string
+          description: Resolved IPv4 address of the hbbs ID server, if different from id_server.
+        relay_server_ip:
+          type: string
+          description: Resolved IPv4 address with port of the hbbr relay server, if different from relay_server.
+        config_string_ip:
+          type: string
+          description: Base64-encoded configuration string with resolved IP addresses.
     ClientOptions:
       type: object
       required: [ice_servers, webrtc_congestion_control, pushed, modified_at]

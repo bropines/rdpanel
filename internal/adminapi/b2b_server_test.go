@@ -372,3 +372,25 @@ func TestServerClientConfig(t *testing.T) {
 			dHost, dRelay, dAPI, idSrv, relaySrv, apiSrv)
 	}
 }
+
+func TestResolveHostIP(t *testing.T) {
+	ctx := context.Background()
+	// Already IP
+	if res := resolveHostIP(ctx, "1.2.3.4"); res != "" {
+		t.Fatalf("expected empty for IPv4, got %q", res)
+	}
+	if res := resolveHostIP(ctx, "1.2.3.4:21117"); res != "" {
+		t.Fatalf("expected empty for IPv4 with port, got %q", res)
+	}
+	if res := resolveHostIP(ctx, ""); res != "" {
+		t.Fatalf("expected empty for empty host, got %q", res)
+	}
+	// Localhost should resolve to 127.0.0.1
+	if res := resolveHostIP(ctx, "localhost"); res != "127.0.0.1" {
+		t.Logf("localhost resolved to %q (may vary on some systems)", res)
+	}
+	if res := resolveHostIP(ctx, "localhost:21117"); res != "127.0.0.1:21117" && res != "" {
+		t.Logf("localhost:21117 resolved to %q", res)
+	}
+}
+
