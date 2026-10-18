@@ -266,4 +266,55 @@ func TestRelayTrafficEndpoint(t *testing.T) {
 	}
 }
 
+func TestRelayPrefixRulesAPI(t *testing.T) {
+	e := newRelayEnv(t)
+	admin, _ := e.as("root", store.RoleAdmin)
+	user, _ := e.as("bob", store.RoleUser)
+
+	// User forbidden
+	code, m, _ := user.do(http.MethodGet, "/relays/prefix-rules", nil)
+	wantErr(t, "user get prefix rules", code, 403, m, "forbidden")
+
+	// Initially empty
+	code, _, _ = admin.do(http.MethodGet, "/relays/prefix-rules", nil)
+	if code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", code)
+	}
+
+	// Create valid prefix rule
+	code, m, _ = admin.do(http.MethodPost, "/relays/prefix-rules", map[string]any{
+		"cidr":       "192.168.1.0/24",
+		"relay_host": "relay-local.example.com",
+		"comment":    "Local office",
+	})
+	want(t, "create prefix rule", code, 201, m)
+	id := int64(m["id"].(float64))
+	if id <= 0 || m["cidr"] != "192.168.1.0/24" || m["relay_host"] != "relay-local.example.com" {
+		t.Fatalf("unexpected rule: %v", m)
+	}
+
+	// List rules
+	code, _, _ = admin.do(http.MethodGet, "/relays/prefix-rules", nil)
+	if code != http.StatusOK {
+		t.Fatalf("expected 200 on list, got %d", code)
+	}
+
+	// Invalid rule
+	code, m, _ = admin.do(http.MethodPost, "/relays/prefix-rules", map[string]any{
+		"cidr":       "invalid-cidr",
+		"relay_host": "relay.example.com",
+	})
+	wantErr(t, "invalid cidr", code, 400, m, "validation_failed")
+
+	// Delete rule
+	code, _, _ = admin.do(http.MethodDelete, "/relays/prefix-rules/"+itoa(id), nil)
+	if code != http.StatusNoContent {
+		t.Fatalf("expected 204 on delete, got %d", code)
+	}
+
+	// Delete nonexistent rule
+	code, m, _ = admin.do(http.MethodDelete, "/relays/prefix-rules/99999", nil)
+	wantErr(t, "delete nonexistent", code, 404, m, "not_found")
+}
+
 func itoa(n int64) string { return strconv.FormatInt(n, 10) }

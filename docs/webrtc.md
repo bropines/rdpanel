@@ -50,6 +50,9 @@ uses this panel as its API server. The panel sends them in the heartbeat respons
 - The list is encrypted at rest with the panel's secret key, and the admin audit log records only
   how many servers were set. Every client that receives the list can read the TURN credentials, so
   use a TURN user that is only for RustDesk, or time-limited credentials that you rotate.
+- The panel UI provides one-click presets (**Global**, **RU / Anti-Censorship**, **Cloudflare**,
+  **Default**) and a **Test servers** button to probe candidate ICE servers (UDP STUN Binding Request
+  RFC 5389) and report latency before saving. Applying a preset keeps custom TURN servers intact.
 - If a list has only TURN servers, RustDesk adds its default STUN servers in front.
 
 ## TURN server (coturn)

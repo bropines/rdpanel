@@ -40,6 +40,7 @@ var wantTables = []string{
 	"relay_agents", "relay_settings", "relays", // 00010_relay_agents
 	"api_tokens",            // 00011_api_tokens
 	"relay_traffic_samples", // 00014_relay_traffic_samples
+	"relay_prefix_rules",    // 00015_relay_prefix_rules
 }
 
 func tables(t *testing.T, d *DB) []string {

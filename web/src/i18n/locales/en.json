@@ -815,6 +815,20 @@
         "url": "Each entry must be a stun:, stuns:, turn:// or turns:// URL without spaces",
         "turn": "TURN entries need credentials: turn://user:pass@host:port",
         "tooMany": "At most 16 ICE servers"
+      },
+      "presets": {
+        "label": "Presets",
+        "global": "Global",
+        "ru": "RU / Anti-Censorship",
+        "cloudflare": "Cloudflare",
+        "default": "Default"
+      },
+      "probe": {
+        "button": "Test servers",
+        "testing": "Testing...",
+        "success": "All tested ICE servers are reachable",
+        "someFailed": "Some ICE servers failed or timed out",
+        "reachableCount": "reachable"
       }
     },
     "viewers": {

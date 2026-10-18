@@ -106,7 +106,8 @@ func (a *App) initRelays() error {
 	s, err := relays.New(relays.Config{
 		Store: &relays.Store{DB: a.DB}, Panel: a.Store, Bus: a.Events, Log: a.Log.With("component", "relays"),
 		Registerer: a.Registry, Limiter: a.Limiter, LocalHost: cfg.HBBS.RelayPublicHost, PublicURL: cfg.PublicURL,
-		Image: image,
+		Image:   image,
+		ListDir: cfg.HBBS.ListDir,
 		PublicKey: func() (string, error) {
 			raw, err := os.ReadFile(cfg.HBBS.PublicKeyFile)
 			if err != nil {

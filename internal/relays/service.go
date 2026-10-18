@@ -68,6 +68,8 @@ type GlobalProfile interface {
 type LocalControl interface {
 	RelayServers(ctx context.Context) ([]string, error)
 	Usage(ctx context.Context) ([]control.RelayUsage, error)
+	Stats(ctx context.Context) (*control.RelayStats, error)
+	ReloadGeo(ctx context.Context) (string, error)
 }
 
 // Config configures a Service.
@@ -99,6 +101,8 @@ type Config struct {
 	EnrollTTL     time.Duration
 	ClockSkew     time.Duration
 	Now           func() time.Time
+	// ListDir is hbbs/hbbr's working directory (where relay_map.txt lives).
+	ListDir string
 }
 
 // Service is the relay manager and agent hub.
@@ -131,6 +135,8 @@ type trafficState struct {
 	at             time.Time
 	totalMB        float64
 	activeSessions int
+	bytesTotal     uint64
+	relaysTotal    uint64
 }
 
 // New builds a Service.
@@ -264,6 +270,9 @@ func (s *Service) EnsureLocal(ctx context.Context) error {
 func (s *Service) Run(ctx context.Context) {
 	if err := s.EnsureLocal(ctx); err != nil && ctx.Err() == nil {
 		s.log.Warn("relays: seed local relay", slog.Any("err", err))
+	}
+	if err := s.SyncPrefixRules(ctx); err != nil && ctx.Err() == nil {
+		s.log.Warn("relays: sync prefix rules", slog.Any("err", err))
 	}
 	t := time.NewTicker(s.cfg.Interval)
 	defer t.Stop()
@@ -1126,19 +1135,28 @@ func (s *Service) sampleTraffic(ctx context.Context, rs []Relay) {
 	}
 	var deltas []trafficDelta
 
-	// Fetch local usage outside the mutex if needed
+	// Fetch local usage or stats outside the mutex if needed
 	var (
+		localStats    *control.RelayStats
 		localUsage    []control.RelayUsage
 		hasLocalUsage bool
 	)
 	for _, r := range rs {
 		if r.Kind == KindLocal && l != nil {
-			uCtx, cancel := context.WithTimeout(ctx, time.Second)
-			u, err := l.Usage(uCtx)
-			cancel()
-			if err == nil {
-				localUsage = u
+			sCtx, sCancel := context.WithTimeout(ctx, time.Second)
+			st, err := l.Stats(sCtx)
+			sCancel()
+			if err == nil && st != nil {
+				localStats = st
 				hasLocalUsage = true
+			} else {
+				uCtx, uCancel := context.WithTimeout(ctx, time.Second)
+				u, err := l.Usage(uCtx)
+				uCancel()
+				if err == nil {
+					localUsage = u
+					hasLocalUsage = true
+				}
 			}
 			break
 		}
@@ -1193,27 +1211,43 @@ func (s *Service) sampleTraffic(ctx context.Context, rs []Relay) {
 			if !hasLocalUsage {
 				continue
 			}
-			activeSessions = len(localUsage)
-			var totalMB, sumKbps float64
-			for _, u := range localUsage {
-				totalMB += u.TotalMB
-				sumKbps += float64(u.CurrentKbps)
-			}
-			rateBps := sumKbps * 1000
-			bytesDelta = int64(rateBps / 8 * elapsed)
-			if totalMB > prev.totalMB && prev.totalMB > 0 {
-				mbDelta := int64((totalMB - prev.totalMB) * 1024 * 1024)
-				if mbDelta > bytesDelta {
-					bytesDelta = mbDelta
+			if localStats != nil {
+				activeSessions = localStats.RelaysActive
+				if prev.bytesTotal > 0 && localStats.BytesTotal >= prev.bytesTotal {
+					bytesDelta = int64(localStats.BytesTotal - prev.bytesTotal)
 				}
-			}
-			if activeSessions > prev.activeSessions {
-				sessionsDelta = activeSessions - prev.activeSessions
-			}
-			s.lastTraffic[r.ID] = trafficState{
-				at:             now,
-				totalMB:        totalMB,
-				activeSessions: activeSessions,
+				if prev.relaysTotal > 0 && localStats.RelaysTotal >= prev.relaysTotal {
+					sessionsDelta = int(localStats.RelaysTotal - prev.relaysTotal)
+				}
+				s.lastTraffic[r.ID] = trafficState{
+					at:             now,
+					bytesTotal:     localStats.BytesTotal,
+					relaysTotal:    localStats.RelaysTotal,
+					activeSessions: activeSessions,
+				}
+			} else {
+				activeSessions = len(localUsage)
+				var totalMB, sumKbps float64
+				for _, u := range localUsage {
+					totalMB += u.TotalMB
+					sumKbps += float64(u.CurrentKbps)
+				}
+				rateBps := sumKbps * 1000
+				bytesDelta = int64(rateBps / 8 * elapsed)
+				if totalMB > prev.totalMB && prev.totalMB > 0 {
+					mbDelta := int64((totalMB - prev.totalMB) * 1024 * 1024)
+					if mbDelta > bytesDelta {
+						bytesDelta = mbDelta
+					}
+				}
+				if activeSessions > prev.activeSessions {
+					sessionsDelta = activeSessions - prev.activeSessions
+				}
+				s.lastTraffic[r.ID] = trafficState{
+					at:             now,
+					totalMB:        totalMB,
+					activeSessions: activeSessions,
+				}
 			}
 		}
 
@@ -1239,4 +1273,52 @@ func (s *Service) sampleTraffic(ctx context.Context, rs []Relay) {
 	if purgeDue {
 		_, _ = s.st.PurgeTrafficBefore(ctx, now.Add(-30*24*time.Hour))
 	}
+}
+
+// ListPrefixRules returns all prefix routing rules ordered by id.
+func (s *Service) ListPrefixRules(ctx context.Context) ([]PrefixRule, error) {
+	return s.st.ListPrefixRules(ctx)
+}
+
+// CreatePrefixRule validates and inserts a new rule, syncs the map file, and reloads geo routing.
+func (s *Service) CreatePrefixRule(ctx context.Context, rule *PrefixRule) error {
+	if err := s.st.CreatePrefixRule(ctx, rule); err != nil {
+		return err
+	}
+	if syncErr := s.SyncPrefixRules(ctx); syncErr != nil {
+		s.log.Warn("relays: sync prefix rules after create", slog.Any("err", syncErr))
+	}
+	return nil
+}
+
+// DeletePrefixRule deletes a rule by ID, syncs the map file, and reloads geo routing.
+func (s *Service) DeletePrefixRule(ctx context.Context, id int64) error {
+	if err := s.st.DeletePrefixRule(ctx, id); err != nil {
+		return err
+	}
+	if syncErr := s.SyncPrefixRules(ctx); syncErr != nil {
+		s.log.Warn("relays: sync prefix rules after delete", slog.Any("err", syncErr))
+	}
+	return nil
+}
+
+// SyncPrefixRules writes relay_map.txt to ListDir and sends reload-geo to hbbs if reachable.
+func (s *Service) SyncPrefixRules(ctx context.Context) error {
+	rules, err := s.st.ListPrefixRules(ctx)
+	if err != nil {
+		return err
+	}
+	if s.cfg.ListDir != "" {
+		content := FormatRelayMap(rules)
+		if err := WriteRelayMapFile(s.cfg.ListDir, content); err != nil {
+			return err
+		}
+	}
+	ctl, up := s.local()
+	if ctl != nil && (up == nil || up()) {
+		if _, err := ctl.ReloadGeo(ctx); err != nil {
+			return fmt.Errorf("reload geo: %w", err)
+		}
+	}
+	return nil
 }
