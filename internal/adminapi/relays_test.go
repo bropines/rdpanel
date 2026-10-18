@@ -276,7 +276,7 @@ func TestRelayPrefixRulesAPI(t *testing.T) {
 	wantErr(t, "user get prefix rules", code, 403, m, "forbidden")
 
 	// Initially empty
-	code, m, _ = admin.do(http.MethodGet, "/relays/prefix-rules", nil)
+	code, _, _ = admin.do(http.MethodGet, "/relays/prefix-rules", nil)
 	if code != http.StatusOK {
 		t.Fatalf("expected 200, got %d", code)
 	}
@@ -294,9 +294,7 @@ func TestRelayPrefixRulesAPI(t *testing.T) {
 	}
 
 	// List rules
-	code, m, _ = admin.do(http.MethodGet, "/relays/prefix-rules", nil)
-	// m is decoded as JSON array into a list or similar if it's an array
-	// In admin.do it returns (code, map[string]any, raw)
+	code, _, _ = admin.do(http.MethodGet, "/relays/prefix-rules", nil)
 	if code != http.StatusOK {
 		t.Fatalf("expected 200 on list, got %d", code)
 	}
