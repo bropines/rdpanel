@@ -5,6 +5,7 @@ import { idpSchema, toInput, type IdpValues } from "@/pages/IdentityProvidersPag
 import { mfaSchema, passwordSchema } from "@/pages/LoginPage";
 import { passwordChangeSchema } from "@/pages/my/ProfilePage";
 import { formatSecret, TOTP_CODE_RE } from "@/pages/my/TotpSection";
+import { cliCommand, windowsExeName } from "@/pages/server/ClientConfigCard";
 import { iceEntries, toInput as clientOptionsInput, validateIceServers } from "@/pages/server/ClientOptionsCard";
 import { parseConsoleArgs } from "@/pages/server/Console";
 import { diffDraft, validateDraft } from "@/pages/server/ServerSettingsForm";
@@ -268,3 +269,16 @@ describe("client options (WebRTC)", () => {
     expect(clientOptionsInput({ ice_servers: "", congestion: "off" }).webrtc_congestion_control).toBe(false);
   });
 });
+
+describe("client config helpers", () => {
+  it("formats CLI command with quotes", () => {
+    expect(cliCommand("abc123xyz")).toBe('rustdesk --config "abc123xyz"');
+  });
+
+  it("builds Windows executable name with host and key", () => {
+    expect(windowsExeName("desk.example.com", "pubkey123")).toBe("rustdesk-host=desk.example.com,key=pubkey123.exe");
+    expect(windowsExeName("desk.example.com", "")).toBe("rustdesk-host=desk.example.com.exe");
+    expect(windowsExeName("", "")).toBe("rustdesk.exe");
+  });
+});
+

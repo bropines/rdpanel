@@ -13,6 +13,7 @@ import { cn } from "@/lib/utils";
 import { Console } from "@/pages/server/Console";
 import { LogsTab } from "@/pages/server/Logs";
 import { RelaysTab } from "@/pages/server/Relays";
+import { ClientConfigCard } from "@/pages/server/ClientConfigCard";
 import { ClientOptionsCard } from "@/pages/server/ClientOptionsCard";
 import { ServerSettingsForm } from "@/pages/server/ServerSettingsForm";
 import { Viewers } from "@/pages/server/Viewers";
@@ -127,6 +128,7 @@ export function ServerPage() {
         <TabsContent value="settings">
           {tab === "settings" && (
             <div className="space-y-4">
+              <ClientConfigCard />
               <ServerSettingsForm />
               <ClientOptionsCard />
             </div>

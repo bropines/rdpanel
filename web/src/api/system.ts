@@ -40,6 +40,7 @@ export type ServerSettingsState = Schemas["ServerSettingsState"];
 export type ServerSettingsPatch = Schemas["ServerSettingsPatch"];
 export type ClientOptions = Schemas["ClientOptions"];
 export type ClientOptionsInput = Schemas["ClientOptionsInput"];
+export type ClientConfig = Schemas["ClientConfig"];
 
 export const serverApi = {
   health: () => api.request<ServerHealth>("/server/health"),
@@ -50,6 +51,7 @@ export const serverApi = {
   clientOptions: () => api.request<ClientOptions>("/server/client-options"),
   updateClientOptions: (body: ClientOptionsInput) =>
     api.request<ClientOptions>("/server/client-options", { method: "PUT", body }),
+  clientConfig: () => api.request<ClientConfig>("/server/client-config"),
   ipBlocker: (q: QueryOf<"listIpBlocker">) => api.request<Schemas["IpBlockerPage"]>("/server/ip-blocker", { query: q }),
   unblockIp: (ip: string) => api.request<void>(`/server/ip-blocker/${encodeURIComponent(ip)}`, { method: "DELETE" }),
   ipChanges: (q: QueryOf<"listIpChanges">) => api.request<Schemas["IpChangesPage"]>("/server/ip-changes", { query: q }),

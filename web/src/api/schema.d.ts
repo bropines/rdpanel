@@ -1688,6 +1688,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/server/client-config": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Client connection settings and encoded configuration string for RustDesk clients (admin).
+         * @description Returns host, relay, API URL, public key, and the base64-encoded reversed JSON string
+         *     understood by RustDesk's "Import Server Config" / "Import from clipboard" and `--config`.
+         */
+        get: operations["getClientConfig"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/server/settings/reapply": {
         parameters: {
             query?: never;
@@ -3387,6 +3408,19 @@ export interface components {
             single_bandwidth_mbps?: number;
             downgrade_threshold?: number;
             downgrade_start_check_s?: number;
+        };
+        /** @description Connection settings and encoded configuration string for RustDesk clients. */
+        ClientConfig: {
+            /** @description Host or address of the hbbs ID server. */
+            id_server: string;
+            /** @description Host or address of the hbbr relay server. */
+            relay_server: string;
+            /** @description Public API URL for clients. */
+            api_server: string;
+            /** @description Server public key from id_ed25519.pub. */
+            public_key: string;
+            /** @description Base64-encoded reversed JSON string for RustDesk's Import Server Config or --config. */
+            config_string: string;
         };
         /**
          * @description RustDesk client options pushed to every device in heartbeat responses (strategy `config_options`).
@@ -7163,6 +7197,28 @@ export interface operations {
                 };
             };
             400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    getClientConfig: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Client configuration. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ClientConfig"];
+                };
+            };
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
         };
