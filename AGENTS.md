@@ -80,5 +80,9 @@ scripts/e2e-server.sh && (cd web && npm run e2e:real)   # Playwright against a r
 
 - Commit author: `bropines <bropines@gmail.com>`.
 - Conventional-style subjects: `feat(scope): …`, `fix(scope): …`, `docs: …`, `ci: …`.
-- Releases: tag `vX.Y.Z` on `main`; CI publishes `ghcr.io/bropines/rdpanel:X.Y.Z`,
+- Releases: tag `vX.Y.Z` on `main`; release title `RD Panel X.Y.Z`. Release notes
+  follow the project style (one-line summary, `docker pull` snippet, `### New` or
+  `### Changes` bullets, footer `Built with hbbs/hbbr from bropines/rustdesk-server@<SHA>.`;
+  never use raw `--generate-notes`). CI publishes `ghcr.io/bropines/rdpanel:X.Y.Z`,
   `:X.Y`, `:latest` and the Helm chart.
+
