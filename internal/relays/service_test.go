@@ -365,7 +365,7 @@ func TestOverridesAndConfigVersions(t *testing.T) {
 }
 
 func TestSeparateMgmtHost(t *testing.T) {
-	h := newHarness(t)
+	h := newHarness(t, nil)
 	ctx := context.Background()
 	_ = h.svc.SetOptions(ctx, Options{AllowPrivateHosts: true}, nil)
 	fr := hbbstest.NewFakeRelay(t, testKey)
