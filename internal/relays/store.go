@@ -709,3 +709,68 @@ func HasOverrides(ov reconcile.Settings) bool {
 	}
 	return false
 }
+
+// TrafficSample is an hourly bucket of relay traffic.
+type TrafficSample struct {
+	RelayID   int64     `json:"relay_id"`
+	HourStart time.Time `json:"hour_start"`
+	Bytes     int64     `json:"bytes"`
+	Sessions  int       `json:"sessions"`
+	MaxActive int       `json:"max_active"`
+}
+
+// RecordTraffic records or accumulates a traffic sample for the hour containing `at`.
+func (s *Store) RecordTraffic(ctx context.Context, relayID int64, at time.Time, bytesDelta int64, sessionsDelta int, activeSessions int) error {
+	hs := store.HourStart(at).UnixMilli()
+	if bytesDelta < 0 {
+		bytesDelta = 0
+	}
+	if sessionsDelta < 0 {
+		sessionsDelta = 0
+	}
+	if activeSessions < 0 {
+		activeSessions = 0
+	}
+	_, err := s.DB.ExecContext(ctx, `INSERT INTO relay_traffic_samples (relay_id, hour_start, bytes, sessions, max_active)
+		VALUES (?, ?, ?, ?, ?)
+		ON CONFLICT (relay_id, hour_start) DO UPDATE SET
+			bytes = bytes + excluded.bytes,
+			sessions = sessions + excluded.sessions,
+			max_active = max(max_active, excluded.max_active)`,
+		relayID, hs, bytesDelta, sessionsDelta, activeSessions)
+	return mapErr(err)
+}
+
+// TrafficSince returns hourly traffic samples for relayID starting at or after `since` (ordered by hour_start ASC).
+func (s *Store) TrafficSince(ctx context.Context, relayID int64, since time.Time) ([]TrafficSample, error) {
+	rows, err := s.DB.QueryContext(ctx, `SELECT relay_id, hour_start, bytes, sessions, max_active
+		FROM relay_traffic_samples
+		WHERE relay_id = ? AND hour_start >= ?
+		ORDER BY hour_start ASC`, relayID, store.HourStart(since).UnixMilli())
+	if err != nil {
+		return nil, mapErr(err)
+	}
+	defer rows.Close()
+	var out []TrafficSample
+	for rows.Next() {
+		var (
+			ts TrafficSample
+			hs int64
+		)
+		if err := rows.Scan(&ts.RelayID, &hs, &ts.Bytes, &ts.Sessions, &ts.MaxActive); err != nil {
+			return nil, mapErr(err)
+		}
+		ts.HourStart = time.UnixMilli(hs).UTC()
+		out = append(out, ts)
+	}
+	return out, mapErr(rows.Err())
+}
+
+// PurgeTrafficBefore removes traffic samples older than `cutoff`.
+func (s *Store) PurgeTrafficBefore(ctx context.Context, cutoff time.Time) (int64, error) {
+	res, err := s.DB.ExecContext(ctx, `DELETE FROM relay_traffic_samples WHERE hour_start < ?`, store.HourStart(cutoff).UnixMilli())
+	if err != nil {
+		return 0, mapErr(err)
+	}
+	return res.RowsAffected()
+}

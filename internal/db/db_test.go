@@ -38,7 +38,8 @@ var wantTables = []string{
 	"webauthn_challenges", "webauthn_credentials", "webauthn_user_handles", // 00008_webauthn_passkeys
 	"email_codes",                              // 00009_email_codes
 	"relay_agents", "relay_settings", "relays", // 00010_relay_agents
-	"api_tokens", // 00011_api_tokens
+	"api_tokens",            // 00011_api_tokens
+	"relay_traffic_samples", // 00014_relay_traffic_samples
 }
 
 func tables(t *testing.T, d *DB) []string {

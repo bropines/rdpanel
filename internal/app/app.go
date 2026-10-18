@@ -30,6 +30,7 @@ import (
 	"github.com/bropines/rdpanel/internal/store"
 	"github.com/bropines/rdpanel/internal/updatecheck"
 	"github.com/bropines/rdpanel/internal/web"
+	"github.com/bropines/rdpanel/internal/webhook"
 	webdist "github.com/bropines/rdpanel/web"
 )
 
@@ -73,6 +74,8 @@ type App struct {
 	TOTP *adminapi.TOTPService
 	// Mail sends e-mail codes and password reset links (internal/mailauth).
 	Mail *mailauth.Service
+	// Webhook dispatches alerts for critical events (internal/webhook).
+	Webhook *webhook.Service
 	// StartedAt is when New ran (About page uptime).
 	StartedAt time.Time
 	// Updates is the cached GitHub release check (nil when
@@ -131,6 +134,14 @@ func New(ctx context.Context, cfg *config.Config, log *slog.Logger, opts ...Opti
 	if err := a.initHBBS(); err != nil {
 		_ = a.DB.Close()
 		return nil, err
+	}
+	if cfg.Webhook.Enabled() {
+		a.Webhook = webhook.New(webhook.Config{
+			URL:    cfg.Webhook.URL,
+			Secret: cfg.Webhook.Secret.Reveal(),
+			Bus:    a.Events,
+			Log:    log.With("component", "webhook"),
+		})
 	}
 	a.WebFS = webdist.Dist()
 	a.SPA = web.NewSPA(a.WebFS)

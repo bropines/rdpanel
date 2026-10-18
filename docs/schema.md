@@ -14,6 +14,7 @@ automatically on start (`rdpanel serve`, `rdpanel user ...`).
 | `00005_b2a_panel.sql` | panel_assets (branding logo), presence_samples (dashboard online series) |
 | `00006_b2b_punch_requests.sql` | punch_requests |
 | `00010_relay_agents.sql` | relays, relay_agents, relay_settings ([relay-agents.md](relay-agents.md), [design](design/relay-agents.md#9-db-schema-migration-00008_relay_agentssql)) |
+| `00014_relay_traffic_samples.sql` | relay_traffic_samples (hourly relay traffic & session history) |
 
 Later streams add new numbered files; never edit an applied migration.
 
@@ -307,3 +308,7 @@ minute by the presence sampler and kept 7 days; feeds the dashboard `series.onli
 ### `migration_runs`
 Legacy import bookkeeping: `source`, `source_path`, `source_version` (expect 265),
 `dry_run`, `status` (`running`/`succeeded`/`failed`), `report` JSON, `started_at`, `finished_at`.
+
+### `relay_traffic_samples`
+Hourly samples of relay traffic (`relay_id`, `hour_start` unix ms PK, `bytes`, `sessions`, `max_active`),
+recorded periodically from hbbr usage or agent status reports, kept for 30 days.

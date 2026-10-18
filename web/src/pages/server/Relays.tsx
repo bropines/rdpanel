@@ -34,7 +34,7 @@ import {
   type RelayEnrollment,
   type RelayList,
 } from "@/api/relays";
-import { ConfirmDialog, CopyButton, EmptyState, ErrorState, Field, KeyValue, Mono, RelativeTime, SectionTitle, useErrorMessage } from "@/components";
+import { ConfirmDialog, CopyButton, EmptyState, ErrorState, Field, KeyValue, Mono, RelativeTime, SectionTitle, Sparkline, useErrorMessage } from "@/components";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -558,6 +558,94 @@ function UsageSection({ r }: { r: Relay }) {
   );
 }
 
+function formatBytes(b: number): string {
+  if (b <= 0) return "0 B";
+  if (b < 1024) return `${b} B`;
+  if (b < 1024 * 1024) return `${(b / 1024).toFixed(1)} KB`;
+  if (b < 1024 * 1024 * 1024) return `${(b / (1024 * 1024)).toFixed(1)} MB`;
+  return `${(b / (1024 * 1024 * 1024)).toFixed(2)} GB`;
+}
+
+function TrafficSection({ r }: { r: Relay }) {
+  const { t } = useTranslation();
+  const [hours, setHours] = useState<number>(24);
+  const q = useQuery({
+    queryKey: relayKeys.traffic(r.id, hours),
+    queryFn: () => relaysApi.traffic(r.id, hours),
+    refetchInterval: 30_000,
+    retry: false,
+  });
+
+  const bytesSeries = useMemo(() => {
+    return q.data?.items.map((i) => i.bytes) ?? [];
+  }, [q.data]);
+
+  return (
+    <div className="space-y-3">
+      <SectionTitle
+        actions={
+          <div className="flex items-center gap-1">
+            <Button
+              variant={hours === 24 ? "secondary" : "ghost"}
+              size="sm"
+              className="h-7 px-2 text-xs"
+              onClick={() => setHours(24)}
+            >
+              24h
+            </Button>
+            <Button
+              variant={hours === 168 ? "secondary" : "ghost"}
+              size="sm"
+              className="h-7 px-2 text-xs"
+              onClick={() => setHours(168)}
+            >
+              7d
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7 w-7 p-0"
+              onClick={() => void q.refetch()}
+            >
+              <RefreshCw className={cn("h-3.5 w-3.5", q.isFetching && "animate-spin")} />
+            </Button>
+          </div>
+        }
+      >
+        {t("relays.drawer.trafficHistory")}
+      </SectionTitle>
+
+      {q.isError ? (
+        <p className="text-sm text-muted-foreground">{t("relays.drawer.trafficUnavailable")}</p>
+      ) : !q.data ? (
+        <Skeleton className="h-20" />
+      ) : (
+        <div className="space-y-3 rounded-md border p-3">
+          <div className="grid grid-cols-3 gap-2 text-center">
+            <div>
+              <div className="text-xs text-muted-foreground">{t("relays.drawer.totalTraffic")}</div>
+              <div className="text-sm font-semibold tabular-nums">{formatBytes(q.data.total_bytes)}</div>
+            </div>
+            <div>
+              <div className="text-xs text-muted-foreground">{t("relays.drawer.totalSessions")}</div>
+              <div className="text-sm font-semibold tabular-nums">{q.data.total_sessions}</div>
+            </div>
+            <div>
+              <div className="text-xs text-muted-foreground">{t("relays.drawer.peakActive")}</div>
+              <div className="text-sm font-semibold tabular-nums">{q.data.max_active}</div>
+            </div>
+          </div>
+          {bytesSeries.length > 1 && (
+            <div className="pt-1">
+              <Sparkline values={bytesSeries} className="h-10 w-full" label={t("relays.drawer.trafficHistory")} />
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function RelayDrawer({ r, onClose }: { r: Relay | undefined; onClose: () => void }) {
   const { t } = useTranslation();
   const a = r?.agent;
@@ -650,6 +738,7 @@ function RelayDrawer({ r, onClose }: { r: Relay | undefined; onClose: () => void
               )}
               <EditSection r={r} />
               {r.kind === "agent" && <OverridesSection r={r} />}
+              <TrafficSection r={r} />
               {(r.kind === "local" || (r.kind === "agent" && a?.connected)) && <UsageSection r={r} />}
             </SheetBody>
           </>

@@ -88,6 +88,8 @@ See [deploy.md → Passkeys](deploy.md#passkeys) for how the RP id and origins a
 | `RDPANEL_LOGS_DIR` (`logs.dir`) | — (image: `/run/rdpanel/logs`) | s6-log directories (`<dir>/<source>/current`) the panel tails for hbbs/hbbr/panel lines; empty = only the panel's own lines ([deploy.md → Server logs](deploy.md#server-logs)) |
 | `RDPANEL_UPDATE_CHECK` (`update_check`) | `true` | About page "update available" check: the server asks the GitHub releases API at most every 6 h (failures tolerated); `false` = no outbound request |
 | `RDPANEL_API_DOCS` (`api_docs`) | `auth` | interactive admin API docs at `/api/v1/docs` and the spec at `/api/v1/openapi.yaml` / `.json`: `auth` = signed-in panel users or API tokens (browsers are sent to the login), `public` = readable without login (calls still need auth), `off` = 404 ([api.md](api.md#interactive-docs)) |
+| `RDPANEL_WEBHOOK_URL` (`webhook.url`) | empty | HTTP/HTTPS endpoint for critical alerts (relay degraded/offline, hbbs down); empty = disabled |
+| `RDPANEL_WEBHOOK_SECRET` (`webhook.secret`) | empty | optional HMAC-SHA256 secret for webhook payload signing (`X-Signature-256`) |
 
 ### E-mail (SMTP)
 

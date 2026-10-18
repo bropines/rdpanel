@@ -2165,6 +2165,25 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/relays/{id}/traffic": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["RelayId"];
+            };
+            cookie?: never;
+        };
+        /** Hourly traffic and session history for one relay. */
+        get: operations["getRelayTrafficById"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/settings": {
         parameters: {
             query?: never;
@@ -3570,6 +3589,24 @@ export interface components {
             highest_kbps: number;
             avg_kbps: number;
             current_kbps: number;
+        };
+        RelayTrafficSummary: {
+            /** Format: int64 */
+            relay_id: number;
+            hours: number;
+            /** Format: int64 */
+            total_bytes: number;
+            total_sessions: number;
+            max_active: number;
+            items: components["schemas"]["RelayTrafficPoint"][];
+        };
+        RelayTrafficPoint: {
+            /** Format: date-time */
+            hour_start: string;
+            /** Format: int64 */
+            bytes: number;
+            sessions: number;
+            max_active: number;
         };
         /** @enum {string} */
         RelayKind: "local" | "static" | "agent";
@@ -8035,6 +8072,34 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             503: components["responses"]["Unavailable"];
+        };
+    };
+    getRelayTrafficById: {
+        parameters: {
+            query?: {
+                /** @description Number of hours to return (1-168, default 24). */
+                hours?: number;
+            };
+            header?: never;
+            path: {
+                id: components["parameters"]["RelayId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Hourly traffic samples. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RelayTrafficSummary"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
         };
     };
     getSettings: {

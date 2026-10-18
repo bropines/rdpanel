@@ -26,6 +26,13 @@ var vecsWithoutChildren = map[string]bool{
 	"rdpanel_hbb_admin_reconcile_total":         true,
 	"rdpanel_hbb_admin_drift_corrections_total": true,
 	"rdpanel_events_published_total":            true,
+	"rdpanel_relay_up":                          true,
+	"rdpanel_relay_health":                      true,
+	"rdpanel_relay_probe_seconds":               true,
+	"rdpanel_relay_probes_total":                true,
+	"rdpanel_relay_active_sessions":             true,
+	"rdpanel_relay_config_lag":                  true,
+	"rdpanel_relay_rotation_weight":             true,
 }
 
 func TestMonitoringFilesMatchMetrics(t *testing.T) {

@@ -288,4 +288,39 @@ export const relayHandlers = [
       ],
     });
   }),
+  http.get(`${B}/relays/:id/traffic`, ({ params, request }) => {
+    const r = find(params.id);
+    if (!r) return err(404, "not_found", "relay not found");
+    const url = new URL(request.url);
+    const hours = Math.min(168, Math.max(1, parseInt(url.searchParams.get("hours") || "24", 10)));
+    const now = Date.now();
+    const items: S["RelayTrafficPoint"][] = [];
+    let totalBytes = 0;
+    let totalSessions = 0;
+    let maxActive = 0;
+    for (let i = hours - 1; i >= 0; i--) {
+      const t = new Date(now - i * 3600_000);
+      t.setMinutes(0, 0, 0);
+      const b = i % 3 === 0 ? 0 : 5_000_000 + ((i * 1234567) % 20_000_000);
+      const s = b > 0 ? (i % 5) + 1 : 0;
+      const a = s > 0 ? Math.min(s, 3) : 0;
+      items.push({
+        hour_start: t.toISOString(),
+        bytes: b,
+        sessions: s,
+        max_active: a,
+      });
+      totalBytes += b;
+      totalSessions += s;
+      if (a > maxActive) maxActive = a;
+    }
+    return ok({
+      relay_id: r.id,
+      hours,
+      total_bytes: totalBytes,
+      total_sessions: totalSessions,
+      max_active: maxActive,
+      items,
+    });
+  }),
 ];

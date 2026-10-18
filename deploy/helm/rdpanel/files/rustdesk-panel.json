@@ -1527,6 +1527,201 @@
       }
     },
     {
+      "type": "timeseries",
+      "title": "Relay fleet health",
+      "id": 35,
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "description": "Computed relay health (1 = active/degraded/offline) and last probe status.",
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 0,
+        "y": 53
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "expr": "rdpanel_relay_health{job=~\"$job\", instance=~\"$instance\"} == 1",
+          "legendFormat": "{{relay}} ({{state}})",
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "expr": "rdpanel_relay_up{job=~\"$job\", instance=~\"$instance\"}",
+          "legendFormat": "{{relay}} probe ok",
+          "refId": "B"
+        }
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            }
+          },
+          "min": 0
+        },
+        "overrides": []
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Relay probe latency",
+      "id": 36,
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "description": "Data round trip of successful end-to-end relay probes.",
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 8,
+        "y": 53
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "expr": "rdpanel_relay_probe_seconds{job=~\"$job\", instance=~\"$instance\"}",
+          "legendFormat": "{{relay}}",
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            }
+          },
+          "min": 0
+        },
+        "overrides": []
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Relay fleet sessions & rotation",
+      "id": 37,
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "description": "Active sessions per relay, rotation entries and connected agents.",
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 16,
+        "y": 53
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "expr": "rdpanel_relay_active_sessions{job=~\"$job\", instance=~\"$instance\"}",
+          "legendFormat": "{{relay}} sessions",
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "expr": "rdpanel_relay_rotation_weight{job=~\"$job\", instance=~\"$instance\"}",
+          "legendFormat": "{{relay}} weight",
+          "refId": "B"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "expr": "rdpanel_relay_agents_connected{job=~\"$job\", instance=~\"$instance\"}",
+          "legendFormat": "agents connected",
+          "refId": "C"
+        }
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            }
+          },
+          "min": 0
+        },
+        "overrides": []
+      }
+    },
+    {
       "type": "row",
       "title": "Server settings reconciler",
       "id": 27,
@@ -1535,7 +1730,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 53
+        "y": 61
       },
       "panels": []
     },
@@ -1552,7 +1747,7 @@
         "h": 8,
         "w": 8,
         "x": 0,
-        "y": 54
+        "y": 62
       },
       "targets": [
         {
@@ -1608,7 +1803,7 @@
         "h": 8,
         "w": 8,
         "x": 8,
-        "y": 54
+        "y": 62
       },
       "targets": [
         {
@@ -1664,7 +1859,7 @@
         "h": 8,
         "w": 8,
         "x": 16,
-        "y": 54
+        "y": 62
       },
       "targets": [
         {
@@ -1716,7 +1911,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 62
+        "y": 70
       },
       "panels": []
     },
@@ -1733,7 +1928,7 @@
         "h": 8,
         "w": 8,
         "x": 0,
-        "y": 63
+        "y": 71
       },
       "targets": [
         {
@@ -1798,7 +1993,7 @@
         "h": 8,
         "w": 8,
         "x": 8,
-        "y": 63
+        "y": 71
       },
       "targets": [
         {
@@ -1863,7 +2058,7 @@
         "h": 8,
         "w": 8,
         "x": 16,
-        "y": 63
+        "y": 71
       },
       "targets": [
         {

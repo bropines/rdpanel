@@ -12,6 +12,8 @@ export type RelayEnrollment = Schemas["RelayEnrollment"];
 export type RelayOptions = Schemas["RelayOptions"];
 export type RelaySettingsValues = Schemas["RelaySettingsValues"];
 export type RelaySettingsState = Schemas["RelaySettingsState"];
+export type RelayTrafficSummary = Schemas["RelayTrafficSummary"];
+export type RelayTrafficPoint = Schemas["RelayTrafficPoint"];
 
 export const relayKeys = {
   all: ["relays"] as const,
@@ -19,6 +21,7 @@ export const relayKeys = {
   options: ["relays", "options"] as const,
   settings: (id: number) => ["relays", "settings", id] as const,
   usage: (id: number) => ["relays", "usage", id] as const,
+  traffic: (id: number, hours?: number) => ["relays", "traffic", id, hours ?? 24] as const,
 };
 
 export const relaysApi = {
@@ -36,6 +39,7 @@ export const relaysApi = {
   updateSettings: (id: number, body: RelaySettingsValues) =>
     api.request<RelaySettingsState>(`/relays/${id}/settings`, { method: "PUT", body }),
   usage: (id: number) => api.request<{ checked_at: string; items: Schemas["RelayUsage"][] }>(`/relays/${id}/usage`),
+  traffic: (id: number, hours = 24) => api.request<RelayTrafficSummary>(`/relays/${id}/traffic?hours=${hours}`),
   options: () => api.request<RelayOptions>("/relays/options"),
   updateOptions: (body: RelayOptions) => api.request<RelayOptions>("/relays/options", { method: "PUT", body }),
 };

@@ -219,4 +219,51 @@ func TestRelaysAPI(t *testing.T) {
 	}
 }
 
+func TestRelayTrafficEndpoint(t *testing.T) {
+	e := newRelayEnv(t)
+	admin, _ := e.as("root", store.RoleAdmin)
+
+	// Create a relay
+	v, _, err := e.svc.Create(e.ctx, relays.CreateInput{Name: "relay-traffic-test", Kind: relays.KindStatic, PublicHost: "1.2.3.4:21117"})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Insert some traffic samples for the current and previous hour
+	now := e.st.Now()
+	if err := e.rstore.RecordTraffic(e.ctx, v.ID, now, 1024, 2, 4); err != nil {
+		t.Fatal(err)
+	}
+	if err := e.rstore.RecordTraffic(e.ctx, v.ID, now.Add(-time.Hour), 2048, 1, 3); err != nil {
+		t.Fatal(err)
+	}
+
+	// GET /relays/{id}/traffic?hours=6
+	code, m, _ := admin.do(http.MethodGet, "/relays/"+itoa(v.ID)+"/traffic?hours=6", nil)
+	want(t, "relay traffic", code, 200, m)
+
+	if int(m["hours"].(float64)) != 6 {
+		t.Errorf("hours = %v, want 6", m["hours"])
+	}
+	if int64(m["total_bytes"].(float64)) != 3072 {
+		t.Errorf("total_bytes = %v, want 3072", m["total_bytes"])
+	}
+	if int(m["total_sessions"].(float64)) != 3 {
+		t.Errorf("total_sessions = %v, want 3", m["total_sessions"])
+	}
+	if int(m["max_active"].(float64)) != 4 {
+		t.Errorf("max_active = %v, want 4", m["max_active"])
+	}
+	items := m["items"].([]any)
+	if len(items) != 6 {
+		t.Fatalf("items count = %d, want 6", len(items))
+	}
+
+	// 404 for nonexistent relay
+	code, _, _ = admin.do(http.MethodGet, "/relays/999999/traffic", nil)
+	if code != http.StatusNotFound {
+		t.Errorf("want 404, got %d", code)
+	}
+}
+
 func itoa(n int64) string { return strconv.FormatInt(n, 10) }

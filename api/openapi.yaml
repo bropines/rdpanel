@@ -2903,6 +2903,33 @@ paths:
         "404": { $ref: "#/components/responses/NotFound" }
         "503": { $ref: "#/components/responses/Unavailable" }
 
+  /relays/{id}/traffic:
+    parameters:
+      - $ref: "#/components/parameters/RelayId"
+    get:
+      tags: [relays]
+      operationId: getRelayTrafficById
+      summary: Hourly traffic and session history for one relay.
+      parameters:
+        - name: hours
+          in: query
+          description: Number of hours to return (1-168, default 24).
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 168
+            default: 24
+      responses:
+        "200":
+          description: Hourly traffic samples.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RelayTrafficSummary" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
   /settings:
     get:
       tags: [settings]
@@ -4624,6 +4651,26 @@ components:
         highest_kbps: { type: number }
         avg_kbps: { type: number }
         current_kbps: { type: number }
+    RelayTrafficSummary:
+      type: object
+      required: [relay_id, hours, total_bytes, total_sessions, max_active, items]
+      properties:
+        relay_id: { type: integer, format: int64 }
+        hours: { type: integer }
+        total_bytes: { type: integer, format: int64 }
+        total_sessions: { type: integer }
+        max_active: { type: integer }
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/RelayTrafficPoint" }
+    RelayTrafficPoint:
+      type: object
+      required: [hour_start, bytes, sessions, max_active]
+      properties:
+        hour_start: { type: string, format: date-time }
+        bytes: { type: integer, format: int64 }
+        sessions: { type: integer }
+        max_active: { type: integer }
     RelayKind:
       type: string
       enum: [local, static, agent]
