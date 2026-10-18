@@ -393,4 +393,3 @@ func TestResolveHostIP(t *testing.T) {
 		t.Logf("localhost:21117 resolved to %q", res)
 	}
 }
-
