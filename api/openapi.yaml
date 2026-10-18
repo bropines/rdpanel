@@ -4685,6 +4685,7 @@ components:
         name: { type: string }
         kind: { $ref: "#/components/schemas/RelayKind" }
         public_host: { type: string, description: "host[:port] handed to clients (default port 21117)." }
+        mgmt_host: { type: [string, "null"], description: "Optional host[:port] used by the panel for reachability probes (defaults to public_host)." }
         region: { type: [string, "null"] }
         weight: { type: integer, minimum: 0, maximum: 5 }
         in_rotation: { type: boolean }
@@ -4734,6 +4735,7 @@ components:
         kind: { type: string, enum: [static, agent] }
         name: { type: string, minLength: 1, maxLength: 64 }
         public_host: { type: string, minLength: 1, maxLength: 255, pattern: "^[^\\s,]+$" }
+        mgmt_host: { type: [string, "null"], maxLength: 255, pattern: "^[^\\s,]+$" }
         region: { type: [string, "null"], maxLength: 32 }
         weight: { type: integer, minimum: 0, maximum: 5, default: 1 }
         in_rotation: { type: boolean, default: true }
@@ -4743,6 +4745,7 @@ components:
       properties:
         name: { type: string, minLength: 1, maxLength: 64 }
         public_host: { type: string, minLength: 1, maxLength: 255, pattern: "^[^\\s,]+$" }
+        mgmt_host: { type: [string, "null"], maxLength: 255, pattern: "^[^\\s,]+$" }
         region: { type: [string, "null"], maxLength: 32 }
         weight: { type: integer, minimum: 0, maximum: 5 }
         in_rotation: { type: boolean }

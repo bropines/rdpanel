@@ -3644,6 +3644,8 @@ export interface components {
             kind: components["schemas"]["RelayKind"];
             /** @description host[:port] handed to clients (default port 21117). */
             public_host: string;
+            /** @description Optional host[:port] used by the panel for reachability probes (defaults to public_host). */
+            mgmt_host?: string | null;
             region?: string | null;
             weight: number;
             in_rotation: boolean;
@@ -3692,6 +3694,7 @@ export interface components {
             kind: "static" | "agent";
             name: string;
             public_host: string;
+            mgmt_host?: string | null;
             region?: string | null;
             /** @default 1 */
             weight: number;
@@ -3701,6 +3704,7 @@ export interface components {
         RelayPatch: {
             name?: string;
             public_host?: string;
+            mgmt_host?: string | null;
             region?: string | null;
             weight?: number;
             in_rotation?: boolean;

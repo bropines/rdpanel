@@ -35,9 +35,14 @@ beforeAll(() => {
   server.listen({ onUnhandledRequest: "error" });
   // Node's fetch rejects relative URLs; resolve them against the jsdom origin.
   const patched = globalThis.fetch;
-  vi.stubGlobal("fetch", (input: RequestInfo | URL, init?: RequestInit) =>
-    patched(typeof input === "string" && input.startsWith("/") ? new URL(input, window.location.origin) : input, init),
-  );
+  vi.stubGlobal("fetch", (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = typeof input === "string" && input.startsWith("/") ? new URL(input, window.location.origin) : input;
+    if (init && "signal" in init) {
+      const { signal: _s, ...rest } = init;
+      return patched(url, rest);
+    }
+    return patched(url, init);
+  });
 });
 afterEach(() => server.resetHandlers());
 afterAll(() => {

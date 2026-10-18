@@ -363,3 +363,50 @@ func TestOverridesAndConfigVersions(t *testing.T) {
 		t.Fatalf("disabled relay config: %+v", c4)
 	}
 }
+
+func TestSeparateMgmtHost(t *testing.T) {
+	h := newHarness(t)
+	ctx := context.Background()
+	_ = h.svc.SetOptions(ctx, Options{AllowPrivateHosts: true}, nil)
+	fr := hbbstest.NewFakeRelay(t, testKey)
+	defer fr.Close()
+
+	// Public host is unresolvable or external, mgmt_host points to probeable relay.
+	v, _, err := h.svc.Create(ctx, CreateInput{
+		Kind:       KindStatic,
+		Name:       "split-relay",
+		PublicHost: "desk-nl.example.com:21117",
+		MgmtHost:   fr.Addr(),
+		Weight:     1,
+		InRotation: true,
+	})
+	if err != nil {
+		t.Fatalf("create split relay: %v", err)
+	}
+	if v.MgmtHost != fr.Addr() || v.PublicHost != "desk-nl.example.com:21117" {
+		t.Fatalf("unexpected fields: %+v", v)
+	}
+
+	// Probe: should succeed via MgmtHost.
+	h.svc.Pass(ctx, true)
+	v, err = h.svc.Get(ctx, v.ID)
+	if err != nil || v.Health != HealthActive {
+		t.Fatalf("expected healthy relay via mgmt_host, got: %+v (err: %v)", v, err)
+	}
+
+	// Rotation: clients receive PublicHost, NOT MgmtHost.
+	servers := h.svc.RelayServers(ctx)
+	if len(servers) != 1 || servers[0] != "desk-nl.example.com:21117" {
+		t.Fatalf("expected public_host in rotation, got: %v", servers)
+	}
+
+	// Patch mgmt_host to empty (clearing it): defaults back to PublicHost.
+	empty := ""
+	v, err = h.svc.Update(ctx, v.ID, Patch{MgmtHost: &empty})
+	if err != nil {
+		t.Fatalf("patch clear mgmt_host: %v", err)
+	}
+	if v.MgmtHost != "" {
+		t.Fatalf("expected empty mgmt_host, got %q", v.MgmtHost)
+	}
+}

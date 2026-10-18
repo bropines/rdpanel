@@ -135,14 +135,30 @@ func TestRelaysAPI(t *testing.T) {
 	if m["admin_state"] != "draining" || m["region"] != "DE" || b2bNum(m["rotation_weight"]) != 0 {
 		t.Fatalf("drained: %v", m)
 	}
+	code, m, _ = admin.do(http.MethodPatch, "/relays/"+itoa(sid), map[string]any{"mgmt_host": "100.64.0.1:21117"})
+	want(t, "patch mgmt_host", code, 200, m)
+	if m["mgmt_host"] != "100.64.0.1:21117" {
+		t.Fatalf("mgmt_host after patch: %v", m)
+	}
+	code, m, _ = admin.do(http.MethodPatch, "/relays/"+itoa(sid), map[string]any{"mgmt_host": nil})
+	want(t, "clear mgmt_host", code, 200, m)
+	if m["mgmt_host"] != nil {
+		t.Fatalf("mgmt_host after clear: %v", m)
+	}
+	code, m, _ = admin.do(http.MethodPatch, "/relays/"+itoa(sid), map[string]any{"mgmt_host": "bad,host"})
+	wantErr(t, "bad mgmt_host", code, 400, m, "validation_failed")
+
 	code, m, _ = admin.do(http.MethodPatch, "/relays/"+itoa(sid), map[string]any{"weight": 9})
 	wantErr(t, "weight", code, 400, m, "validation_failed")
 	code, m, _ = admin.do(http.MethodPatch, "/relays/"+itoa(sid), map[string]any{"bogus": 1})
 	wantErr(t, "unknown field", code, 400, m, "validation_failed")
 
 	// Agent relay: enrollment material once.
-	code, m, _ = admin.do(http.MethodPost, "/relays", map[string]any{"kind": "agent", "name": "fra-1", "public_host": "fra-1.example.com"})
+	code, m, _ = admin.do(http.MethodPost, "/relays", map[string]any{"kind": "agent", "name": "fra-1", "public_host": "fra-1.example.com", "mgmt_host": "10.0.0.1:21117"})
 	want(t, "create agent", code, 201, m)
+	if m["relay"].(map[string]any)["mgmt_host"] != "10.0.0.1:21117" {
+		t.Fatalf("agent mgmt_host: %v", m)
+	}
 	enr := m["enrollment"].(map[string]any)
 	aid := int64(b2bNum(m["relay"].(map[string]any)["id"]))
 	tok := enr["token"].(string)

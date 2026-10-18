@@ -141,6 +141,7 @@ type relayDTO struct {
 	Name           string         `json:"name"`
 	Kind           string         `json:"kind"`
 	PublicHost     string         `json:"public_host"`
+	MgmtHost       *string        `json:"mgmt_host"`
 	Region         *string        `json:"region"`
 	Weight         int            `json:"weight"`
 	InRotation     bool           `json:"in_rotation"`
@@ -157,7 +158,7 @@ type relayDTO struct {
 }
 
 func (c *b2bCore) relayDTO(v relays.View) relayDTO {
-	d := relayDTO{ID: v.ID, Name: v.Name, Kind: string(v.Kind), PublicHost: v.PublicHost, Region: strPtr(v.Region),
+	d := relayDTO{ID: v.ID, Name: v.Name, Kind: string(v.Kind), PublicHost: v.PublicHost, MgmtHost: strPtr(v.MgmtHost), Region: strPtr(v.Region),
 		Weight: v.Weight, InRotation: v.InRotation, AdminState: string(v.AdminState), Health: string(v.Health),
 		HealthSince: v.HealthSince, LastProbeAt: v.LastProbeAt, LastProbeMs: v.LastProbeMs,
 		LastProbeError: strPtr(v.LastProbeError), RotationWeight: v.RotationWeight, CreatedAt: v.CreatedAt, UpdatedAt: v.UpdatedAt}
@@ -261,6 +262,7 @@ type relayCreateDTO struct {
 	Kind       string  `json:"kind"`
 	Name       string  `json:"name"`
 	PublicHost string  `json:"public_host"`
+	MgmtHost   *string `json:"mgmt_host"`
 	Region     *string `json:"region"`
 	Weight     *int    `json:"weight"`
 	InRotation *bool   `json:"in_rotation"`
@@ -276,6 +278,9 @@ func (c *b2bCore) handleCreateRelay(w http.ResponseWriter, r *http.Request) {
 	}
 	ci := relays.CreateInput{Kind: relays.Kind(in.Kind), Name: strings.TrimSpace(in.Name),
 		PublicHost: strings.TrimSpace(in.PublicHost), Weight: 1, InRotation: true}
+	if in.MgmtHost != nil {
+		ci.MgmtHost = strings.TrimSpace(*in.MgmtHost)
+	}
 	if in.Region != nil {
 		ci.Region = strings.TrimSpace(*in.Region)
 		if len(ci.Region) > 32 {
@@ -298,7 +303,7 @@ func (c *b2bCore) handleCreateRelay(w http.ResponseWriter, r *http.Request) {
 		c.relayErr(w, r, "create relay", err)
 		return
 	}
-	c.audit(r, "relay.create", "relay", v.ID, map[string]any{"name": v.Name, "kind": string(v.Kind), "public_host": v.PublicHost})
+	c.audit(r, "relay.create", "relay", v.ID, map[string]any{"name": v.Name, "kind": string(v.Kind), "public_host": v.PublicHost, "mgmt_host": v.MgmtHost})
 	out := map[string]any{"relay": c.relayDTO(v), "enrollment": enr}
 	httpx.WriteJSON(w, http.StatusCreated, out)
 }
@@ -334,6 +339,12 @@ func (c *b2bCore) handlePatchRelay(w http.ResponseWriter, r *http.Request) {
 			err = json.Unmarshal(v, &p.Name)
 		case "public_host":
 			err = json.Unmarshal(v, &p.PublicHost)
+		case "mgmt_host":
+			empty := ""
+			p.MgmtHost = &empty
+			if string(v) != "null" {
+				err = json.Unmarshal(v, p.MgmtHost)
+			}
 		case "region":
 			empty := ""
 			p.Region = &empty
@@ -350,13 +361,13 @@ func (c *b2bCore) handlePatchRelay(w http.ResponseWriter, r *http.Request) {
 			badRequest(w, "unknown field "+k)
 			return
 		}
-		if err != nil || (string(v) == "null" && k != "region") {
+		if err != nil || (string(v) == "null" && k != "region" && k != "mgmt_host") {
 			badRequest(w, k+": invalid value")
 			return
 		}
 		keys = append(keys, k)
 	}
-	for _, s := range []*string{p.Name, p.PublicHost, p.Region} {
+	for _, s := range []*string{p.Name, p.PublicHost, p.MgmtHost, p.Region} {
 		if s != nil {
 			*s = strings.TrimSpace(*s)
 		}
