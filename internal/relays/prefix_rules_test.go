@@ -9,10 +9,10 @@ import (
 
 func TestPrefixRuleValidation(t *testing.T) {
 	for _, tc := range []struct {
-		name      string
-		rule      PrefixRule
-		wantErr   bool
-		wantCIDR  string
+		name     string
+		rule     PrefixRule
+		wantErr  bool
+		wantCIDR string
 	}{
 		{
 			name:     "valid IPv4 subnet",

@@ -755,4 +755,3 @@ func (c *Client) Stats(ctx context.Context) (*RelayStats, error) {
 func (c *Client) ReloadGeo(ctx context.Context) (string, error) {
 	return c.Exec(ctx, HBBS, "reload-geo")
 }
-

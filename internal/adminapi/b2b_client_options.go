@@ -123,4 +123,3 @@ func (c *b2bCore) handlePostClientOptionsProbe(w http.ResponseWriter, r *http.Re
 	}
 	httpx.WriteJSON(w, http.StatusOK, iceServerProbeListDTO{Items: items})
 }
-

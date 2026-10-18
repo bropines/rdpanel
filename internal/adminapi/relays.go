@@ -758,4 +758,3 @@ func (c *b2bCore) handleDeletePrefixRule(w http.ResponseWriter, r *http.Request)
 	c.audit(r, "relays.prefix_rule.delete", "relay_prefix_rule", id, nil)
 	w.WriteHeader(http.StatusNoContent)
 }
-

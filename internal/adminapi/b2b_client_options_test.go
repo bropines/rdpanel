@@ -94,4 +94,3 @@ func TestClientOptionsProbe(t *testing.T) {
 		t.Fatalf("expected SSRF error on 127.0.0.1, got %v", item0)
 	}
 }
-

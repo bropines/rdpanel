@@ -298,7 +298,7 @@ func TestAllowListAndValidation(t *testing.T) {
 	}{
 		{HBBS, "reload-geo extra", ErrInvalidArgs},
 		{HBBS, "rg extra", ErrInvalidArgs},
-		{HBBS, "stats", ErrNotAllowed},     // hbbr command sent to hbbs
+		{HBBS, "stats", ErrNotAllowed}, // hbbr command sent to hbbs
 		{HBBR, "stats extra", ErrInvalidArgs},
 		{HBBS, "blacklist", ErrNotAllowed}, // hbbr command sent to hbbs
 		{HBBR, "must-login", ErrNotAllowed},

@@ -1322,4 +1322,3 @@ func (s *Service) SyncPrefixRules(ctx context.Context) error {
 	}
 	return nil
 }
-
