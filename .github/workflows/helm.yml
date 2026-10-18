@@ -46,6 +46,8 @@ jobs:
         run: |
           helm lint --strict "$CHART"
           for f in "$CHART"/ci/*.yaml; do helm lint --strict "$CHART" -f "$f"; done
+          helm lint --strict deploy/helm/rustdesk-relay-agent
+          for f in deploy/helm/rustdesk-relay-agent/ci/*.yaml; do helm lint --strict deploy/helm/rustdesk-relay-agent -f "$f"; done
       - name: template + kubeconform
         run: |
           set -euo pipefail
@@ -53,6 +55,16 @@ jobs:
             echo "::group::$v"
             if [ "$v" = default ]; then args=(); else args=(-f "$v"); fi
             helm template rd "$CHART" -n rustdesk "${args[@]}" \
+              | kubeconform -strict -summary -kubernetes-version "${{ matrix.kube }}" \
+                  -schema-location default \
+                  -schema-location 'https://raw.githubusercontent.com/datreeio/CRDs-catalog/main/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json' \
+                  -
+            echo "::endgroup::"
+          done
+          for v in default deploy/helm/rustdesk-relay-agent/ci/*.yaml; do
+            echo "::group::relay-agent-$v"
+            if [ "$v" = default ]; then args=(); else args=(-f "$v"); fi
+            helm template agent deploy/helm/rustdesk-relay-agent -n rustdesk "${args[@]}" \
               | kubeconform -strict -summary -kubernetes-version "${{ matrix.kube }}" \
                   -schema-location default \
                   -schema-location 'https://raw.githubusercontent.com/datreeio/CRDs-catalog/main/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json' \
@@ -68,10 +80,11 @@ jobs:
             fi
           done
       - name: package
-        run: helm package "$CHART" -d /tmp/charts
+        run: |
+          helm package "$CHART" -d /tmp/charts
+          helm package deploy/helm/rustdesk-relay-agent -d /tmp/charts
 
-  # Tag vX.Y.Z -> oci://ghcr.io/bropines/charts/rdpanel:X.Y.Z (chart version and
-  # appVersion are set from the tag).
+  # Tag vX.Y.Z -> oci://ghcr.io/bropines/charts/{rdpanel,rustdesk-relay-agent}:X.Y.Z
   publish:
     name: publish chart
     if: github.ref_type == 'tag'
@@ -89,7 +102,9 @@ jobs:
         run: |
           v="${GITHUB_REF_NAME#v}"
           helm package "$CHART" -d /tmp/charts --version "$v" --app-version "$v"
+          helm package deploy/helm/rustdesk-relay-agent -d /tmp/charts --version "$v" --app-version "$v"
       - name: push
         run: |
           echo "${{ secrets.GITHUB_TOKEN }}" | helm registry login ghcr.io -u "${{ github.actor }}" --password-stdin
           helm push /tmp/charts/rdpanel-*.tgz oci://ghcr.io/bropines/charts
+          helm push /tmp/charts/rustdesk-relay-agent-*.tgz oci://ghcr.io/bropines/charts

@@ -1,0 +1,13 @@
+agent:
+  panelUrl: "https://rdpanel.example.com"
+  token: "test-enrollment-token-123456"
+  publicHost: "relay-1.example.com:21117"
+  mgmtHost: "10.0.0.10:21117"
+
+service:
+  type: ClusterIP
+  port: 21117
+
+persistence:
+  enabled: true
+  size: 2Gi

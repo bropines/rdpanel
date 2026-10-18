@@ -1,0 +1,18 @@
+{{- if .Values.serviceMonitor.enabled }}
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: {{ include "rustdesk-relay-agent.fullname" . }}
+  labels:
+    {{- include "rustdesk-relay-agent.labels" . | nindent 4 }}
+    {{- with .Values.serviceMonitor.labels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  selector:
+    matchLabels:
+      {{- include "rustdesk-relay-agent.selectorLabels" . | nindent 6 }}
+  endpoints:
+    - port: relay
+      interval: {{ .Values.serviceMonitor.interval }}
+{{- end }}

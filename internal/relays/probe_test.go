@@ -88,3 +88,29 @@ func TestProbeSSRFGuard(t *testing.T) {
 		t.Error("public address flagged")
 	}
 }
+
+func TestTCPCheck(t *testing.T) {
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ln.Close()
+	addr := ln.Addr().String()
+
+	p := &Prober{Timeout: time.Second}
+	// Loopback with allowPrivate=true succeeds
+	if err := p.TCPCheck(context.Background(), addr, true); err != nil {
+		t.Fatalf("TCPCheck open port: %v", err)
+	}
+	// Loopback without allowPrivate fails with ErrPrivateHost
+	if err := p.TCPCheck(context.Background(), addr, false); !errors.Is(err, ErrPrivateHost) {
+		t.Fatalf("TCPCheck private without allowPrivate: %v", err)
+	}
+	// Closed port fails
+	closedLn, _ := net.Listen("tcp", "127.0.0.1:0")
+	closedAddr := closedLn.Addr().String()
+	closedLn.Close()
+	if err := p.TCPCheck(context.Background(), closedAddr, true); err == nil {
+		t.Fatal("TCPCheck closed port should fail")
+	}
+}

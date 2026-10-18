@@ -53,24 +53,25 @@ const MaxWeight = 5
 
 // Relay is one row of relays (plus relay_agents for kind agent).
 type Relay struct {
-	ID             int64      `json:"id"`
-	Name           string     `json:"name"`
-	Kind           Kind       `json:"kind"`
-	PublicHost     string     `json:"public_host"`
-	MgmtHost       string     `json:"mgmt_host,omitempty"`
-	Region         string     `json:"region,omitempty"`
-	Weight         int        `json:"weight"`
-	InRotation     bool       `json:"in_rotation"`
-	AdminState     AdminState `json:"admin_state"`
-	Health         Health     `json:"health"`
-	HealthSince    *time.Time `json:"health_since,omitempty"`
-	LastProbeAt    *time.Time `json:"last_probe_at,omitempty"`
-	LastProbeMs    *float64   `json:"last_probe_ms,omitempty"`
-	LastProbeError string     `json:"last_probe_error,omitempty"`
-	CreatedBy      *int64     `json:"created_by,omitempty"`
-	CreatedAt      time.Time  `json:"created_at"`
-	UpdatedAt      time.Time  `json:"updated_at"`
-	Agent          *Agent     `json:"agent,omitempty"`
+	ID              int64      `json:"id"`
+	Name            string     `json:"name"`
+	Kind            Kind       `json:"kind"`
+	PublicHost      string     `json:"public_host"`
+	MgmtHost        string     `json:"mgmt_host,omitempty"`
+	Region          string     `json:"region,omitempty"`
+	Weight          int        `json:"weight"`
+	InRotation      bool       `json:"in_rotation"`
+	AdminState      AdminState `json:"admin_state"`
+	Health          Health     `json:"health"`
+	HealthSince     *time.Time `json:"health_since,omitempty"`
+	LastProbeAt     *time.Time `json:"last_probe_at,omitempty"`
+	LastProbeMs     *float64   `json:"last_probe_ms,omitempty"`
+	LastProbeError  string     `json:"last_probe_error,omitempty"`
+	PublicReachable *bool      `json:"public_reachable,omitempty"`
+	CreatedBy       *int64     `json:"created_by,omitempty"`
+	CreatedAt       time.Time  `json:"created_at"`
+	UpdatedAt       time.Time  `json:"updated_at"`
+	Agent           *Agent     `json:"agent,omitempty"`
 }
 
 // TargetHost returns MgmtHost if non-empty, otherwise PublicHost.
@@ -79,6 +80,11 @@ func (r Relay) TargetHost() string {
 		return r.MgmtHost
 	}
 	return r.PublicHost
+}
+
+// HasSeparateMgmt reports whether MgmtHost is configured and differs from PublicHost.
+func (r Relay) HasSeparateMgmt() bool {
+	return r.MgmtHost != "" && r.MgmtHost != r.PublicHost
 }
 
 // Agent is the relay_agents row of an agent relay.
@@ -158,7 +164,7 @@ func mapErr(err error) error {
 }
 
 const relayCols = `r.id, r.name, r.kind, r.public_host, r.mgmt_host, r.region, r.weight, r.in_rotation, r.admin_state, r.health,
-	r.health_since, r.last_probe_at, r.last_probe_ms, r.last_probe_error, r.created_by, r.created_at, r.updated_at,
+	r.health_since, r.last_probe_at, r.last_probe_ms, r.last_probe_error, r.public_reachable, r.created_by, r.created_at, r.updated_at,
 	a.relay_id, a.enroll_token_hash IS NOT NULL, a.enroll_expires_at, a.require_approval, a.agent_pubkey,
 	a.enrolled_at, a.enrolled_from_ip, a.approved_at, a.revoked_at, a.hostname, a.agent_version, a.hbbr_version,
 	a.arch, a.desired_version, a.desired_at, a.config_hash, a.acked_version, a.acked_at, a.ack_errors,
@@ -175,6 +181,7 @@ func scanRelay(sc scanner) (Relay, error) {
 		mgmtHost, region, probeErr                sql.NullString
 		healthSince, probeAt, createdBy           sql.NullInt64
 		probeMs                                   sql.NullFloat64
+		publicReachable                           sql.NullBool
 		created, updated                          int64
 		aID, enrollExp, enrolledAt, approvedAt    sql.NullInt64
 		revokedAt, desiredAt, ackedAt, lastSeenAt sql.NullInt64
@@ -185,7 +192,7 @@ func scanRelay(sc scanner) (Relay, error) {
 		desiredV, ackedV                          sql.NullInt64
 	)
 	if err := sc.Scan(&r.ID, &r.Name, &kind, &r.PublicHost, &mgmtHost, &region, &r.Weight, &r.InRotation, &state, &health,
-		&healthSince, &probeAt, &probeMs, &probeErr, &createdBy, &created, &updated,
+		&healthSince, &probeAt, &probeMs, &probeErr, &publicReachable, &createdBy, &created, &updated,
 		&aID, &tokenPending, &enrollExp, &requireApproval, &pubkey,
 		&enrolledAt, &ip, &approvedAt, &revokedAt, &host, &ver, &hver,
 		&arch, &desiredV, &desiredAt, &hash, &ackedV, &ackedAt, &ackErrors,
@@ -199,6 +206,10 @@ func scanRelay(sc scanner) (Relay, error) {
 	if probeMs.Valid {
 		v := probeMs.Float64
 		r.LastProbeMs = &v
+	}
+	if publicReachable.Valid {
+		b := publicReachable.Bool
+		r.PublicReachable = &b
 	}
 	if createdBy.Valid {
 		v := createdBy.Int64
@@ -422,12 +433,12 @@ func (s *Store) Delete(ctx context.Context, id int64) error {
 }
 
 // SetHealth records a probe outcome and the computed health.
-func (s *Store) SetHealth(ctx context.Context, id int64, h Health, changed bool, probeAt time.Time, probeMs *float64, probeErr string) error {
+func (s *Store) SetHealth(ctx context.Context, id int64, h Health, changed bool, probeAt time.Time, probeMs *float64, probeErr string, publicReachable *bool) error {
 	now := ms(s.now())
 	_, err := s.DB.ExecContext(ctx, `UPDATE relays SET health = ?,
 		health_since = CASE WHEN ? THEN ? ELSE coalesce(health_since, ?) END,
-		last_probe_at = ?, last_probe_ms = ?, last_probe_error = ? WHERE id = ?`,
-		string(h), changed, now, now, ms(probeAt), probeMs, nullStr(probeErr), id)
+		last_probe_at = ?, last_probe_ms = ?, last_probe_error = ?, public_reachable = ? WHERE id = ?`,
+		string(h), changed, now, now, ms(probeAt), probeMs, nullStr(probeErr), publicReachable, id)
 	return err
 }
 
