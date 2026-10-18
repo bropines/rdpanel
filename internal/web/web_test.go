@@ -86,6 +86,7 @@ func TestSecurityHeaders(t *testing.T) {
 	}
 	csp := rec.Header().Get("Content-Security-Policy")
 	if !strings.Contains(csp, "default-src 'self'") || !strings.Contains(csp, "frame-ancestors 'none'") ||
+		!strings.Contains(csp, "worker-src 'self' blob:") ||
 		strings.Contains(csp, "script-src 'self' 'unsafe") {
 		t.Errorf("csp = %q", csp)
 	}

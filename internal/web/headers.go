@@ -4,13 +4,16 @@ import "net/http"
 
 // ContentSecurityPolicy is applied to every response. Scripts must come from
 // our origin only; inline styles are allowed because Radix/sonner set them at
-// runtime. Avatars may be loaded from IdPs over https.
+// runtime. Avatars may be loaded from IdPs over https. Workers may be spawned
+// from self or blob: URLs (e.g. browser extensions, client background jobs).
 const ContentSecurityPolicy = "default-src 'self'; " +
 	"script-src 'self'; " +
 	"style-src 'self' 'unsafe-inline'; " +
 	"img-src 'self' data: https:; " +
 	"font-src 'self' data:; " +
 	"connect-src 'self'; " +
+	"worker-src 'self' blob:; " +
+	"child-src 'self' blob:; " +
 	"object-src 'none'; " +
 	"base-uri 'self'; " +
 	"form-action 'self'; " +
