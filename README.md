@@ -40,16 +40,21 @@ A Go backend + React UI for [RustDesk](https://rustdesk.com), and a drop-in repl
 - **Admin panel:**
   - devices with live online status from hbbs (pushed over SSE);
   - users and groups, unified address books with sharing and coloured tags;
+  - connection access control (ACL) and granular control roles (mouse, keyboard, clipboard, file transfer, tunnel);
+  - client MDM strategies with heartbeat push (security presets, group and device overrides);
   - audit logs, identity providers, hbbs/hbbr control;
   - English and Russian, light and dark themes, mobile layout.
-- **Sign-in:**
+- **Sign-in & Directory:**
   - password, TOTP 2FA with recovery codes, passkeys (WebAuthn) for the panel;
+  - LDAP / Active Directory integration with auto-provisioning, group mapping and periodic background sync;
   - e-mailed sign-in codes (panel and RustDesk client), password reset by e-mail;
   - OIDC (GitHub, Google, any OIDC provider) for both the panel and the RustDesk client;
   - the public client API and the admin panel can live on different hosts (e.g. panel
     only on a VPN/tailnet).
-- **Server control:**
-  - relay servers, always-use-relay, must-login, IP blocker, block/blacklists, bandwidth;
+- **Server control & Routing:**
+  - relay servers, GeoIP and CIDR prefix routing, dynamic STUN fetch;
+  - inter-panel federation mesh with automatic peer relay synchronization;
+  - always-use-relay, must-login, IP blocker, block/blacklists, bandwidth;
   - opt-in keepalive for TCP/WebSocket clients;
   - a reconciler stores the desired state and re-applies it after hbbs/hbbr restarts.
 - **Secure defaults:** hashed tokens, AEAD-encrypted secrets at rest, argon2id passwords,

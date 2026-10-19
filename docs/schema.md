@@ -15,6 +15,11 @@ automatically on start (`rdpanel serve`, `rdpanel user ...`).
 | `00006_b2b_punch_requests.sql` | punch_requests |
 | `00010_relay_agents.sql` | relays, relay_agents, relay_settings ([relay-agents.md](relay-agents.md), [design](design/relay-agents.md#9-db-schema-migration-00008_relay_agentssql)) |
 | `00014_relay_traffic_samples.sql` | relay_traffic_samples (hourly relay traffic & session history) |
+| `00015_relay_prefix_rules.sql` | relay_prefix_rules (GeoIP and CIDR prefix routing) |
+| `00016_federation.sql` | federation_peers, federated_relays (inter-panel mesh) |
+| `00017_strategies.sql` | client_strategies, device_groups.strategy_id, devices.strategy_id (MDM configuration push) |
+| `00018_acl.sql` | control_roles, connection_acls (granular permissions and access matrix) |
+| `00019_ldap.sql` | ldap_settings, users.is_ldap, users.ldap_dn (Active Directory / LDAP authentication and sync) |
 
 Later streams add new numbered files; never edit an applied migration.
 
