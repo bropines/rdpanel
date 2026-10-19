@@ -201,11 +201,10 @@ func (s *Service) ImportCountryRules(ctx context.Context, countryCode, relayHost
 		}
 	}
 
-	total, _ := s.st.ListPrefixRules(ctx)
 	return &ImportCountryRulesResult{
 		CountryCode: code,
 		RelayHost:   host,
 		AddedCount:  added,
-		TotalRules:  len(total),
+		TotalRules:  len(existing) + added,
 	}, nil
 }
