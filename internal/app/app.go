@@ -161,7 +161,15 @@ func New(ctx context.Context, cfg *config.Config, log *slog.Logger, opts ...Opti
 
 // openDB opens and migrates the panel database.
 func openDB(ctx context.Context, cfg *config.Config, log *slog.Logger) (*db.DB, error) {
-	d, err := db.Open(ctx, cfg.DBPath, db.Options{})
+	var (
+		d   *db.DB
+		err error
+	)
+	if cfg.DBType == "postgres" {
+		d, err = db.OpenPostgres(ctx, cfg.DatabaseURL, db.PostgresOptions{})
+	} else {
+		d, err = db.Open(ctx, cfg.DBPath, db.Options{})
+	}
 	if err != nil {
 		return nil, err
 	}

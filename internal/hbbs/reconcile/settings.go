@@ -233,10 +233,11 @@ func (s *Store) Save(ctx context.Context, st Settings, updatedBy *int64) error {
 		by = *updatedBy
 	}
 	return s.DB.WithTx(ctx, func(tx *sql.Tx) error {
+		q := s.DB.Wrap(tx)
 		for _, f := range fields() {
 			v := f.get(&st)
 			if v == nil {
-				if _, err := tx.ExecContext(ctx, `DELETE FROM server_settings WHERE target = ? AND key = ?`, string(f.target), f.key); err != nil {
+				if _, err := q.ExecContext(ctx, `DELETE FROM server_settings WHERE target = ? AND key = ?`, string(f.target), f.key); err != nil {
 					return err
 				}
 				continue
@@ -245,7 +246,7 @@ func (s *Store) Save(ctx context.Context, st Settings, updatedBy *int64) error {
 			if err != nil {
 				return err
 			}
-			if _, err := tx.ExecContext(ctx, `INSERT INTO server_settings (target, key, value, updated_by, updated_at)
+			if _, err := q.ExecContext(ctx, `INSERT INTO server_settings (target, key, value, updated_by, updated_at)
 				VALUES (?, ?, ?, ?, ?)
 				ON CONFLICT (target, key) DO UPDATE SET
 					applied_at = CASE WHEN server_settings.value = excluded.value THEN server_settings.applied_at ELSE NULL END,

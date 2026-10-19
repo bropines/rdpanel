@@ -85,17 +85,12 @@ func (s *Store) CreatePrefixRule(ctx context.Context, r *PrefixRule) error {
 	r.CreatedAt = now
 	r.UpdatedAt = now
 
-	res, err := s.DB.ExecContext(ctx, `INSERT INTO relay_prefix_rules (cidr, relay_host, comment, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?)`,
-		r.CIDR, r.RelayHost, r.Comment, now.UnixMilli(), now.UnixMilli())
+	err := s.DB.QueryRowContext(ctx, `INSERT INTO relay_prefix_rules (cidr, relay_host, comment, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?) RETURNING id`,
+		r.CIDR, r.RelayHost, r.Comment, now.UnixMilli(), now.UnixMilli()).Scan(&r.ID)
 	if err != nil {
 		return mapErr(err)
 	}
-	id, err := res.LastInsertId()
-	if err != nil {
-		return mapErr(err)
-	}
-	r.ID = id
 	return nil
 }
 

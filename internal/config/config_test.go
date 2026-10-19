@@ -286,3 +286,62 @@ func TestWebAuthnRP(t *testing.T) {
 		}
 	}
 }
+
+func TestDBConfig(t *testing.T) {
+	t.Run("default sqlite", func(t *testing.T) {
+		cfg, err := Load(env(nil))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if cfg.DBType != "sqlite" {
+			t.Errorf("DBType = %q, want sqlite", cfg.DBType)
+		}
+	})
+
+	t.Run("postgres inferred from database url", func(t *testing.T) {
+		cfg, err := Load(env(map[string]string{
+			"RDPANEL_DATABASE_URL": "postgres://user:pass@localhost:5432/rdpanel?sslmode=disable",
+		}))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if cfg.DBType != "postgres" {
+			t.Errorf("DBType = %q, want postgres", cfg.DBType)
+		}
+		if cfg.DatabaseURL != "postgres://user:pass@localhost:5432/rdpanel?sslmode=disable" {
+			t.Errorf("DatabaseURL = %q", cfg.DatabaseURL)
+		}
+	})
+
+	t.Run("postgres explicit with database url", func(t *testing.T) {
+		cfg, err := Load(env(map[string]string{
+			"RDPANEL_DB_TYPE":      "postgres",
+			"RDPANEL_DATABASE_URL": "postgresql://user:pass@localhost:5432/rdpanel",
+		}))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if cfg.DBType != "postgres" {
+			t.Errorf("DBType = %q, want postgres", cfg.DBType)
+		}
+	})
+
+	t.Run("postgres missing database url", func(t *testing.T) {
+		_, err := Load(env(map[string]string{
+			"RDPANEL_DB_TYPE": "postgres",
+		}))
+		if err == nil || !strings.Contains(err.Error(), "database_url") {
+			t.Fatalf("expected error about database_url, got: %v", err)
+		}
+	})
+
+	t.Run("invalid db type", func(t *testing.T) {
+		_, err := Load(env(map[string]string{
+			"RDPANEL_DB_TYPE": "mysql",
+		}))
+		if err == nil || !strings.Contains(err.Error(), "must be sqlite or postgres") {
+			t.Fatalf("expected error about db_type, got: %v", err)
+		}
+	})
+}
+

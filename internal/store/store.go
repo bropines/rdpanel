@@ -87,7 +87,7 @@ func New(d *db.DB, opts ...Option) *Store {
 	for _, fn := range opts {
 		fn(&o)
 	}
-	return build(d, d.DB, o)
+	return build(d, d.Wrap(d.DB), o)
 }
 
 // WithClock returns a copy of s using now for timestamps (tests).
@@ -146,7 +146,7 @@ func (s *Store) Tx(ctx context.Context, fn func(tx *Store) error) error {
 		return fn(s)
 	}
 	return s.db.WithTx(ctx, func(tx *sql.Tx) error {
-		return fn(build(s.db, tx, s.opts))
+		return fn(build(s.db, s.db.Wrap(tx), s.opts))
 	})
 }
 
@@ -156,5 +156,5 @@ func atomic(ctx context.Context, d *db.DB, q db.Querier, fn func(q db.Querier) e
 	if _, inTx := q.(*sql.Tx); inTx || d == nil {
 		return fn(q)
 	}
-	return d.WithTx(ctx, func(tx *sql.Tx) error { return fn(tx) })
+	return d.WithTx(ctx, func(tx *sql.Tx) error { return fn(d.Wrap(tx)) })
 }

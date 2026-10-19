@@ -92,26 +92,21 @@ func (r *ControlRoles) Create(ctx context.Context, cr *ControlRole) error {
 		}
 	}
 
-	res, err := r.q.ExecContext(ctx, `
+	err := r.q.QueryRowContext(ctx, `
 		INSERT INTO control_roles (
 			name, note,
 			allow_keyboard_mouse, allow_clipboard, allow_file_transfer,
 			allow_audio, allow_tcp_tunneling, allow_terminal, allow_restart,
 			is_default, created_at, updated_at
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`,
 		cr.Name, cr.Note,
 		boolInt(cr.AllowKeyboardMouse), boolInt(cr.AllowClipboard), boolInt(cr.AllowFileTransfer),
 		boolInt(cr.AllowAudio), boolInt(cr.AllowTCPTunneling), boolInt(cr.AllowTerminal), boolInt(cr.AllowRestart),
 		isDef, now, now,
-	)
+	).Scan(&cr.ID)
 	if err != nil {
 		return mapErr(err)
 	}
-	id, err := res.LastInsertId()
-	if err != nil {
-		return mapErr(err)
-	}
-	cr.ID = id
 	return nil
 }
 
@@ -345,24 +340,19 @@ func (r *ConnectionACLs) Create(ctx context.Context, a *ConnectionACL) error {
 	a.CreatedAt = fromMs(now)
 	a.UpdatedAt = fromMs(now)
 
-	res, err := r.q.ExecContext(ctx, `
+	err := r.q.QueryRowContext(ctx, `
 		INSERT INTO connection_acls (
 			name, note,
 			user_id, user_group_id, device_id, device_group_id, control_role_id,
 			action, priority, enabled, created_at, updated_at
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`,
 		a.Name, a.Note,
 		a.UserID, a.UserGroupID, a.DeviceID, a.DeviceGroupID, a.ControlRoleID,
 		string(a.Action), a.Priority, boolInt(a.Enabled), now, now,
-	)
+	).Scan(&a.ID)
 	if err != nil {
 		return mapErr(err)
 	}
-	id, err := res.LastInsertId()
-	if err != nil {
-		return mapErr(err)
-	}
-	a.ID = id
 	return nil
 }
 

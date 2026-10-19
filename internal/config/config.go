@@ -39,8 +39,13 @@ type Config struct {
 	AdminURL string `yaml:"admin_url"`
 	// DataDir holds panel.db, secret.key and (by default) jwt.key.
 	DataDir string `yaml:"data_dir"`
+	// DBType is the database engine: "sqlite" (default) or "postgres".
+	DBType string `yaml:"db_type"`
 	// DBPath is the SQLite database file. Default: <DataDir>/panel.db.
 	DBPath string `yaml:"db_path"`
+	// DatabaseURL is the database connection string. Used for PostgreSQL, e.g.
+	// postgres://user:pass@host:5432/dbname?sslmode=disable.
+	DatabaseURL string `yaml:"database_url"`
 	// SecretKey is a base64-encoded 32-byte AEAD key for secrets at rest. When
 	// empty, the key is loaded from (or generated into) SecretKeyFile.
 	SecretKey Secret `yaml:"secret_key"`
@@ -347,7 +352,9 @@ func (c *Config) envVars() []envVar {
 		{"RDPANEL_PUBLIC_URL", str(&c.PublicURL)},
 		{"RDPANEL_ADMIN_URL", str(&c.AdminURL)},
 		{"RDPANEL_DATA_DIR", str(&c.DataDir)},
+		{"RDPANEL_DB_TYPE", str(&c.DBType)},
 		{"RDPANEL_DB_PATH", str(&c.DBPath)},
+		{"RDPANEL_DATABASE_URL", str(&c.DatabaseURL)},
 		{"RDPANEL_SECRET_KEY", sec(&c.SecretKey)},
 		{"RDPANEL_SECRET_KEY_FILE", str(&c.SecretKeyFile)},
 		{"RUSTDESK_API_JWT_KEY", sec(&c.Auth.JWTKey)},
@@ -426,6 +433,16 @@ func (c *Config) loadSecretFiles() error {
 }
 
 func (c *Config) fillDerived() {
+	c.DBType = strings.ToLower(strings.TrimSpace(c.DBType))
+	if c.DBType == "" {
+		if strings.HasPrefix(c.DatabaseURL, "postgres://") || strings.HasPrefix(c.DatabaseURL, "postgresql://") {
+			c.DBType = "postgres"
+		} else {
+			c.DBType = "sqlite"
+		}
+	} else if c.DBType == "postgresql" {
+		c.DBType = "postgres"
+	}
 	if c.DBPath == "" {
 		c.DBPath = filepath.Join(c.DataDir, "panel.db")
 	}
@@ -494,6 +511,15 @@ func (c *Config) Validate() error {
 	}
 	if c.DataDir == "" {
 		add("data_dir must not be empty")
+	}
+	switch c.DBType {
+	case "sqlite":
+	case "postgres":
+		if c.DatabaseURL == "" {
+			add("database_url (or RDPANEL_DATABASE_URL) is required when db_type is postgres")
+		}
+	default:
+		add("db_type %q: must be sqlite or postgres", c.DBType)
 	}
 	if c.WebAuthn.RPID != "" || len(c.WebAuthn.Origins) > 0 {
 		if _, _, err := c.WebAuthnRP(); err != nil {

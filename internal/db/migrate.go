@@ -12,9 +12,21 @@ import (
 //go:embed migrations/*.sql
 var migrationsFS embed.FS
 
-// Migrations returns the embedded goose migration files.
+//go:embed migrations_pg/*.sql
+var pgMigrationsFS embed.FS
+
+// Migrations returns the embedded goose migration files for SQLite.
 func Migrations() fs.FS {
 	sub, err := fs.Sub(migrationsFS, "migrations")
+	if err != nil {
+		panic(err) // embedded path is static
+	}
+	return sub
+}
+
+// MigrationsPG returns the embedded goose migration files for PostgreSQL.
+func MigrationsPG() fs.FS {
+	sub, err := fs.Sub(pgMigrationsFS, "migrations_pg")
 	if err != nil {
 		panic(err) // embedded path is static
 	}
@@ -28,6 +40,9 @@ type MigrationResult struct {
 }
 
 func (d *DB) provider() (*goose.Provider, error) {
+	if d.Dialect() == DialectPostgres {
+		return goose.NewProvider(goose.DialectPostgres, d.DB, MigrationsPG())
+	}
 	return goose.NewProvider(goose.DialectSQLite3, d.DB, Migrations())
 }
 

@@ -31,7 +31,9 @@ Defaults are the binary's; the container image changes a few (for example
 | `RDPANEL_PUBLIC_URL` (`public_url`) | — | external base URL, e.g. `https://desk.example.com`; used for OIDC callbacks, enables HSTS when https |
 | `RDPANEL_ADMIN_URL` (`admin_url`) | = public URL | base URL of the panel (SPA + `/api/v1/*`) when it is served from another (e.g. internal) host |
 | `RDPANEL_DATA_DIR` (`data_dir`) | `/data` | data directory |
-| `RDPANEL_DB_PATH` (`db_path`) | `<data>/panel.db` | SQLite database |
+| `RDPANEL_DB_TYPE` (`db_type`) | `sqlite` | database engine: `sqlite` (default) or `postgres` |
+| `RDPANEL_DB_PATH` (`db_path`) | `<data>/panel.db` | SQLite database file |
+| `RDPANEL_DATABASE_URL` (`database_url`) | — | PostgreSQL connection DSN (e.g. `postgres://user:pass@host:5432/rdpanel`); automatically selects `db_type: postgres` |
 | `RDPANEL_SECRET_KEY` (`secret_key`) | — | base64 32-byte key for secrets at rest; otherwise read/generated in the key file |
 | `RDPANEL_SECRET_KEY_FILE` (`secret_key_file`) | `<data>/secret.key` | generated with mode 0600 on first start — **back it up** |
 

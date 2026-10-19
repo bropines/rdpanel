@@ -4,6 +4,8 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -11,6 +13,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/pressly/goose/v3"
 )
 
@@ -296,3 +299,79 @@ func TestWithTx(t *testing.T) {
 		t.Fatal("panic must roll back")
 	}
 }
+
+func TestMigrationsPG(t *testing.T) {
+	fsys := MigrationsPG()
+	entries, err := fs.ReadDir(fsys, ".")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 19 {
+		t.Fatalf("expected 19 migrations in migrations_pg, got %d", len(entries))
+	}
+
+	sqliteEntries, err := fs.ReadDir(Migrations(), ".")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != len(sqliteEntries) {
+		t.Fatalf("migration count mismatch: pg=%d sqlite=%d", len(entries), len(sqliteEntries))
+	}
+
+	for i, entry := range entries {
+		expectedPrefix := fmt.Sprintf("%05d_", i+1)
+		if !strings.HasPrefix(entry.Name(), expectedPrefix) {
+			t.Errorf("entry %d: %q does not start with %q", i, entry.Name(), expectedPrefix)
+		}
+		if !strings.HasSuffix(entry.Name(), ".sql") {
+			t.Errorf("entry %q does not end with .sql", entry.Name())
+		}
+		content, err := fs.ReadFile(fsys, entry.Name())
+		if err != nil {
+			t.Errorf("failed to read %s: %v", entry.Name(), err)
+			continue
+		}
+		if len(content) == 0 {
+			t.Errorf("migration %s is empty", entry.Name())
+		}
+		if !strings.Contains(string(content), "-- +goose Up") {
+			t.Errorf("migration %s missing '-- +goose Up'", entry.Name())
+		}
+	}
+}
+
+func TestPostgresHelpers(t *testing.T) {
+	uniqErr := &pgconn.PgError{Code: "23505"}
+	if !IsUniqueViolation(uniqErr) {
+		t.Error("expected 23505 to be unique violation")
+	}
+	fkErr := &pgconn.PgError{Code: "23503"}
+	if !IsForeignKeyViolation(fkErr) {
+		t.Error("expected 23503 to be foreign key violation")
+	}
+	chkErr := &pgconn.PgError{Code: "23514"}
+	if !IsCheckViolation(chkErr) {
+		t.Error("expected 23514 to be check violation")
+	}
+	otherErr := &pgconn.PgError{Code: "42P01"}
+	if IsUniqueViolation(otherErr) || IsForeignKeyViolation(otherErr) || IsCheckViolation(otherErr) {
+		t.Error("other error should not be violation")
+	}
+}
+
+func TestDialectAndWrap(t *testing.T) {
+	dSqlite := &DB{dialect: DialectSQLite}
+	if dSqlite.Dialect() != DialectSQLite {
+		t.Fatalf("got %v", dSqlite.Dialect())
+	}
+	wrapped := dSqlite.Wrap(dSqlite)
+	if _, ok := wrapped.(dialectQuerier); ok {
+		t.Error("sqlite wrap should return underlying querier directly")
+	}
+
+	dPg := &DB{dialect: DialectPostgres}
+	if dPg.Dialect() != DialectPostgres {
+		t.Fatalf("got %v", dPg.Dialect())
+	}
+}
+

@@ -106,18 +106,18 @@ func (s *Store) Create(ctx context.Context, in CreatePeerInput) (Peer, error) {
 
 	var id int64
 	err := s.DB.WithTx(ctx, func(tx *sql.Tx) error {
-		res, err := tx.ExecContext(ctx, `
+		q := s.DB.Wrap(tx)
+		err := q.QueryRowContext(ctx, `
 			INSERT INTO federation_peers (name, api_url, token_hash, sync_relays, status, created_at, updated_at)
-			VALUES (?, ?, ?, ?, ?, ?, ?)`,
-			name, apiURL, tokenHash, in.SyncRelays, string(StatusUnknown), now, now)
+			VALUES (?, ?, ?, ?, ?, ?, ?) RETURNING id`,
+			name, apiURL, tokenHash, in.SyncRelays, string(StatusUnknown), now, now).Scan(&id)
 		if err != nil {
-			if strings.Contains(err.Error(), "UNIQUE") {
+			if db.IsUniqueViolation(err) || strings.Contains(err.Error(), "UNIQUE") {
 				return store.ErrConflict
 			}
 			return err
 		}
-		id, err = res.LastInsertId()
-		return err
+		return nil
 	})
 	if err != nil {
 		return Peer{}, err
@@ -222,11 +222,12 @@ func (s *Store) UpdateStatus(ctx context.Context, id int64, status PeerStatus, e
 func (s *Store) ReplaceFederatedRelays(ctx context.Context, peerID int64, relays []FederatedRelay) error {
 	now := ms(s.now())
 	return s.DB.WithTx(ctx, func(tx *sql.Tx) error {
-		if _, err := tx.ExecContext(ctx, `DELETE FROM federated_relays WHERE peer_id = ?`, peerID); err != nil {
+		q := s.DB.Wrap(tx)
+		if _, err := q.ExecContext(ctx, `DELETE FROM federated_relays WHERE peer_id = ?`, peerID); err != nil {
 			return err
 		}
 		for _, r := range relays {
-			if _, err := tx.ExecContext(ctx, `
+			if _, err := q.ExecContext(ctx, `
 				INSERT INTO federated_relays (peer_id, remote_name, public_host, region, health, last_sync_at)
 				VALUES (?, ?, ?, ?, ?, ?)`,
 				peerID, r.RemoteName, r.PublicHost, r.Region, r.Health, now); err != nil {

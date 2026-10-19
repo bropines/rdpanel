@@ -108,16 +108,15 @@ func (r *WebAuthnCredentials) GetForUser(ctx context.Context, userID, id int64) 
 // credential id is ErrConflict.
 func (r *WebAuthnCredentials) Create(ctx context.Context, c *WebAuthnCredential) error {
 	now := r.now()
-	res, err := r.q.ExecContext(ctx, `INSERT INTO webauthn_credentials (user_id, credential_id, public_key,
+	err := r.q.QueryRowContext(ctx, `INSERT INTO webauthn_credentials (user_id, credential_id, public_key,
 		attestation_type, aaguid, sign_count, clone_warning, transports, attachment, user_verified, backup_eligible,
-		backup_state, name, created_at, updated_at, last_used_at) VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?, NULL)`,
+		backup_state, name, created_at, updated_at, last_used_at) VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?, NULL) RETURNING id`,
 		c.UserID, c.CredentialID, c.PublicKey, c.AttestationType, c.AAGUID, int64(c.SignCount),
 		strings.Join(c.Transports, ","), c.Attachment, boolInt(c.UserVerified), boolInt(c.BackupEligible),
-		boolInt(c.BackupState), c.Name, toMs(now), toMs(now))
+		boolInt(c.BackupState), c.Name, toMs(now), toMs(now)).Scan(&c.ID)
 	if err != nil {
 		return mapErr(err)
 	}
-	c.ID, _ = res.LastInsertId()
 	c.CreatedAt, c.UpdatedAt = fromMs(toMs(now)), fromMs(toMs(now))
 	return nil
 }

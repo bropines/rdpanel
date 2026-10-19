@@ -288,7 +288,10 @@ Summary:
 | `RDPANEL_PUBLIC_URL` | panel | — | external base URL RustDesk clients use as "API server"; the OIDC redirect URI is `<public_url>/api/oidc/callback` |
 | `RDPANEL_ADMIN_URL` | panel | = public URL | base URL of the panel (SPA + `/api/v1/*`) when it is served from another host; OIDC panel logins end there, panel cookies are `Secure` when it is https |
 | `RDPANEL_DATA_DIR` | panel, key-secret | `/data/panel` | panel.db, secret.key, jwt.key |
-| `RDPANEL_DB_PATH`, `RDPANEL_SECRET_KEY`, `RDPANEL_SECRET_KEY_FILE`, `RDPANEL_JWT_KEY_FILE` | panel | derived from data dir | storage and keys |
+| `RDPANEL_DB_TYPE` | panel | `sqlite` | database engine: `sqlite` (default) or `postgres` |
+| `RDPANEL_DB_PATH` | panel | `/data/panel/panel.db` | SQLite database file |
+| `RDPANEL_DATABASE_URL` | panel | — | PostgreSQL connection DSN (when using PostgreSQL) |
+| `RDPANEL_SECRET_KEY`, `RDPANEL_SECRET_KEY_FILE`, `RDPANEL_JWT_KEY_FILE` | panel | derived from data dir | storage and keys |
 | `RDPANEL_TOKEN_LIFETIME`, `RDPANEL_JWT_LIFETIME`, `RDPANEL_SESSION_IDLE`, `RDPANEL_SESSION_ABSOLUTE` | panel | `4380h`, = token, `12h`, `168h` | token/session lifetimes |
 | `RDPANEL_WEBAUTHN_RP_ID`, `RDPANEL_WEBAUTHN_ORIGINS` | panel | admin URL host / origin | passkey relying party (see [Passkeys](#passkeys)) |
 | `RDPANEL_TRUSTED_PROXIES`, `RDPANEL_REAL_IP_HEADER` | panel | loopback, `X-Forwarded-For` | client-IP resolution |
@@ -329,6 +332,17 @@ Back up the whole `/data`: stop the container, or use `sqlite3 .backup` for the 
 |---|---|
 | `id_ed25519` | every client must be given the new public key |
 | `secret.key` | stored secrets (address-book passwords, OIDC client secrets, TOTP seeds) are unreadable |
+
+### PostgreSQL database (optional)
+
+By default, RD Panel uses an embedded SQLite database (`/data/panel/panel.db` with WAL mode enabled). For HA deployments, container orchestration or integration with existing managed database clusters, PostgreSQL 14+ is supported:
+
+```sh
+RDPANEL_DB_TYPE=postgres
+RDPANEL_DATABASE_URL=postgres://rdpanel:secret@postgres.internal:5432/rdpanel?sslmode=disable
+```
+
+When `RDPANEL_DATABASE_URL` starts with `postgres://` or `postgresql://`, `RDPANEL_DB_TYPE` is inferred automatically. Goose schema migrations run on startup against the target database.
 
 ## Passkeys
 

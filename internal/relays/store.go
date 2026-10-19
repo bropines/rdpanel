@@ -331,19 +331,17 @@ func (s *Store) Create(ctx context.Context, n NewRelay) (int64, error) {
 	now := ms(s.now())
 	var id int64
 	err := s.DB.WithTx(ctx, func(tx *sql.Tx) error {
-		res, err := tx.ExecContext(ctx, `INSERT INTO relays (name, kind, public_host, mgmt_host, region, weight, in_rotation,
+		q := s.DB.Wrap(tx)
+		err := q.QueryRowContext(ctx, `INSERT INTO relays (name, kind, public_host, mgmt_host, region, weight, in_rotation,
 			admin_state, health, health_since, created_by, created_at, updated_at)
-			VALUES (?, ?, ?, ?, ?, ?, ?, 'enabled', ?, ?, ?, ?, ?)`,
+			VALUES (?, ?, ?, ?, ?, ?, ?, 'enabled', ?, ?, ?, ?, ?) RETURNING id`,
 			n.Name, string(n.Kind), n.PublicHost, nullStr(n.MgmtHost), nullStr(n.Region), n.Weight, n.InRotation, string(n.Health), now,
-			n.CreatedBy, now, now)
+			n.CreatedBy, now, now).Scan(&id)
 		if err != nil {
 			return mapErr(err)
 		}
-		if id, err = res.LastInsertId(); err != nil {
-			return err
-		}
 		if n.Kind == KindAgent {
-			if _, err := tx.ExecContext(ctx, `INSERT INTO relay_agents (relay_id, enroll_token_hash, enroll_expires_at,
+			if _, err := q.ExecContext(ctx, `INSERT INTO relay_agents (relay_id, enroll_token_hash, enroll_expires_at,
 				require_approval) VALUES (?, ?, ?, ?)`, id, n.TokenHash, ms(n.TokenExpires), n.RequireApproval); err != nil {
 				return mapErr(err)
 			}
@@ -486,9 +484,10 @@ func (s *Store) Enroll(ctx context.Context, in EnrollInput) (Relay, error) {
 	now := s.now()
 	var id int64
 	err := s.DB.WithTx(ctx, func(tx *sql.Tx) error {
+		q := s.DB.Wrap(tx)
 		var exp sql.NullInt64
 		var requireApproval bool
-		err := tx.QueryRowContext(ctx, `SELECT relay_id, enroll_expires_at, require_approval FROM relay_agents
+		err := q.QueryRowContext(ctx, `SELECT relay_id, enroll_expires_at, require_approval FROM relay_agents
 			WHERE enroll_token_hash = ?`, in.TokenHash).Scan(&id, &exp, &requireApproval)
 		if errors.Is(err, sql.ErrNoRows) {
 			return ErrTokenInvalid
@@ -503,7 +502,7 @@ func (s *Store) Enroll(ctx context.Context, in EnrollInput) (Relay, error) {
 		if !requireApproval {
 			approved = ms(now)
 		}
-		_, err = tx.ExecContext(ctx, `UPDATE relay_agents SET enroll_token_hash = NULL, enroll_expires_at = NULL,
+		_, err = q.ExecContext(ctx, `UPDATE relay_agents SET enroll_token_hash = NULL, enroll_expires_at = NULL,
 			agent_pubkey = ?, enrolled_at = ?, enrolled_from_ip = ?, approved_at = ?, revoked_at = NULL,
 			hostname = ?, agent_version = ?, hbbr_version = ?, arch = ?, acked_version = 0 WHERE relay_id = ?`,
 			in.Pubkey, ms(now), nullStr(in.IP), approved, nullStr(trunc(in.Hostname, 255)),
@@ -598,7 +597,8 @@ func (s *Store) Overrides(ctx context.Context, id int64) (reconcile.Settings, er
 func (s *Store) SaveOverrides(ctx context.Context, id int64, ov reconcile.Settings, by *int64) error {
 	now := ms(s.now())
 	return s.DB.WithTx(ctx, func(tx *sql.Tx) error {
-		if _, err := tx.ExecContext(ctx, `DELETE FROM relay_settings WHERE relay_id = ?`, id); err != nil {
+		q := s.DB.Wrap(tx)
+		if _, err := q.ExecContext(ctx, `DELETE FROM relay_settings WHERE relay_id = ?`, id); err != nil {
 			return err
 		}
 		for _, k := range reconcile.RelayKeys {
@@ -610,7 +610,7 @@ func (s *Store) SaveOverrides(ctx context.Context, id int64, ov reconcile.Settin
 			if err != nil {
 				return err
 			}
-			if _, err := tx.ExecContext(ctx, `INSERT INTO relay_settings (relay_id, key, value, updated_by, updated_at)
+			if _, err := q.ExecContext(ctx, `INSERT INTO relay_settings (relay_id, key, value, updated_by, updated_at)
 				VALUES (?, ?, ?, ?, ?)`, id, k, string(raw), by, now); err != nil {
 				return mapErr(err)
 			}

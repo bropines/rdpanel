@@ -21,7 +21,7 @@ LDFLAGS   := -s -w \
 	-X $(PKG)/internal/buildinfo.Version=$(VERSION) \
 	-X $(PKG)/internal/buildinfo.Commit=$(COMMIT) \
 	-X $(PKG)/internal/buildinfo.Date=$(DATE)
-STATICCHECK_VERSION ?= 2024.1.1
+STATICCHECK_VERSION ?= 2026.2.2
 GOVULNCHECK_VERSION ?= v1.1.4
 
 # Container image (see docs/deploy.md). HBB_SRC is a checkout of
