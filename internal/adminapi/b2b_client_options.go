@@ -123,3 +123,59 @@ func (c *b2bCore) handlePostClientOptionsProbe(w http.ResponseWriter, r *http.Re
 	}
 	httpx.WriteJSON(w, http.StatusOK, iceServerProbeListDTO{Items: items})
 }
+
+type fetchPublicSTUNInput struct {
+	SourceURL string `json:"source_url"`
+	Limit     int    `json:"limit"`
+}
+
+type publicSTUNListDTO struct {
+	Source       string              `json:"source"`
+	FetchedCount int                 `json:"fetched_count"`
+	WorkingCount int                 `json:"working_count"`
+	Items        []iceServerProbeDTO `json:"items"`
+}
+
+func (c *b2bCore) handlePostFetchPublicSTUN(w http.ResponseWriter, r *http.Request) {
+	var in fetchPublicSTUNInput
+	if r.Body != nil && r.ContentLength > 0 {
+		if !decodeBody(w, r, &in, 64<<10) {
+			return
+		}
+	}
+	ctx := r.Context()
+	allowPrivate := false
+	if c.d.Relays != nil {
+		if opts, err := c.d.Relays.GetOptions(ctx); err == nil {
+			allowPrivate = opts.AllowPrivateHosts
+		}
+	}
+	res, err := clientopts.FetchPublicSTUN(ctx, in.SourceURL, in.Limit, allowPrivate)
+	if err != nil {
+		validationFailed(w, "invalid fetch parameters", map[string]string{"source_url": err.Error()})
+		return
+	}
+	items := make([]iceServerProbeDTO, 0, len(res.Items))
+	for _, item := range res.Items {
+		dto := iceServerProbeDTO{
+			Server:    item.Server,
+			Scheme:    item.Scheme,
+			Reachable: item.Reachable,
+		}
+		if item.Reachable {
+			rtt := item.RTTMs
+			dto.RTTMs = &rtt
+		}
+		if item.Error != "" {
+			errStr := item.Error
+			dto.Error = &errStr
+		}
+		items = append(items, dto)
+	}
+	httpx.WriteJSON(w, http.StatusOK, publicSTUNListDTO{
+		Source:       res.Source,
+		FetchedCount: res.FetchedCount,
+		WorkingCount: res.WorkingCount,
+		Items:        items,
+	})
+}

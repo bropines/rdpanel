@@ -867,9 +867,15 @@
       "presets": {
         "label": "Пресеты",
         "global": "Весь мир (Global)",
+        "worldwide": "Весь мир (открытые)",
         "ru": "РФ / Обход блокировок",
         "cloudflare": "Cloudflare",
         "default": "По умолчанию"
+      },
+      "fetchStun": {
+        "button": "Подтянуть публичные STUN",
+        "fetching": "Загрузка и проверка...",
+        "success": "Найдено и добавлено рабочих STUN: {{count}}"
       },
       "probe": {
         "button": "Проверить серверы",
@@ -1398,9 +1404,18 @@
     "prefixRules": {
       "title": "Префиксная маршрутизация (CIDR)",
       "hint": "Направление клиентских сессий на выбранные релеи по IP-подсетям (CIDR) с поиском по наиболее точному префиксу. Клиенты без совпадений используют обычную ротацию.",
+      "modes": {
+        "cidr": "CIDR префикс",
+        "country": "Пресет по стране"
+      },
       "add": "Добавить правило",
       "cidr": "Префикс CIDR",
       "cidrPlaceholder": "например, 192.168.1.0/24 или 2001:db8::/32",
+      "country": "Страна",
+      "countryPlaceholder": "Выберите страну",
+      "prefixes": "префиксов",
+      "importCountryBtn": "Импортировать префиксы страны",
+      "countryImported": "Импортировано префиксов для {{country}}: {{count}}",
       "relayHost": "Целевой релей",
       "relayHostPlaceholder": "Выберите релей или введите host:port",
       "customHost": "Другой host:port…",

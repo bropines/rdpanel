@@ -135,3 +135,36 @@ func TestPrefixRuleStoreCRUD(t *testing.T) {
 		t.Fatalf("ListPrefixRules after delete = %v, err = %v", rules, err)
 	}
 }
+
+func TestCountryPrefixRules(t *testing.T) {
+	ctx := context.Background()
+	h := newHarness(t, nil)
+
+	countries := ListCountryPrefixInfo()
+	if len(countries) == 0 {
+		t.Fatal("expected non-empty countries list")
+	}
+
+	// Import RU
+	res, err := h.svc.ImportCountryRules(ctx, "RU", "relay-ru.example.com", "")
+	if err != nil {
+		t.Fatalf("ImportCountryRules err = %v", err)
+	}
+	if res.CountryCode != "RU" || res.AddedCount <= 0 {
+		t.Fatalf("unexpected result: %+v", res)
+	}
+
+	// Repeat import should not add duplicates
+	res2, err := h.svc.ImportCountryRules(ctx, "RU", "relay-ru.example.com", "")
+	if err != nil {
+		t.Fatalf("repeat ImportCountryRules err = %v", err)
+	}
+	if res2.AddedCount != 0 {
+		t.Fatalf("expected 0 added on repeat, got %d", res2.AddedCount)
+	}
+
+	// Unsupported country
+	if _, err := h.svc.ImportCountryRules(ctx, "XX", "relay.example.com", ""); err == nil {
+		t.Fatal("expected error for unsupported country XX")
+	}
+}

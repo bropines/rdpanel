@@ -1509,6 +1509,28 @@ export const handlers = [
     });
     return ok({ items });
   }),
+  http.post(`${B}/server/client-options/fetch-stun`, async ({ request }) => {
+    const u = requireAdmin();
+    if (u instanceof Response) return u;
+    const b = await body<{ source_url?: string; limit?: number }>(request).catch(
+      () => ({} as { source_url?: string; limit?: number }),
+    );
+    const limit = b.limit || 6;
+    const mockServers: S["IceServerProbeItem"][] = [
+      { server: "stun:stun.cloudflare.com:3478", scheme: "stun", reachable: true, rtt_ms: 12.4 },
+      { server: "stun:stun.l.google.com:19302", scheme: "stun", reachable: true, rtt_ms: 18.2 },
+      { server: "stun:stun.syncthing.net:3478", scheme: "stun", reachable: true, rtt_ms: 22.5 },
+      { server: "stun:stun.qq.com:3478", scheme: "stun", reachable: true, rtt_ms: 41.0 },
+      { server: "stun:stun.miwifi.com:3478", scheme: "stun", reachable: true, rtt_ms: 53.6 },
+      { server: "stun:stun.nextcloud.com:443", scheme: "stun", reachable: true, rtt_ms: 64.1 },
+    ].slice(0, limit);
+    return ok({
+      source: b.source_url || "https://raw.githubusercontent.com/pradt2/always-online-stun/master/valid_hosts.txt",
+      fetched_count: 85,
+      working_count: mockServers.length,
+      items: mockServers,
+    });
+  }),
   http.get(`${B}/server/client-config`, () => {
     const u = requireAdmin();
     if (u instanceof Response) return u;

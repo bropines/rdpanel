@@ -277,6 +277,13 @@ describe("server → relays", () => {
 
     expect(await screen.findByText("172.16.0.0/16")).toBeInTheDocument();
     expect(screen.getByText("Branch office")).toBeInTheDocument();
+
+    // Import country preset
+    await user.click(screen.getByRole("button", { name: "Add rule" }));
+    expect(await screen.findByRole("dialog")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Country preset" }));
+    await user.click(screen.getByRole("button", { name: "Import country prefixes" }));
+    expect(await screen.findByText("95.165.0.0/16")).toBeInTheDocument();
   });
 });
 

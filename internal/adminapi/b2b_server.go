@@ -49,6 +49,7 @@ func (c *b2bCore) registerServer(r chi.Router) {
 		r.Get("/server/client-options", c.handleGetClientOptions)
 		r.Put("/server/client-options", c.handlePutClientOptions)
 		r.Post("/server/client-options/probe", c.handlePostClientOptionsProbe)
+		r.Post("/server/client-options/fetch-stun", c.handlePostFetchPublicSTUN)
 		r.Get("/server/client-config", c.handleGetClientConfig)
 		r.Get("/server/ip-blocker", c.handleIPBlocker)
 		r.Delete("/server/ip-blocker/{ip}", c.handleUnblockIP)

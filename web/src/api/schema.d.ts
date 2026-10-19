@@ -1705,6 +1705,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/server/client-options/fetch-stun": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Fetch and probe public STUN servers
+         * @description Fetches open STUN servers from a public community list,
+         *     probes candidates concurrently, and returns working servers sorted by lowest latency.
+         */
+        post: operations["fetchPublicStunServers"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/server/client-config": {
         parameters: {
             query?: never;
@@ -2054,6 +2075,40 @@ export interface paths {
         put?: never;
         /** Create a CIDR prefix to relay routing rule. */
         post: operations["createRelayPrefixRule"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/relays/prefix-rules/countries": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List supported country codes and prefix counts for geographic relay routing. */
+        get: operations["listPrefixRuleCountries"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/relays/prefix-rules/import-country": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Import aggregated CIDRs for a country to route towards a specified relay host. */
+        post: operations["importCountryPrefixRules"];
         delete?: never;
         options?: never;
         head?: never;
@@ -3536,6 +3591,28 @@ export interface components {
         };
         IceServerProbeList: {
             items: components["schemas"]["IceServerProbeItem"][];
+        };
+        PublicStunList: {
+            source: string;
+            fetched_count: number;
+            working_count: number;
+            items: components["schemas"]["IceServerProbeItem"][];
+        };
+        CountryPrefixInfo: {
+            code: string;
+            name: string;
+            prefix_count: number;
+        };
+        ImportCountryPrefixRulesInput: {
+            country_code: string;
+            relay_host: string;
+            comment?: string;
+        };
+        ImportCountryPrefixRulesResult: {
+            country_code: string;
+            relay_host: string;
+            added_count: number;
+            total_rules: number;
         };
         RelayPrefixRule: {
             /** Format: int64 */
@@ -7363,6 +7440,44 @@ export interface operations {
             403: components["responses"]["Forbidden"];
         };
     };
+    fetchPublicStunServers: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Must equal the rdpanel_csrf cookie. */
+                "X-CSRF-Token": components["parameters"]["CsrfHeader"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": {
+                    /** @description Optional custom URL to fetch raw STUN hosts from. */
+                    source_url?: string;
+                    /**
+                     * @description Maximum number of lowest-latency working STUN servers to return.
+                     * @default 6
+                     */
+                    limit?: number;
+                };
+            };
+        };
+        responses: {
+            /** @description Fast working public STUN servers. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PublicStunList"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
     getClientConfig: {
         parameters: {
             query?: never;
@@ -7943,6 +8058,58 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["RelayPrefixRule"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    listPrefixRuleCountries: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Supported country presets. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CountryPrefixInfo"][];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    importCountryPrefixRules: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Must equal the rdpanel_csrf cookie. */
+                "X-CSRF-Token": components["parameters"]["CsrfHeader"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ImportCountryPrefixRulesInput"];
+            };
+        };
+        responses: {
+            /** @description Import result. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImportCountryPrefixRulesResult"];
                 };
             };
             400: components["responses"]["ValidationFailed"];

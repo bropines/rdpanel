@@ -16,12 +16,16 @@ export type RelayTrafficSummary = Schemas["RelayTrafficSummary"];
 export type RelayTrafficPoint = Schemas["RelayTrafficPoint"];
 export type RelayPrefixRule = Schemas["RelayPrefixRule"];
 export type RelayPrefixRuleInput = Schemas["RelayPrefixRuleInput"];
+export type CountryPrefixInfo = Schemas["CountryPrefixInfo"];
+export type ImportCountryPrefixRulesInput = Schemas["ImportCountryPrefixRulesInput"];
+export type ImportCountryPrefixRulesResult = Schemas["ImportCountryPrefixRulesResult"];
 
 export const relayKeys = {
   all: ["relays"] as const,
   list: ["relays", "list"] as const,
   options: ["relays", "options"] as const,
   prefixRules: ["relays", "prefix-rules"] as const,
+  prefixCountries: ["relays", "prefix-rules", "countries"] as const,
   settings: (id: number) => ["relays", "settings", id] as const,
   usage: (id: number) => ["relays", "usage", id] as const,
   traffic: (id: number, hours?: number) => ["relays", "traffic", id, hours ?? 24] as const,
@@ -50,6 +54,9 @@ export const relaysApi = {
     api.request<RelayPrefixRule>("/relays/prefix-rules", { method: "POST", body }),
   deletePrefixRule: (id: number) =>
     api.request<void>(`/relays/prefix-rules/${id}`, { method: "DELETE" }),
+  prefixCountries: () => api.request<CountryPrefixInfo[]>("/relays/prefix-rules/countries"),
+  importCountryPrefixRules: (body: ImportCountryPrefixRulesInput) =>
+    api.request<ImportCountryPrefixRulesResult>("/relays/prefix-rules/import-country", { method: "POST", body }),
 };
 
 /** The relay keys of the per-relay override form (same as the hbbr part of server settings). */

@@ -210,6 +210,46 @@ export const relayHandlers = [
     prefixRules.push(rule);
     return ok(rule, 201);
   }),
+  http.get(`${B}/relays/prefix-rules/countries`, () =>
+    ok([
+      { code: "RU", name: "Russia", prefix_count: 20 },
+      { code: "DE", name: "Germany", prefix_count: 15 },
+      { code: "NL", name: "Netherlands", prefix_count: 12 },
+      { code: "US", name: "United States", prefix_count: 12 },
+      { code: "KZ", name: "Kazakhstan", prefix_count: 8 },
+      { code: "BY", name: "Belarus", prefix_count: 8 },
+      { code: "CN", name: "China", prefix_count: 10 },
+      { code: "GB", name: "United Kingdom", prefix_count: 8 },
+      { code: "FR", name: "France", prefix_count: 8 },
+    ]),
+  ),
+  http.post(`${B}/relays/prefix-rules/import-country`, async ({ request }) => {
+    const b = (await request.json()) as S["ImportCountryPrefixRulesInput"];
+    if (!b.country_code || !b.relay_host) return err(400, "validation_failed", "country_code and relay_host are required");
+    const code = b.country_code.toUpperCase();
+    const cidrs = code === "RU" ? ["95.165.0.0/16", "178.62.0.0/16", "194.87.0.0/16"] : ["85.10.192.0/18", "88.198.0.0/16"];
+    let added = 0;
+    for (const c of cidrs) {
+      if (!prefixRules.some((r) => r.cidr === c)) {
+        const nextId = prefixRules.length ? Math.max(...prefixRules.map((r) => r.id)) + 1 : 1;
+        prefixRules.push({
+          id: nextId,
+          cidr: c,
+          relay_host: b.relay_host,
+          comment: b.comment || `[${code}] Country`,
+          created_at: nowIso(),
+          updated_at: nowIso(),
+        });
+        added++;
+      }
+    }
+    return ok({
+      country_code: code,
+      relay_host: b.relay_host,
+      added_count: added,
+      total_rules: prefixRules.length,
+    });
+  }),
   http.delete(`${B}/relays/prefix-rules/:id`, ({ params }) => {
     const id = Number(params.id);
     const idx = prefixRules.findIndex((r) => r.id === id);
