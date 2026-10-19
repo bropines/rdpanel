@@ -73,17 +73,17 @@ func TestLDAPAdminAPI(t *testing.T) {
 
 	// Update with valid settings
 	updateBody := map[string]any{
-		"enabled":            true,
-		"server_url":         "ldaps://ad.example.corp:636",
-		"start_tls":          false,
+		"enabled":              true,
+		"server_url":           "ldaps://ad.example.corp:636",
+		"start_tls":            false,
 		"insecure_skip_verify": true,
-		"bind_dn":            "cn=admin,dc=example,dc=corp",
-		"bind_password":      "SecretPassword123",
-		"base_dn":            "dc=example,dc=corp",
-		"user_search_base":   "ou=users,dc=example,dc=corp",
-		"user_filter":        "(&(objectClass=user)(sAMAccountName=%s))",
-		"auto_register":      true,
-		"sync_interval_mins": 60,
+		"bind_dn":              "cn=admin,dc=example,dc=corp",
+		"bind_password":        "SecretPassword123",
+		"base_dn":              "dc=example,dc=corp",
+		"user_search_base":     "ou=users,dc=example,dc=corp",
+		"user_filter":          "(&(objectClass=user)(sAMAccountName=%s))",
+		"auto_register":        true,
+		"sync_interval_mins":   60,
 	}
 	code, updated, _ := admin.do("PUT", "/settings/ldap", updateBody)
 	if code != http.StatusOK {

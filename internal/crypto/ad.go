@@ -84,4 +84,3 @@ const ScopeLDAPBindPassword = "settings.ldap_bind_password"
 
 // LDAPBindPasswordAD is the AD of the stored LDAP bind password.
 func LDAPBindPasswordAD() string { return AD(ScopeLDAPBindPassword, 0) }
-

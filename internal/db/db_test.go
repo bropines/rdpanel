@@ -42,9 +42,9 @@ var wantTables = []string{
 	"relay_traffic_samples",                // 00014_relay_traffic_samples
 	"relay_prefix_rules",                   // 00015_relay_prefix_rules
 	"federation_peers", "federated_relays", // 00016_federation
-	"client_strategies",                   // 00017_strategies
-	"connection_acls", "control_roles",    // 00018_acl
-	"ldap_settings",                       // 00019_ldap
+	"client_strategies",                // 00017_strategies
+	"connection_acls", "control_roles", // 00018_acl
+	"ldap_settings", // 00019_ldap
 }
 
 func tables(t *testing.T, d *DB) []string {
