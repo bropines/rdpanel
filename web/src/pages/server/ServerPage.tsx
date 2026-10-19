@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { Activity, Globe2, Network, Radio, ScrollText, Server, SlidersHorizontal, TerminalSquare, View } from "lucide-react";
+import { Activity, Globe2, Network, Radio, ScrollText, Server, ShieldCheck, SlidersHorizontal, TerminalSquare, View } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 import type { Schemas } from "@/api/client";
@@ -17,6 +17,7 @@ import { RelaysTab } from "@/pages/server/Relays";
 import { ClientConfigCard } from "@/pages/server/ClientConfigCard";
 import { ClientOptionsCard } from "@/pages/server/ClientOptionsCard";
 import { ServerSettingsForm } from "@/pages/server/ServerSettingsForm";
+import { StrategiesTab } from "@/pages/server/Strategies";
 import { Viewers } from "@/pages/server/Viewers";
 
 function HealthCard({ title, icon: Icon, h }: { title: string; icon: typeof Server; h: Schemas["ComponentHealth"] }) {
@@ -109,6 +110,10 @@ export function ServerPage() {
             <SlidersHorizontal />
             {t("server.tabs.settings")}
           </TabsTrigger>
+          <TabsTrigger value="strategies">
+            <ShieldCheck />
+            {t("server.tabs.strategies")}
+          </TabsTrigger>
           <TabsTrigger value="relays">
             <Network />
             {t("server.tabs.relays")}
@@ -139,6 +144,7 @@ export function ServerPage() {
             </div>
           )}
         </TabsContent>
+        <TabsContent value="strategies">{tab === "strategies" && <StrategiesTab />}</TabsContent>
         <TabsContent value="relays">{tab === "relays" && <RelaysTab />}</TabsContent>
         <TabsContent value="federation">{tab === "federation" && <FederationTab />}</TabsContent>
         <TabsContent value="viewers">{tab === "viewers" && <Viewers />}</TabsContent>

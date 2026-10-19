@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"strings"
@@ -75,6 +76,9 @@ type DeviceSearch struct {
 	// DeviceGroupID limits to one device group; GroupNone to devices without a group.
 	DeviceGroupID *int64
 	GroupNone     bool
+	// StrategyID limits to one strategy; StrategyNone to devices without a direct strategy override.
+	StrategyID   *int64
+	StrategyNone bool
 	// OSFamily is one of OSFamilies ("" = any).
 	OSFamily string
 	// Version is an exact client version ("" = any).
@@ -124,6 +128,12 @@ func (p *DeviceSearch) where() (string, []any) {
 		add("d.device_group_id IS NULL")
 	case p.DeviceGroupID != nil:
 		add("d.device_group_id = ?", *p.DeviceGroupID)
+	}
+	switch {
+	case p.StrategyNone:
+		add("d.strategy_id IS NULL")
+	case p.StrategyID != nil:
+		add("d.strategy_id = ?", *p.StrategyID)
 	}
 	if p.OSFamily != "" {
 		add(osFamilyExpr("d.os")+" = ?", p.OSFamily)
@@ -298,23 +308,30 @@ func (r *Devices) Facets(ctx context.Context, p DeviceSearch) (total int, oses, 
 // DeviceGroupRow is a device group with its device count.
 type DeviceGroupRow struct {
 	*DeviceGroup
-	DeviceCount int
+	DeviceCount  int
+	StrategyName string
 }
 
-const deviceGroupRowSelect = `SELECT g.id, g.name, g.note, g.created_at, g.updated_at,
-	(SELECT count(*) FROM devices d WHERE d.device_group_id = g.id) AS device_count FROM device_groups g`
+const deviceGroupRowSelect = `SELECT g.id, g.name, g.note, g.strategy_id, g.created_at, g.updated_at,
+	(SELECT count(*) FROM devices d WHERE d.device_group_id = g.id) AS device_count,
+	coalesce(st.name, '') AS strategy_name
+	FROM device_groups g
+	LEFT JOIN client_strategies st ON st.id = g.strategy_id`
 
 func scanDeviceGroupRow(row interface{ Scan(...any) error }) (*DeviceGroupRow, error) {
 	var (
 		g                    DeviceGroup
+		stratID              sql.NullInt64
 		n                    int
 		createdAt, updatedAt int64
+		stratName            string
 	)
-	if err := row.Scan(&g.ID, &g.Name, &g.Note, &createdAt, &updatedAt, &n); err != nil {
+	if err := row.Scan(&g.ID, &g.Name, &g.Note, &stratID, &createdAt, &updatedAt, &n, &stratName); err != nil {
 		return nil, mapErr(err)
 	}
+	g.StrategyID = ptrID(stratID)
 	g.CreatedAt, g.UpdatedAt = fromMs(createdAt), fromMs(updatedAt)
-	return &DeviceGroupRow{DeviceGroup: &g, DeviceCount: n}, nil
+	return &DeviceGroupRow{DeviceGroup: &g, DeviceCount: n, StrategyName: stratName}, nil
 }
 
 // GroupSearch filters, sorts and pages group listings.
@@ -382,11 +399,11 @@ func (r *DeviceGroups) GetRow(ctx context.Context, id int64) (*DeviceGroupRow, e
 	return scanDeviceGroupRow(r.q.QueryRowContext(ctx, deviceGroupRowSelect+` WHERE g.id = ?`, id))
 }
 
-// Update writes name and note.
+// Update writes name, note and strategy_id.
 func (r *DeviceGroups) Update(ctx context.Context, g *DeviceGroup) error {
 	g.UpdatedAt = r.now()
-	return expectOne(r.q.ExecContext(ctx, `UPDATE device_groups SET name = ?, note = ?, updated_at = ? WHERE id = ?`,
-		strings.TrimSpace(g.Name), g.Note, toMs(g.UpdatedAt), g.ID))
+	return expectOne(r.q.ExecContext(ctx, `UPDATE device_groups SET name = ?, note = ?, strategy_id = ?, updated_at = ? WHERE id = ?`,
+		strings.TrimSpace(g.Name), g.Note, nullID(g.StrategyID), toMs(g.UpdatedAt), g.ID))
 }
 
 // Delete removes a device group; its devices' device_group_id becomes NULL.

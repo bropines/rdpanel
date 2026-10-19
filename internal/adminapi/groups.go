@@ -28,24 +28,38 @@ func newUserGroupDTO(g *store.UserGroupRow) userGroupDTO {
 
 // deviceGroupDTO is components.schemas.DeviceGroup.
 type deviceGroupDTO struct {
-	ID          int64     `json:"id"`
-	Name        string    `json:"name"`
-	Note        string    `json:"note"`
-	DeviceCount int       `json:"device_count"`
-	CreatedAt   time.Time `json:"created_at"`
-	UpdatedAt   time.Time `json:"updated_at"`
+	ID          int64        `json:"id"`
+	Name        string       `json:"name"`
+	Note        string       `json:"note"`
+	StrategyID  *int64       `json:"strategy_id"`
+	Strategy    *groupRefDTO `json:"strategy"`
+	DeviceCount int          `json:"device_count"`
+	CreatedAt   time.Time    `json:"created_at"`
+	UpdatedAt   time.Time    `json:"updated_at"`
 }
 
 func newDeviceGroupDTO(g *store.DeviceGroupRow) deviceGroupDTO {
-	return deviceGroupDTO{ID: g.ID, Name: g.Name, Note: g.Note, DeviceCount: g.DeviceCount,
-		CreatedAt: g.CreatedAt, UpdatedAt: g.UpdatedAt}
+	dto := deviceGroupDTO{
+		ID:          g.ID,
+		Name:        g.Name,
+		Note:        g.Note,
+		StrategyID:  g.StrategyID,
+		DeviceCount: g.DeviceCount,
+		CreatedAt:   g.CreatedAt,
+		UpdatedAt:   g.UpdatedAt,
+	}
+	if g.StrategyID != nil {
+		dto.Strategy = &groupRefDTO{ID: *g.StrategyID, Name: g.StrategyName}
+	}
+	return dto
 }
 
 // groupInput is UserGroupInput/Patch and DeviceGroupInput/Patch.
 type groupInput struct {
-	Name       *string `json:"name"`
-	Visibility *string `json:"visibility"`
-	Note       *string `json:"note"`
+	Name       *string    `json:"name"`
+	Visibility *string    `json:"visibility"`
+	Note       *string    `json:"note"`
+	StrategyID opt[int64] `json:"strategy_id"`
 }
 
 func (in *groupInput) validate(create, withVisibility bool) map[string]string {
@@ -241,6 +255,15 @@ func (a *resources) handleCreateDeviceGroup(w http.ResponseWriter, r *http.Reque
 	if in.Note != nil {
 		g.Note = *in.Note
 	}
+	if in.StrategyID.Set {
+		if strat := in.StrategyID.ptr(); strat != nil {
+			if _, err := a.d.Store.ClientStrategies.Get(ctx, *strat); err != nil {
+				validationFailed(w, "invalid device group", map[string]string{"strategy_id": "strategy does not exist"})
+				return
+			}
+			g.StrategyID = strat
+		}
+	}
 	if err := a.d.Store.DeviceGroups.Create(ctx, g); err != nil {
 		a.groupConflict(w, r, "create device group", err)
 		return
@@ -280,6 +303,18 @@ func (a *resources) handleUpdateDeviceGroup(w http.ResponseWriter, r *http.Reque
 		}
 		if in.Note != nil {
 			g.Note = *in.Note
+		}
+		if in.StrategyID.Set {
+			strat := in.StrategyID.ptr()
+			if strat != nil {
+				if _, err := tx.ClientStrategies.Get(ctx, *strat); err != nil {
+					return errors.New("strategy does not exist")
+				}
+			}
+			g.StrategyID = strat
+			if !eqID(old.StrategyID, g.StrategyID) {
+				ch["strategy_id"] = []any{ptrVal(old.StrategyID), ptrVal(g.StrategyID)}
+			}
 		}
 		ch.val("name", old.Name, g.Name)
 		ch.text("note", old.Note, g.Note)

@@ -4,6 +4,8 @@ import { useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 
 import { addressBooksApi } from "@/api/addressBooks";
+import { devicesApi } from "@/api/devices";
+import { strategiesApi } from "@/api/strategies";
 import { groupsApi, lookupApi, type GroupRef, type UserRef } from "@/api/users";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -241,3 +243,65 @@ export function BookPicker(props: {
     />
   );
 }
+
+export function StrategyPicker(props: {
+  value: number | null | undefined;
+  valueLabel?: ReactNode;
+  onChange: (id: number | null, strategy?: { id: number; name: string }) => void;
+  noneLabel?: string;
+  disabled?: boolean;
+  id?: string;
+}) {
+  const { t } = useTranslation();
+  return (
+    <AsyncCombobox
+      id={props.id}
+      value={props.value}
+      valueLabel={props.valueLabel}
+      disabled={props.disabled}
+      onChange={(id, o) => props.onChange(id, o ? { id: o.id, name: o.label } : undefined)}
+      queryKey="strategies"
+      fetchOptions={async () =>
+        (await strategiesApi.list()).items.map((s) => ({
+          id: s.id,
+          label: s.name,
+          hint: s.is_default ? t("strategies.default") : undefined,
+        }))
+      }
+      placeholder={t("pickers.selectStrategy")}
+      noneLabel={props.noneLabel ?? t("strategies.inheritedOrDefault")}
+    />
+  );
+}
+
+export function DevicePicker(props: {
+  value: number | null | undefined;
+  valueLabel?: ReactNode;
+  onChange: (id: number | null, device?: { id: number; name: string }) => void;
+  allowNone?: boolean;
+  noneLabel?: string;
+  disabled?: boolean;
+  id?: string;
+}) {
+  const { t } = useTranslation();
+  return (
+    <AsyncCombobox
+      id={props.id}
+      value={props.value}
+      valueLabel={props.valueLabel}
+      disabled={props.disabled}
+      onChange={(id, o) => props.onChange(id, o ? { id: o.id, name: o.label } : undefined)}
+      queryKey="devices"
+      fetchOptions={async (q) =>
+        (await devicesApi.list({ q, page_size: 50 })).items.map((d) => ({
+          id: d.id,
+          label: d.alias || d.hostname || d.rustdesk_id,
+          hint: d.rustdesk_id,
+        }))
+      }
+      placeholder={t("pickers.selectDevice")}
+      noneLabel={props.allowNone ? (props.noneLabel ?? t("pickers.noDevice")) : undefined}
+    />
+  );
+}
+

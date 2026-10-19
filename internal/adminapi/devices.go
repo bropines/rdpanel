@@ -31,8 +31,10 @@ type deviceDTO struct {
 	Note            string       `json:"note"`
 	OwnerUserID     *int64       `json:"owner_user_id"`
 	DeviceGroupID   *int64       `json:"device_group_id"`
+	StrategyID      *int64       `json:"strategy_id"`
 	Owner           *userRefDTO  `json:"owner"`
 	DeviceGroup     *groupRefDTO `json:"device_group"`
+	Strategy        *groupRefDTO `json:"strategy"`
 	OSFamily        string       `json:"os_family"`
 	Online          bool         `json:"online"`
 	OnlineSince     *time.Time   `json:"online_since"`
@@ -132,6 +134,10 @@ func (a *resources) newDeviceDTO(d *store.Device, refs map[int64]store.UserRef, 
 	if d.DeviceGroupID != nil {
 		o.DeviceGroup = &groupRefDTO{ID: *d.DeviceGroupID, Name: d.DeviceGroupName}
 	}
+	if d.StrategyID != nil {
+		o.StrategyID = d.StrategyID
+		o.Strategy = &groupRefDTO{ID: *d.StrategyID, Name: d.StrategyName}
+	}
 	o.Online, o.OnlineSince = a.presenceOf(d, now)
 	return o
 }
@@ -164,6 +170,17 @@ func (a *resources) deviceFilter(q *query, user *store.User) store.DeviceSearch 
 			p.DeviceGroupID = &id
 		} else {
 			q.fail("device_group", "must be a device group id or none")
+		}
+	}
+	switch s := q.str("strategy"); s {
+	case "":
+	case "none":
+		p.StrategyNone = true
+	default:
+		if id, ok := idParam(s); ok {
+			p.StrategyID = &id
+		} else {
+			q.fail("strategy", "must be a strategy id or none")
 		}
 	}
 	if !user.IsAdmin() {
@@ -365,10 +382,11 @@ type deviceUpdate struct {
 	Note          *string    `json:"note"`
 	OwnerUserID   opt[int64] `json:"owner_user_id"`
 	DeviceGroupID opt[int64] `json:"device_group_id"`
+	StrategyID    opt[int64] `json:"strategy_id"`
 }
 
-// checkRefs validates optional owner / device group references.
-func (a *resources) checkRefs(ctx context.Context, owner, group *int64, fields map[string]string) error {
+// checkRefs validates optional owner / device group / strategy references.
+func (a *resources) checkRefs(ctx context.Context, owner, group, strategy *int64, fields map[string]string) error {
 	if owner != nil {
 		if _, err := a.d.Store.Users.GetByID(ctx, *owner); errors.Is(err, store.ErrNotFound) {
 			fields["owner_user_id"] = "user does not exist"
@@ -379,6 +397,13 @@ func (a *resources) checkRefs(ctx context.Context, owner, group *int64, fields m
 	if group != nil {
 		if _, err := a.d.Store.DeviceGroups.Get(ctx, *group); errors.Is(err, store.ErrNotFound) {
 			fields["device_group_id"] = "device group does not exist"
+		} else if err != nil {
+			return err
+		}
+	}
+	if strategy != nil {
+		if _, err := a.d.Store.ClientStrategies.Get(ctx, *strategy); errors.Is(err, store.ErrNotFound) {
+			fields["strategy_id"] = "strategy does not exist"
 		} else if err != nil {
 			return err
 		}
@@ -397,8 +422,8 @@ func (a *resources) handleUpdateDevice(w http.ResponseWriter, r *http.Request) {
 	if !decodeJSON(w, r, &in) {
 		return
 	}
-	if !user.IsAdmin() && (in.OwnerUserID.Set || in.DeviceGroupID.Set) {
-		forbidden(w, "only administrators can change the owner or group")
+	if !user.IsAdmin() && (in.OwnerUserID.Set || in.DeviceGroupID.Set || in.StrategyID.Set) {
+		forbidden(w, "only administrators can change the owner, group or strategy")
 		return
 	}
 	fields := map[string]string{}
@@ -408,14 +433,17 @@ func (a *resources) handleUpdateDevice(w http.ResponseWriter, r *http.Request) {
 	if in.Note != nil && runes(*in.Note) > 4096 {
 		fields["note"] = "must be at most 4096 characters"
 	}
-	var owner, group *int64
+	var owner, group, strat *int64
 	if in.OwnerUserID.Set {
 		owner = in.OwnerUserID.ptr()
 	}
 	if in.DeviceGroupID.Set {
 		group = in.DeviceGroupID.ptr()
 	}
-	if err := a.checkRefs(ctx, owner, group, fields); err != nil {
+	if in.StrategyID.Set {
+		strat = in.StrategyID.ptr()
+	}
+	if err := a.checkRefs(ctx, owner, group, strat, fields); err != nil {
 		a.fail500(w, r, "update device", err)
 		return
 	}
@@ -444,6 +472,12 @@ func (a *resources) handleUpdateDevice(w http.ResponseWriter, r *http.Request) {
 			ch["device_group_id"] = []any{ptrVal(d.DeviceGroupID), ptrVal(group)}
 		}
 		d.DeviceGroupID = group
+	}
+	if in.StrategyID.Set {
+		if !eqID(d.StrategyID, strat) {
+			ch["strategy_id"] = []any{ptrVal(d.StrategyID), ptrVal(strat)}
+		}
+		d.StrategyID = strat
 	}
 	if err := a.d.Store.Devices.Update(ctx, d); err != nil {
 		a.writeStoreErr(w, r, "update device", err)
@@ -535,6 +569,7 @@ type deviceBulkRequest struct {
 	DeviceIDs     []int64    `json:"device_ids"`
 	OwnerUserID   opt[int64] `json:"owner_user_id"`
 	DeviceGroupID opt[int64] `json:"device_group_id"`
+	StrategyID    opt[int64] `json:"strategy_id"`
 }
 
 func (a *resources) handleBulkDevices(w http.ResponseWriter, r *http.Request) {
@@ -545,21 +580,24 @@ func (a *resources) handleBulkDevices(w http.ResponseWriter, r *http.Request) {
 	}
 	fields := map[string]string{}
 	switch in.Action {
-	case "assign_owner", "assign_group", "kick", "delete":
+	case "assign_owner", "assign_group", "assign_strategy", "kick", "delete":
 	default:
-		fields["action"] = "must be one of assign_owner, assign_group, kick, delete"
+		fields["action"] = "must be one of assign_owner, assign_group, assign_strategy, kick, delete"
 	}
 	if len(in.DeviceIDs) == 0 || len(in.DeviceIDs) > 1000 {
 		fields["device_ids"] = "must contain 1 to 1000 ids"
 	}
-	var owner, group *int64
+	var owner, group, strat *int64
 	if in.Action == "assign_owner" && in.OwnerUserID.Set {
 		owner = in.OwnerUserID.ptr()
 	}
 	if in.Action == "assign_group" && in.DeviceGroupID.Set {
 		group = in.DeviceGroupID.ptr()
 	}
-	if err := a.checkRefs(ctx, owner, group, fields); err != nil {
+	if in.Action == "assign_strategy" && in.StrategyID.Set {
+		strat = in.StrategyID.ptr()
+	}
+	if err := a.checkRefs(ctx, owner, group, strat, fields); err != nil {
 		a.fail500(w, r, "bulk devices", err)
 		return
 	}
@@ -605,7 +643,15 @@ func (a *resources) handleBulkDevices(w http.ResponseWriter, r *http.Request) {
 					res.Skipped++
 					continue
 				}
-				prev[d.ID], d.DeviceGroupID = d.OwnerUserID, group
+				prev[d.ID], d.DeviceGroupID = d.DeviceGroupID, group
+				err = tx.Devices.Update(ctx, d)
+				changed = append(changed, d)
+			case "assign_strategy":
+				if eqID(d.StrategyID, strat) {
+					res.Skipped++
+					continue
+				}
+				prev[d.ID], d.StrategyID = d.StrategyID, strat
 				err = tx.Devices.Update(ctx, d)
 				changed = append(changed, d)
 			case "kick":

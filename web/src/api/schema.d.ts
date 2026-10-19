@@ -1334,6 +1334,64 @@ export interface paths {
         patch: operations["updateDeviceGroup"];
         trace?: never;
     };
+    "/strategies": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List client MDM strategies (admin). */
+        get: operations["listStrategies"];
+        put?: never;
+        /** Create client MDM strategy. */
+        post: operations["createStrategy"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/strategies/{strategy_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                strategy_id: components["parameters"]["StrategyId"];
+            };
+            cookie?: never;
+        };
+        /** Get client MDM strategy. */
+        get: operations["getStrategy"];
+        put?: never;
+        post?: never;
+        /** Delete client MDM strategy. */
+        delete: operations["deleteStrategy"];
+        options?: never;
+        head?: never;
+        /** Update client MDM strategy. */
+        patch: operations["updateStrategy"];
+        trace?: never;
+    };
+    "/strategies/{strategy_id}/default": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                strategy_id: components["parameters"]["StrategyId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Mark client MDM strategy as default. */
+        post: operations["setDefaultStrategy"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/address-books": {
         parameters: {
             query?: never;
@@ -2991,6 +3049,9 @@ export interface components {
             /** @description Embedded owner (null = unassigned). */
             owner?: components["schemas"]["UserRef"] | null;
             device_group?: components["schemas"]["GroupRef"] | null;
+            /** Format: int64 */
+            strategy_id?: number | null;
+            strategy?: components["schemas"]["GroupRef"] | null;
             os_family?: components["schemas"]["OsFamily"];
             /** @description Live presence (hbbs OnlineRequest, heartbeat fallback). */
             online: boolean;
@@ -3237,15 +3298,22 @@ export interface components {
              * @description Admin only.
              */
             device_group_id?: number | null;
+            /**
+             * Format: int64
+             * @description Admin only.
+             */
+            strategy_id?: number | null;
         };
         DeviceBulkRequest: {
             /** @enum {string} */
-            action: "assign_owner" | "assign_group" | "kick" | "delete";
+            action: "assign_owner" | "assign_group" | "assign_strategy" | "kick" | "delete";
             device_ids: number[];
             /** Format: int64 */
             owner_user_id?: number | null;
             /** Format: int64 */
             device_group_id?: number | null;
+            /** Format: int64 */
+            strategy_id?: number | null;
         };
         PresenceChangedEvent: {
             /**
@@ -3367,6 +3435,9 @@ export interface components {
             id: number;
             name: string;
             note: string;
+            /** Format: int64 */
+            strategy_id?: number | null;
+            strategy?: components["schemas"]["GroupRef"] | null;
             device_count: number;
             /** Format: date-time */
             created_at: string;
@@ -3376,10 +3447,14 @@ export interface components {
         DeviceGroupInput: {
             name: string;
             note?: string;
+            /** Format: int64 */
+            strategy_id?: number | null;
         };
         DeviceGroupPatch: {
             name?: string;
             note?: string;
+            /** Format: int64 */
+            strategy_id?: number | null;
         };
         DeviceGroupPage: components["schemas"]["PageMeta"] & {
             items: components["schemas"]["DeviceGroup"][];
@@ -4256,6 +4331,42 @@ export interface components {
             /** Format: date-time */
             last_sync_at: string;
         };
+        ClientStrategy: {
+            /** Format: int64 */
+            id: number;
+            name: string;
+            note: string;
+            /** @description Key-value options pushed to RustDesk clients in heartbeat. */
+            config_options: {
+                [key: string]: string;
+            };
+            is_default: boolean;
+            /** @description Number of devices effectively governed by this strategy. */
+            device_count: number;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+        };
+        ClientStrategyInput: {
+            name: string;
+            note?: string;
+            config_options: {
+                [key: string]: string;
+            };
+            is_default?: boolean;
+        };
+        ClientStrategyPatch: {
+            name?: string;
+            note?: string;
+            config_options?: {
+                [key: string]: string;
+            };
+            is_default?: boolean;
+        };
+        ClientStrategyList: {
+            items: components["schemas"]["ClientStrategy"][];
+        };
     };
     responses: {
         /** @description hbbs/hbbr unreachable (error code `server_unavailable`). */
@@ -4358,6 +4469,7 @@ export interface components {
         DeviceId: number;
         UserId: number;
         GroupId: number;
+        StrategyId: number;
         BookId: number;
         SessionId: number;
         DeviceOnline: boolean;
@@ -6702,6 +6814,173 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
+        };
+    };
+    listStrategies: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description List of client strategies. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ClientStrategyList"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    createStrategy: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Must equal the rdpanel_csrf cookie. */
+                "X-CSRF-Token": components["parameters"]["CsrfHeader"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ClientStrategyInput"];
+            };
+        };
+        responses: {
+            /** @description Created. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ClientStrategy"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    getStrategy: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                strategy_id: components["parameters"]["StrategyId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Strategy detail. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ClientStrategy"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    deleteStrategy: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Must equal the rdpanel_csrf cookie. */
+                "X-CSRF-Token": components["parameters"]["CsrfHeader"];
+            };
+            path: {
+                strategy_id: components["parameters"]["StrategyId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Deleted. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    updateStrategy: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Must equal the rdpanel_csrf cookie. */
+                "X-CSRF-Token": components["parameters"]["CsrfHeader"];
+            };
+            path: {
+                strategy_id: components["parameters"]["StrategyId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ClientStrategyPatch"];
+            };
+        };
+        responses: {
+            /** @description Updated. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ClientStrategy"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    setDefaultStrategy: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Must equal the rdpanel_csrf cookie. */
+                "X-CSRF-Token": components["parameters"]["CsrfHeader"];
+            };
+            path: {
+                strategy_id: components["parameters"]["StrategyId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Updated default strategy. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ClientStrategy"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
         };
     };
     listAddressBooks: {

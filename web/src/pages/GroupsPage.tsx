@@ -12,6 +12,7 @@ import { ApiError } from "@/api/client";
 import { groupKeys, groupsApi, type DeviceGroup, type UserGroup } from "@/api/users";
 import { ConfirmDialog, EmptyState, Field, PageHeader, RelativeTime, useToastError } from "@/components";
 import { DataTable, SearchInput, type ColumnMeta } from "@/components/data-table";
+import { StrategyPicker } from "@/components/pickers";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -36,13 +37,24 @@ function GroupDialog({ kind, group, open, onOpenChange }: { kind: Kind; group: G
   const qc = useQueryClient();
   const toastError = useToastError();
   const form = useForm<GroupValues>({ resolver: zodResolver(groupSchema), defaultValues: { name: "", note: "", visibility: "self" } });
+  const [strategy, setStrategy] = useState<number | null>(null);
+  const [strategyLabel, setStrategyLabel] = useState<string | undefined>();
+
   useEffect(() => {
-    if (open)
+    if (open) {
       form.reset({
         name: group?.name ?? "",
         note: group?.note ?? "",
         visibility: group && "visibility" in group ? group.visibility : "self",
       });
+      if (group && "strategy_id" in group) {
+        setStrategy(group.strategy_id ?? null);
+        setStrategyLabel(group.strategy?.name);
+      } else {
+        setStrategy(null);
+        setStrategyLabel(undefined);
+      }
+    }
   }, [open, group, form]);
   const save = useMutation({
     mutationFn: (v: GroupValues): Promise<Group> => {
@@ -50,7 +62,7 @@ function GroupDialog({ kind, group, open, onOpenChange }: { kind: Kind; group: G
         const body = { name: v.name, note: v.note, visibility: v.visibility };
         return group ? groupsApi.updateUserGroup(group.id, body) : groupsApi.createUserGroup(body);
       }
-      const body = { name: v.name, note: v.note };
+      const body = { name: v.name, note: v.note, strategy_id: strategy };
       return group ? groupsApi.updateDeviceGroup(group.id, body) : groupsApi.createDeviceGroup(body);
     },
     onSuccess: () => {
@@ -94,6 +106,20 @@ function GroupDialog({ kind, group, open, onOpenChange }: { kind: Kind; group: G
                     </SelectContent>
                   </Select>
                 )}
+              />
+            </Field>
+          )}
+          {kind === "device" && (
+            <Field label={t("strategies.title")} htmlFor="g-strategy" hint={t("strategies.groupHint")}>
+              <StrategyPicker
+                id="g-strategy"
+                value={strategy}
+                valueLabel={strategyLabel}
+                noneLabel={t("strategies.inheritedOrDefault")}
+                onChange={(id, s) => {
+                  setStrategy(id);
+                  setStrategyLabel(s?.name);
+                }}
               />
             </Field>
           )}
@@ -155,7 +181,7 @@ function GroupTable({ kind }: { kind: Kind }) {
         ),
       },
     ];
-    if (kind === "user")
+    if (kind === "user") {
       cols.push({
         id: "visibility",
         header: t("groups.visibility"),
@@ -164,6 +190,21 @@ function GroupTable({ kind }: { kind: Kind }) {
         cell: ({ row: { original: g } }) =>
           "visibility" in g ? <Badge variant="outline">{t(`groups.visibilityOption.${g.visibility}`)}</Badge> : null,
       });
+    }
+    if (kind === "device") {
+      cols.push({
+        id: "strategy",
+        header: t("strategies.title"),
+        enableSorting: false,
+        meta: { label: t("strategies.title") } satisfies ColumnMeta,
+        cell: ({ row: { original: g } }) =>
+          "strategy" in g && g.strategy ? (
+            <Badge variant="outline">{g.strategy.name}</Badge>
+          ) : (
+            <span className="text-xs text-muted-foreground">{t("strategies.inheritedOrDefault")}</span>
+          ),
+      });
+    }
     cols.push(
       {
         id: kind === "user" ? "member_count" : "device_count",

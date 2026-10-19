@@ -141,3 +141,45 @@ func TestSetGetAndStrategy(t *testing.T) {
 		t.Fatalf("stored shape: %v", v)
 	}
 }
+
+func TestStrategyForDeviceMDMMerge(t *testing.T) {
+	s, st, _, _ := newService(t)
+	ctx := context.Background()
+
+	// 1. Create a device (falls back to default strategy "Standard Office")
+	d := &store.Device{RustdeskID: "dev-mdm-1"}
+	if err := st.Devices.Create(ctx, d); err != nil {
+		t.Fatal(err)
+	}
+
+	strat, err := s.StrategyFor(ctx, d)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strat == nil {
+		t.Fatal("expected non-nil strategy for device")
+	}
+	if strat.ConfigOptions["approve-mode"] != "both" {
+		t.Fatalf("expected approve-mode both, got %q", strat.ConfigOptions["approve-mode"])
+	}
+
+	// 2. Set global ICE servers and ensure they merge
+	on := true
+	if _, err := s.Set(ctx, "stun:stun.l.google.com:19302", &on, nil); err != nil {
+		t.Fatal(err)
+	}
+
+	merged, err := s.StrategyFor(ctx, d)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if merged.ConfigOptions["approve-mode"] != "both" {
+		t.Fatalf("expected approve-mode both, got %q", merged.ConfigOptions["approve-mode"])
+	}
+	if merged.ConfigOptions[OptionICEServers] != "stun:stun.l.google.com:19302" {
+		t.Fatalf("expected merged ICE server, got %q", merged.ConfigOptions[OptionICEServers])
+	}
+	if merged.ConfigOptions[OptionWebRTCCongestion] != "Y" {
+		t.Fatalf("expected merged congestion control Y, got %q", merged.ConfigOptions[OptionWebRTCCongestion])
+	}
+}

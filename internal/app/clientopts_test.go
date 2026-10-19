@@ -38,19 +38,28 @@ func TestClientOptionsHeartbeatStrategy(t *testing.T) {
 		return m
 	}
 
-	if m := beat(0); m["strategy"] != nil || m["modified_at"] != nil {
-		t.Fatalf("no options saved, got %v", m)
+	// Fresh client (modified_at: 0) receives the default strategy.
+	m0 := beat(0)
+	if m0["strategy"] == nil || m0["modified_at"] == nil {
+		t.Fatalf("expected default strategy, got %v", m0)
 	}
+	stratMod := int64(m0["modified_at"].(float64))
+
+	// Client that applied the default strategy gets nothing more until options change.
+	if m := beat(stratMod); m["strategy"] != nil {
+		t.Fatalf("unexpected strategy: %v", m)
+	}
+
 	on := true
 	o, err := a.ClientOptions.Set(ctx, "turn://u:p@turn.example.com:3478", &on, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	m := beat(0)
+	m := beat(stratMod)
 	s, _ := m["strategy"].(map[string]any)
 	opts, _ := s["config_options"].(map[string]any)
 	if int64(m["modified_at"].(float64)) != o.ModifiedAt || opts["ice-servers"] != "turn://u:p@turn.example.com:3478" ||
-		opts["allow-webrtc-congestion-control"] != "Y" {
+		opts["allow-webrtc-congestion-control"] != "Y" || opts["approve-mode"] != "both" {
 		t.Fatalf("strategy: %v", m)
 	}
 	// A client that applied this version gets nothing more.

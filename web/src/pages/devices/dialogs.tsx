@@ -6,12 +6,12 @@ import { toast } from "sonner";
 import { addressBooksApi, bookKeys } from "@/api/addressBooks";
 import { deviceKeys, devicesApi } from "@/api/devices";
 import { Field, useToastError } from "@/components";
-import { BookPicker, DeviceGroupPicker, UserPicker } from "@/components/pickers";
+import { BookPicker, DeviceGroupPicker, StrategyPicker, UserPicker } from "@/components/pickers";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 
-type Mode = "owner" | "group" | "book";
+type Mode = "owner" | "group" | "strategy" | "book";
 
 /** Bulk assign owner / group, or add devices to an address book. */
 export function DeviceBulkDialog({
@@ -43,11 +43,13 @@ export function DeviceBulkDialog({
         const tagList = tags.split(",").map((s) => s.trim()).filter(Boolean);
         return addressBooksApi.addFromDevices(target, { device_ids: deviceIds, tags: tagList });
       }
-      return devicesApi.bulk(
-        mode === "owner"
-          ? { action: "assign_owner", device_ids: deviceIds, owner_user_id: target }
-          : { action: "assign_group", device_ids: deviceIds, device_group_id: target },
-      );
+      if (mode === "owner") {
+        return devicesApi.bulk({ action: "assign_owner", device_ids: deviceIds, owner_user_id: target });
+      }
+      if (mode === "group") {
+        return devicesApi.bulk({ action: "assign_group", device_ids: deviceIds, device_group_id: target });
+      }
+      return devicesApi.bulk({ action: "assign_strategy", device_ids: deviceIds, strategy_id: target });
     },
     onSuccess: (res) => {
       if (mode === "book") {
@@ -66,7 +68,13 @@ export function DeviceBulkDialog({
   });
 
   const title =
-    mode === "owner" ? t("devices.assignOwner") : mode === "group" ? t("devices.assignGroup") : t("devices.addToBook");
+    mode === "owner"
+      ? t("devices.assignOwner")
+      : mode === "group"
+      ? t("devices.assignGroup")
+      : mode === "strategy"
+      ? t("devices.assignStrategy")
+      : t("devices.addToBook");
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -99,6 +107,20 @@ export function DeviceBulkDialog({
                 onChange={(id, g) => {
                   setTarget(id);
                   setTargetLabel(g?.name);
+                }}
+              />
+            </Field>
+          )}
+          {mode === "strategy" && (
+            <Field label={t("devices.strategy")} htmlFor="bulk-strategy">
+              <StrategyPicker
+                id="bulk-strategy"
+                value={target}
+                valueLabel={targetLabel}
+                noneLabel={t("strategies.inheritedOrDefault")}
+                onChange={(id, s) => {
+                  setTarget(id);
+                  setTargetLabel(s?.name);
                 }}
               />
             </Field>

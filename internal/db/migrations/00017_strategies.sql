@@ -1,0 +1,58 @@
+-- +goose Up
+
+CREATE TABLE client_strategies (
+    id             INTEGER PRIMARY KEY AUTOINCREMENT,
+    name           TEXT    NOT NULL UNIQUE CHECK (length(name) BETWEEN 1 AND 64),
+    note           TEXT    NOT NULL DEFAULT '',
+    config_options TEXT    NOT NULL DEFAULT '{}',
+    is_default     INTEGER NOT NULL DEFAULT 0 CHECK (is_default IN (0, 1)),
+    created_at     INTEGER NOT NULL,
+    updated_at     INTEGER NOT NULL
+);
+
+ALTER TABLE device_groups ADD COLUMN strategy_id INTEGER NULL REFERENCES client_strategies (id) ON DELETE SET NULL;
+ALTER TABLE devices ADD COLUMN strategy_id INTEGER NULL REFERENCES client_strategies (id) ON DELETE SET NULL;
+
+CREATE INDEX ix_device_groups_strategy_id ON device_groups (strategy_id);
+CREATE INDEX ix_devices_strategy_id ON devices (strategy_id);
+
+-- Seed default built-in strategy templates:
+-- 1. Standard Office (default): balanced security and usability
+INSERT INTO client_strategies (name, note, config_options, is_default, created_at, updated_at)
+VALUES (
+    'Standard Office',
+    'Balanced policy for typical workstations: password or click confirmation, clipboard and files enabled, local config changes blocked.',
+    '{"allow-remote-config-modification":"N","approve-mode":"both","direct-server":"N","enable-audio":"Y","enable-clipboard":"Y","enable-file-transfer":"Y","enable-keyboard":"Y","enable-record-session":"N","enable-remote-restart":"Y","enable-tunnel":"Y","lock-after-session-end":"N","verification-method":"both"}',
+    1,
+    1729000000000,
+    1729000000000
+);
+
+-- 2. Strict Security: high security workstations, one-time passwords, no clipboard, no file transfer, automatic lock
+INSERT INTO client_strategies (name, note, config_options, is_default, created_at, updated_at)
+VALUES (
+    'Strict Security',
+    'Strict policy for sensitive hosts: temporary passwords only, clipboard and file transfers disabled, automatic screen lock on disconnect.',
+    '{"allow-remote-config-modification":"N","approve-mode":"password","direct-server":"N","enable-audio":"N","enable-clipboard":"N","enable-file-transfer":"N","enable-keyboard":"Y","enable-record-session":"Y","enable-remote-restart":"N","enable-tunnel":"N","lock-after-session-end":"Y","verification-method":"use-temporary-password"}',
+    0,
+    1729000000000,
+    1729000000000
+);
+
+-- 3. Unattended Server: headless servers, permanent password only, screen lock on disconnect
+INSERT INTO client_strategies (name, note, config_options, is_default, created_at, updated_at)
+VALUES (
+    'Unattended Server',
+    'Policy for unattended servers: permanent password only, audio disabled, screen locked on disconnect.',
+    '{"allow-remote-config-modification":"N","approve-mode":"password","direct-server":"N","enable-audio":"N","enable-clipboard":"Y","enable-file-transfer":"Y","enable-keyboard":"Y","enable-record-session":"N","enable-remote-restart":"Y","enable-tunnel":"Y","lock-after-session-end":"Y","verification-method":"use-permanent-password"}',
+    0,
+    1729000000000,
+    1729000000000
+);
+
+-- +goose Down
+DROP INDEX IF EXISTS ix_devices_strategy_id;
+DROP INDEX IF EXISTS ix_device_groups_strategy_id;
+ALTER TABLE devices DROP COLUMN strategy_id;
+ALTER TABLE device_groups DROP COLUMN strategy_id;
+DROP TABLE IF EXISTS client_strategies;

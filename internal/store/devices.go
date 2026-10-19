@@ -25,6 +25,7 @@ type Device struct {
 	Note          string
 	OwnerUserID   *int64
 	DeviceGroupID *int64
+	StrategyID    *int64
 	// PublicKey is the device's Ed25519 public key (32 bytes) when known.
 	PublicKey          []byte
 	LastSeenAt         *time.Time
@@ -38,6 +39,7 @@ type Device struct {
 	// Read-only joins.
 	OwnerUsername   string
 	DeviceGroupName string
+	StrategyName    string
 }
 
 // SysinfoPending reports whether the server asked for a sysinfo re-upload
@@ -56,30 +58,31 @@ type Devices struct {
 }
 
 const deviceColumns = `d.id, d.rustdesk_id, d.uuid, d.hostname, d.os, d.cpu, d.memory, d.os_username,
-	d.client_version, d.alias, d.note, d.owner_user_id, d.device_group_id, d.pk, d.last_seen_at, d.last_seen_ip,
+	d.client_version, d.alias, d.note, d.owner_user_id, d.device_group_id, d.strategy_id, d.pk, d.last_seen_at, d.last_seen_ip,
 	d.last_heartbeat_at, d.sysinfo_at, d.sysinfo_requested_at, d.created_at, d.updated_at,
-	coalesce(u.username, ''), coalesce(g.name, '')`
+	coalesce(u.username, ''), coalesce(g.name, ''), coalesce(st.name, '')`
 
 const deviceFrom = ` FROM devices d
 	LEFT JOIN users u ON u.id = d.owner_user_id
-	LEFT JOIN device_groups g ON g.id = d.device_group_id`
+	LEFT JOIN device_groups g ON g.id = d.device_group_id
+	LEFT JOIN client_strategies st ON st.id = d.strategy_id`
 
 func scanDevice(row interface{ Scan(...any) error }) (*Device, error) {
 	var (
 		d                       Device
 		uuid, ip                sql.NullString
-		owner, group            sql.NullInt64
+		owner, group, strat     sql.NullInt64
 		seen, hb, sysAt, sysReq sql.NullInt64
 		createdAt, updatedAt    int64
 	)
 	err := row.Scan(&d.ID, &d.RustdeskID, &uuid, &d.Hostname, &d.OS, &d.CPU, &d.Memory, &d.OSUsername,
-		&d.ClientVersion, &d.Alias, &d.Note, &owner, &group, &d.PublicKey, &seen, &ip,
-		&hb, &sysAt, &sysReq, &createdAt, &updatedAt, &d.OwnerUsername, &d.DeviceGroupName)
+		&d.ClientVersion, &d.Alias, &d.Note, &owner, &group, &strat, &d.PublicKey, &seen, &ip,
+		&hb, &sysAt, &sysReq, &createdAt, &updatedAt, &d.OwnerUsername, &d.DeviceGroupName, &d.StrategyName)
 	if err != nil {
 		return nil, mapErr(err)
 	}
 	d.UUID, d.LastSeenIP = uuid.String, ip.String
-	d.OwnerUserID, d.DeviceGroupID = ptrID(owner), ptrID(group)
+	d.OwnerUserID, d.DeviceGroupID, d.StrategyID = ptrID(owner), ptrID(group), ptrID(strat)
 	d.LastSeenAt, d.LastHeartbeatAt = ptrMs(seen), ptrMs(hb)
 	d.SysinfoAt, d.SysinfoRequestedAt = ptrMs(sysAt), ptrMs(sysReq)
 	d.CreatedAt, d.UpdatedAt = fromMs(createdAt), fromMs(updatedAt)
@@ -94,11 +97,11 @@ func (r *Devices) Create(ctx context.Context, d *Device) error {
 	}
 	d.UpdatedAt = now
 	return mapErr(r.q.QueryRowContext(ctx, `INSERT INTO devices (rustdesk_id, uuid, hostname, os, cpu, memory,
-		os_username, client_version, alias, note, owner_user_id, device_group_id, pk, last_seen_at, last_seen_ip,
+		os_username, client_version, alias, note, owner_user_id, device_group_id, strategy_id, pk, last_seen_at, last_seen_ip,
 		last_heartbeat_at, sysinfo_at, sysinfo_requested_at, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`,
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`,
 		d.RustdeskID, nullStr(d.UUID), d.Hostname, d.OS, d.CPU, d.Memory, d.OSUsername, d.ClientVersion,
-		d.Alias, d.Note, nullID(d.OwnerUserID), nullID(d.DeviceGroupID), nullBytes(d.PublicKey),
+		d.Alias, d.Note, nullID(d.OwnerUserID), nullID(d.DeviceGroupID), nullID(d.StrategyID), nullBytes(d.PublicKey),
 		nullMs(d.LastSeenAt), nullStr(d.LastSeenIP), nullMs(d.LastHeartbeatAt), nullMs(d.SysinfoAt),
 		nullMs(d.SysinfoRequestedAt), toMs(d.CreatedAt), toMs(d.UpdatedAt)).Scan(&d.ID))
 }
@@ -169,8 +172,8 @@ func (r *Devices) RequestSysinfo(ctx context.Context, id int64) error {
 func (r *Devices) Update(ctx context.Context, d *Device) error {
 	d.UpdatedAt = r.now()
 	return expectOne(r.q.ExecContext(ctx, `UPDATE devices SET alias = ?, note = ?, owner_user_id = ?,
-		device_group_id = ?, hostname = ?, os_username = ?, updated_at = ? WHERE id = ?`,
-		d.Alias, d.Note, nullID(d.OwnerUserID), nullID(d.DeviceGroupID), d.Hostname, d.OSUsername,
+		device_group_id = ?, strategy_id = ?, hostname = ?, os_username = ?, updated_at = ? WHERE id = ?`,
+		d.Alias, d.Note, nullID(d.OwnerUserID), nullID(d.DeviceGroupID), nullID(d.StrategyID), d.Hostname, d.OSUsername,
 		toMs(d.UpdatedAt), d.ID))
 }
 
@@ -310,11 +313,12 @@ func nullBytes(b []byte) any {
 
 // DeviceGroup is a row of device_groups.
 type DeviceGroup struct {
-	ID        int64
-	Name      string
-	Note      string
-	CreatedAt time.Time
-	UpdatedAt time.Time
+	ID         int64
+	Name       string
+	Note       string
+	StrategyID *int64
+	CreatedAt  time.Time
+	UpdatedAt  time.Time
 }
 
 // DeviceGroups is the device_groups repository (read side plus Create).
@@ -326,11 +330,13 @@ type DeviceGroups struct {
 func scanDeviceGroup(row interface{ Scan(...any) error }) (*DeviceGroup, error) {
 	var (
 		g                    DeviceGroup
+		stratID              sql.NullInt64
 		createdAt, updatedAt int64
 	)
-	if err := row.Scan(&g.ID, &g.Name, &g.Note, &createdAt, &updatedAt); err != nil {
+	if err := row.Scan(&g.ID, &g.Name, &g.Note, &stratID, &createdAt, &updatedAt); err != nil {
 		return nil, mapErr(err)
 	}
+	g.StrategyID = ptrID(stratID)
 	g.CreatedAt, g.UpdatedAt = fromMs(createdAt), fromMs(updatedAt)
 	return &g, nil
 }
@@ -346,20 +352,20 @@ func (r *DeviceGroups) Create(ctx context.Context, g *DeviceGroup) error {
 	if g.ID != 0 {
 		id = sql.NullInt64{Int64: g.ID, Valid: true}
 	}
-	return mapErr(r.q.QueryRowContext(ctx, `INSERT INTO device_groups (id, name, note, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?) RETURNING id`, id, strings.TrimSpace(g.Name), g.Note, toMs(g.CreatedAt),
+	return mapErr(r.q.QueryRowContext(ctx, `INSERT INTO device_groups (id, name, note, strategy_id, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?) RETURNING id`, id, strings.TrimSpace(g.Name), g.Note, nullID(g.StrategyID), toMs(g.CreatedAt),
 		toMs(g.UpdatedAt)).Scan(&g.ID))
 }
 
 // Get returns the group with id.
 func (r *DeviceGroups) Get(ctx context.Context, id int64) (*DeviceGroup, error) {
 	return scanDeviceGroup(r.q.QueryRowContext(ctx,
-		`SELECT id, name, note, created_at, updated_at FROM device_groups WHERE id = ?`, id))
+		`SELECT id, name, note, strategy_id, created_at, updated_at FROM device_groups WHERE id = ?`, id))
 }
 
 // GetByName returns the group named name (case-insensitive).
 func (r *DeviceGroups) GetByName(ctx context.Context, name string) (*DeviceGroup, error) {
-	return scanDeviceGroup(r.q.QueryRowContext(ctx, `SELECT id, name, note, created_at, updated_at
+	return scanDeviceGroup(r.q.QueryRowContext(ctx, `SELECT id, name, note, strategy_id, created_at, updated_at
 		FROM device_groups WHERE name = ? COLLATE NOCASE`, strings.TrimSpace(name)))
 }
 
@@ -376,7 +382,7 @@ func (r *DeviceGroups) List(ctx context.Context, scope DeviceScope, limit, offse
 	if err := r.q.QueryRowContext(ctx, `SELECT count(*) FROM device_groups g`+filter, args...).Scan(&total); err != nil {
 		return nil, 0, mapErr(err)
 	}
-	rows, err := r.q.QueryContext(ctx, `SELECT g.id, g.name, g.note, g.created_at, g.updated_at
+	rows, err := r.q.QueryContext(ctx, `SELECT g.id, g.name, g.note, g.strategy_id, g.created_at, g.updated_at
 		FROM device_groups g`+filter+` ORDER BY g.name COLLATE NOCASE, g.id LIMIT ? OFFSET ?`,
 		append(args, clampLimit(limit, 100, 1000), max(offset, 0))...)
 	if err != nil {

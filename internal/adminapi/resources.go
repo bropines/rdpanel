@@ -125,6 +125,13 @@ func registerResources(r chi.Router, c *authCore) {
 		r.Patch("/device-groups/{group_id}", a.handleUpdateDeviceGroup)
 		r.Delete("/device-groups/{group_id}", a.handleDeleteDeviceGroup)
 
+		r.Get("/strategies", a.handleListStrategies)
+		r.Post("/strategies", a.handleCreateStrategy)
+		r.Get("/strategies/{strategy_id}", a.handleGetStrategy)
+		r.Patch("/strategies/{strategy_id}", a.handleUpdateStrategy)
+		r.Delete("/strategies/{strategy_id}", a.handleDeleteStrategy)
+		r.Post("/strategies/{strategy_id}/default", a.handleSetDefaultStrategy)
+
 		r.Get("/settings", a.handleGetSettings)
 		r.Patch("/settings", a.handleUpdateSettings)
 		r.Put("/settings/logo", a.handleUploadLogo)

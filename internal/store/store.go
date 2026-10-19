@@ -54,6 +54,8 @@ type Store struct {
 	WebAuthnChallenges  *WebAuthnChallenges
 	// APITokens are personal tokens for the admin API.
 	APITokens *APITokens
+	// ClientStrategies manages client MDM configuration strategies.
+	ClientStrategies *ClientStrategies
 }
 
 // Option configures a Store.
@@ -115,6 +117,7 @@ func build(d *db.DB, q db.Querier, o options) *Store {
 	s.WebAuthnCredentials = &WebAuthnCredentials{q: q, now: now}
 	s.WebAuthnChallenges = &WebAuthnChallenges{q: q, now: now}
 	s.APITokens = &APITokens{q: q, now: now}
+	s.ClientStrategies = &ClientStrategies{q: q, now: now}
 	return s
 }
 

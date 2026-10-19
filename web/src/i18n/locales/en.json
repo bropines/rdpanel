@@ -714,6 +714,7 @@
     "description": "hbbs/hbbr health, runtime settings kept in sync by the panel, and diagnostics.",
     "tabs": {
       "settings": "Settings",
+      "strategies": "Client Strategies",
       "viewers": "Viewers",
       "console": "Console",
       "relays": "Relays",
@@ -1437,5 +1438,95 @@
     "tokensHint": "Explore and try every endpoint in the interactive API docs.",
     "csrfAuto": "Filled in automatically from the rdpanel_csrf cookie; not needed with a Bearer API token.",
     "loadFailed": "Could not load the API description (/api/v1/openapi.json)."
+  },
+  "strategies": {
+    "title": "Client Strategies",
+    "subtitle": "Centralized MDM configurations pushed to RustDesk clients in heartbeat responses.",
+    "default": "Default",
+    "emptyTitle": "No client strategies yet",
+    "emptyDesc": "Create custom configuration policies or load one of the security presets below.",
+    "newStrategy": "New Strategy",
+    "createStrategy": "Create strategy",
+    "editStrategy": "Edit strategy",
+    "loadTemplate": "Load preset template",
+    "name": "Strategy name",
+    "note": "Description / Note",
+    "notePlaceholder": "What is this strategy for?",
+    "strategyDialogDesc": "Settings configured here will be distributed to clients upon connection.",
+    "makeDefault": "Set as default",
+    "deleteTitle": "Delete strategy \"{{name}}\"?",
+    "deleteDesc": "Devices and groups assigned to this strategy will revert to the system default.",
+    "deviceHint": "Overrides group and system default policies for this specific client.",
+    "groupHint": "Applies to all devices in this group that have no individual strategy override.",
+    "inheritedFromGroup": "Inherited from group",
+    "inheritedOrDefault": "Inherited (default)",
+    "devicesCount_one": "{{count}} device",
+    "devicesCount_other": "{{count}} devices",
+    "actions": {
+      "duplicate": "Duplicate",
+      "makeDefault": "Set as default"
+    },
+    "badges": {
+      "default": "Default policy"
+    },
+    "sections": {
+      "auth": "Access & Permissions",
+      "permissions": "Session Capabilities",
+      "security": "Security & Controls"
+    },
+    "approveMode": {
+      "label": "Incoming connection approval",
+      "click": "Click to confirm",
+      "password": "Password only",
+      "both": "Password or click"
+    },
+    "verificationMethod": {
+      "label": "Password method",
+      "temporary": "Temporary one-time password",
+      "permanent": "Permanent password only",
+      "both": "Both temporary and permanent"
+    },
+    "whitelist": {
+      "label": "IP whitelist",
+      "hint": "Comma-separated IPs or CIDRs allowed to connect to this device (empty = any IP)."
+    },
+    "features": {
+      "keyboard": "Remote keyboard & mouse",
+      "clipboard": "Clipboard synchronization",
+      "fileTransfer": "File transfers",
+      "audio": "Audio streaming",
+      "tunnel": "TCP tunneling",
+      "remoteRestart": "Remote system reboot",
+      "recordSession": "Record session",
+      "recordSessionDesc": "Automatically records remote sessions on client machines."
+    },
+    "security": {
+      "allowConfigMod": {
+        "title": "Allow local config modification",
+        "desc": "If disabled, end users cannot change RustDesk client settings locally."
+      },
+      "lockAfterSession": {
+        "title": "Lock workstation on disconnect",
+        "desc": "Automatically locks the OS screen when remote session ends."
+      }
+    },
+    "directServer": {
+      "title": "Direct IP connection",
+      "desc": "Allow direct connections bypassing rendezvous/relay servers."
+    },
+    "summary": {
+      "mode": "Mode",
+      "auth": "Auth"
+    },
+    "templates": {
+      "standard": "Standard Office",
+      "strict": "Strict Security",
+      "server": "Unattended Server"
+    },
+    "toasts": {
+      "defaultSet": "Default strategy updated",
+      "deleted": "Strategy deleted"
+    }
   }
 }
+

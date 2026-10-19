@@ -18,7 +18,7 @@ import {
   SectionTitle,
   useToastError,
 } from "@/components";
-import { DeviceGroupPicker, UserPicker } from "@/components/pickers";
+import { DeviceGroupPicker, StrategyPicker, UserPicker } from "@/components/pickers";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -56,6 +56,8 @@ function EditForm({ device, isAdmin }: { device: DeviceDetail; isAdmin: boolean 
   const [ownerLabel, setOwnerLabel] = useState<string | undefined>(device.owner ? userLabel(device.owner) : undefined);
   const [group, setGroup] = useState<number | null>(device.device_group_id ?? null);
   const [groupLabel, setGroupLabel] = useState<string | undefined>(device.device_group?.name);
+  const [strategy, setStrategy] = useState<number | null>(device.strategy_id ?? null);
+  const [strategyLabel, setStrategyLabel] = useState<string | undefined>(device.strategy?.name);
 
   useEffect(() => {
     setAlias(device.alias ?? "");
@@ -64,20 +66,33 @@ function EditForm({ device, isAdmin }: { device: DeviceDetail; isAdmin: boolean 
     setOwnerLabel(device.owner ? userLabel(device.owner) : undefined);
     setGroup(device.device_group_id ?? null);
     setGroupLabel(device.device_group?.name);
-  }, [device.id, device.alias, device.note, device.owner_user_id, device.device_group_id, device.owner, device.device_group]);
+    setStrategy(device.strategy_id ?? null);
+    setStrategyLabel(device.strategy?.name);
+  }, [
+    device.id,
+    device.alias,
+    device.note,
+    device.owner_user_id,
+    device.device_group_id,
+    device.strategy_id,
+    device.owner,
+    device.device_group,
+    device.strategy,
+  ]);
 
   const dirty =
     alias !== (device.alias ?? "") ||
     note !== (device.note ?? "") ||
     owner !== (device.owner_user_id ?? null) ||
-    group !== (device.device_group_id ?? null);
+    group !== (device.device_group_id ?? null) ||
+    strategy !== (device.strategy_id ?? null);
 
   const save = useMutation({
     mutationFn: () =>
       devicesApi.update(device.id, {
         alias,
         note,
-        ...(isAdmin ? { owner_user_id: owner, device_group_id: group } : {}),
+        ...(isAdmin ? { owner_user_id: owner, device_group_id: group, strategy_id: strategy } : {}),
       }),
     onSuccess: () => {
       toast.success(t("common.saved"));
@@ -121,6 +136,20 @@ function EditForm({ device, isAdmin }: { device: DeviceDetail; isAdmin: boolean 
               onChange={(id, g) => {
                 setGroup(id);
                 setGroupLabel(g?.name);
+              }}
+            />
+          </Field>
+        )}
+        {isAdmin && (
+          <Field label={t("devices.strategy")} htmlFor="dev-strategy" hint={t("strategies.deviceHint")}>
+            <StrategyPicker
+              id="dev-strategy"
+              value={strategy}
+              valueLabel={strategyLabel}
+              noneLabel={t("strategies.inheritedOrDefault")}
+              onChange={(id, s) => {
+                setStrategy(id);
+                setStrategyLabel(s?.name);
               }}
             />
           </Field>
@@ -242,6 +271,16 @@ export function DeviceDrawer({
                     [t("devices.ip"), d.last_seen_ip ? <Mono key="ip">{d.last_seen_ip}</Mono> : "—"],
                     [t("devices.owner"), userLabel(d.owner)],
                     [t("devices.group"), d.device_group?.name ?? "—"],
+                    [
+                      t("devices.strategy"),
+                      d.strategy?.name ? (
+                        d.strategy.name
+                      ) : d.device_group?.name ? (
+                        <span key="strat" className="text-muted-foreground">{t("strategies.inheritedFromGroup")}</span>
+                      ) : (
+                        <span key="strat" className="text-muted-foreground">{t("strategies.default")}</span>
+                      ),
+                    ],
                     [t("devices.uuid"), d.uuid ? <Mono key="uuid" className="break-all text-xs">{d.uuid}</Mono> : "—"],
                     [t("devices.lastHeartbeat"), <RelativeTime key="hb" iso={d.last_heartbeat_at} />],
                     [t("devices.sysinfoAt"), <RelativeTime key="si" iso={d.sysinfo_at} />],

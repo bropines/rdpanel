@@ -1,6 +1,6 @@
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { ColumnDef, RowSelectionState } from "@tanstack/react-table";
-import { BookPlus, Download, FolderInput, MoreHorizontal, Power, Trash2, UserPlus, X } from "lucide-react";
+import { BookPlus, Download, FolderInput, MoreHorizontal, Power, ShieldCheck, Trash2, UserPlus, X } from "lucide-react";
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
@@ -51,7 +51,7 @@ export function buildDeviceQuery(
   return q;
 }
 
-type BulkMode = "owner" | "group" | "book";
+type BulkMode = "owner" | "group" | "strategy" | "book";
 
 function DevicesView({ my }: { my: boolean }) {
   const { t } = useTranslation();
@@ -161,6 +161,13 @@ function DevicesView({ my }: { my: boolean }) {
         enableSorting: false,
         meta: { label: t("devices.group"), defaultHidden: my } satisfies ColumnMeta,
         cell: ({ row: { original: d } }) => d.device_group?.name ?? <span className="text-muted-foreground">—</span>,
+      },
+      {
+        id: "strategy",
+        header: t("devices.strategy"),
+        enableSorting: false,
+        meta: { label: t("devices.strategy"), defaultHidden: true } satisfies ColumnMeta,
+        cell: ({ row: { original: d } }) => d.strategy?.name ?? <span className="text-muted-foreground">—</span>,
       },
       {
         id: "last_seen_at",
@@ -330,6 +337,10 @@ function DevicesView({ my }: { my: boolean }) {
                 <Button size="sm" variant="outline" onClick={() => setBulk("group")}>
                   <FolderInput />
                   {t("devices.assignGroup")}
+                </Button>
+                <Button size="sm" variant="outline" onClick={() => setBulk("strategy")}>
+                  <ShieldCheck />
+                  {t("devices.assignStrategy")}
                 </Button>
               </>
             )}

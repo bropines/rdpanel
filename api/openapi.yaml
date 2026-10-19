@@ -95,6 +95,8 @@ tags:
   - name: audit
   - name: server
   - name: relays
+  - name: strategies
+    description: Client MDM configuration strategies pushed in heartbeat responses.
   - name: settings
   - name: lookup
   - name: events
@@ -1691,6 +1693,109 @@ paths:
         - $ref: "#/components/parameters/CsrfHeader"
       responses:
         "204": { description: Deleted. }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /strategies:
+    get:
+      tags: [strategies]
+      operationId: listStrategies
+      summary: List client MDM strategies (admin).
+      responses:
+        "200":
+          description: List of client strategies.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ClientStrategyList" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+    post:
+      tags: [strategies]
+      operationId: createStrategy
+      summary: Create client MDM strategy.
+      parameters:
+        - $ref: "#/components/parameters/CsrfHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ClientStrategyInput" }
+      responses:
+        "201":
+          description: Created.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ClientStrategy" }
+        "400": { $ref: "#/components/responses/ValidationFailed" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409": { $ref: "#/components/responses/Conflict" }
+  /strategies/{strategy_id}:
+    parameters:
+      - $ref: "#/components/parameters/StrategyId"
+    get:
+      tags: [strategies]
+      operationId: getStrategy
+      summary: Get client MDM strategy.
+      responses:
+        "200":
+          description: Strategy detail.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ClientStrategy" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    patch:
+      tags: [strategies]
+      operationId: updateStrategy
+      summary: Update client MDM strategy.
+      parameters:
+        - $ref: "#/components/parameters/CsrfHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ClientStrategyPatch" }
+      responses:
+        "200":
+          description: Updated.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ClientStrategy" }
+        "400": { $ref: "#/components/responses/ValidationFailed" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+    delete:
+      tags: [strategies]
+      operationId: deleteStrategy
+      summary: Delete client MDM strategy.
+      parameters:
+        - $ref: "#/components/parameters/CsrfHeader"
+      responses:
+        "204": { description: Deleted. }
+        "400": { $ref: "#/components/responses/ValidationFailed" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /strategies/{strategy_id}/default:
+    parameters:
+      - $ref: "#/components/parameters/StrategyId"
+    post:
+      tags: [strategies]
+      operationId: setDefaultStrategy
+      summary: Mark client MDM strategy as default.
+      parameters:
+        - $ref: "#/components/parameters/CsrfHeader"
+      responses:
+        "200":
+          description: Updated default strategy.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ClientStrategy" }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/NotFound" }
@@ -3509,6 +3614,11 @@ components:
       in: path
       required: true
       schema: { type: integer, format: int64 }
+    StrategyId:
+      name: strategy_id
+      in: path
+      required: true
+      schema: { type: integer, format: int64 }
     BookId:
       name: book_id
       in: path
@@ -4030,6 +4140,11 @@ components:
           oneOf:
             - $ref: "#/components/schemas/GroupRef"
             - type: "null"
+        strategy_id: { type: [integer, "null"], format: int64 }
+        strategy:
+          oneOf:
+            - $ref: "#/components/schemas/GroupRef"
+            - type: "null"
         os_family: { $ref: "#/components/schemas/OsFamily" }
         online: { type: boolean, description: "Live presence (hbbs OnlineRequest, heartbeat fallback)." }
         online_since: { type: [string, "null"], format: date-time, description: Start of the current online/offline streak. }
@@ -4301,15 +4416,17 @@ components:
         note: { type: string, maxLength: 4096 }
         owner_user_id: { type: [integer, "null"], format: int64, description: Admin only. }
         device_group_id: { type: [integer, "null"], format: int64, description: Admin only. }
+        strategy_id: { type: [integer, "null"], format: int64, description: Admin only. }
     DeviceBulkRequest:
       type: object
       required: [action, device_ids]
       additionalProperties: false
       properties:
-        action: { type: string, enum: [assign_owner, assign_group, kick, delete] }
+        action: { type: string, enum: [assign_owner, assign_group, assign_strategy, kick, delete] }
         device_ids: { type: array, minItems: 1, maxItems: 1000, items: { type: integer, format: int64 } }
         owner_user_id: { type: [integer, "null"], format: int64 }
         device_group_id: { type: [integer, "null"], format: int64 }
+        strategy_id: { type: [integer, "null"], format: int64 }
     PresenceChangedEvent:
       type: object
       required: [id, rustdesk_id, online, since]
@@ -4447,6 +4564,11 @@ components:
         id: { type: integer, format: int64 }
         name: { type: string }
         note: { type: string }
+        strategy_id: { type: [integer, "null"], format: int64 }
+        strategy:
+          oneOf:
+            - $ref: "#/components/schemas/GroupRef"
+            - type: "null"
         device_count: { type: integer }
         created_at: { type: string, format: date-time }
         updated_at: { type: string, format: date-time }
@@ -4457,12 +4579,14 @@ components:
       properties:
         name: { type: string, minLength: 1, maxLength: 128 }
         note: { type: string, maxLength: 4096 }
+        strategy_id: { type: [integer, "null"], format: int64 }
     DeviceGroupPatch:
       type: object
       additionalProperties: false
       properties:
         name: { type: string, minLength: 1, maxLength: 128 }
         note: { type: string, maxLength: 4096 }
+        strategy_id: { type: [integer, "null"], format: int64 }
     DeviceGroupPage:
       allOf:
         - $ref: "#/components/schemas/PageMeta"
@@ -5427,4 +5551,50 @@ components:
         region: { type: string }
         health: { type: string }
         last_sync_at: { type: string, format: date-time }
+
+    ClientStrategy:
+      type: object
+      required: [id, name, note, config_options, is_default, device_count, created_at, updated_at]
+      properties:
+        id: { type: integer, format: int64 }
+        name: { type: string }
+        note: { type: string }
+        config_options:
+          type: object
+          additionalProperties: { type: string }
+          description: Key-value options pushed to RustDesk clients in heartbeat.
+        is_default: { type: boolean }
+        device_count: { type: integer, description: Number of devices effectively governed by this strategy. }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+
+    ClientStrategyInput:
+      type: object
+      required: [name, config_options]
+      additionalProperties: false
+      properties:
+        name: { type: string, minLength: 1, maxLength: 64 }
+        note: { type: string, maxLength: 4096 }
+        config_options:
+          type: object
+          additionalProperties: { type: string }
+        is_default: { type: boolean }
+
+    ClientStrategyPatch:
+      type: object
+      additionalProperties: false
+      properties:
+        name: { type: string, minLength: 1, maxLength: 64 }
+        note: { type: string, maxLength: 4096 }
+        config_options:
+          type: object
+          additionalProperties: { type: string }
+        is_default: { type: boolean }
+
+    ClientStrategyList:
+      type: object
+      required: [items]
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/ClientStrategy" } }
+
 

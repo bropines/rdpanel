@@ -145,14 +145,52 @@ func (s *Service) Set(ctx context.Context, iceServers string, congestion *bool, 
 	return copyOpts(o), nil
 }
 
-// StrategyFor implements clientapi.StrategyProvider: the same strategy for
-// every device, or none while the options were never saved.
-func (s *Service) StrategyFor(ctx context.Context, _ *store.Device) (*clientapi.Strategy, error) {
+// StrategyFor implements clientapi.StrategyProvider: resolves the effective MDM
+// strategy for d (device -> group -> default) and merges global client options
+// (such as ICE servers).
+func (s *Service) StrategyFor(ctx context.Context, d *store.Device) (*clientapi.Strategy, error) {
+	var strat *store.ClientStrategy
+	if s.st != nil && s.st.ClientStrategies != nil {
+		var err error
+		strat, err = s.st.ClientStrategies.ResolveForDevice(ctx, d)
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	o, err := s.Get(ctx)
-	if err != nil || o == nil {
+	if err != nil && strat == nil {
 		return nil, err
 	}
-	return &clientapi.Strategy{ModifiedAt: o.ModifiedAt, ConfigOptions: ConfigOptions(o)}, nil
+
+	if strat == nil && o == nil {
+		return nil, nil
+	}
+
+	cfg := make(map[string]string)
+	var modAt int64
+
+	if strat != nil {
+		for k, v := range strat.ConfigOptions {
+			cfg[k] = v
+		}
+		modAt = strat.UpdatedAt.UnixMilli()
+	}
+
+	if o != nil {
+		for k, v := range ConfigOptions(o) {
+			if strat == nil {
+				cfg[k] = v
+			} else if _, ok := cfg[k]; !ok && v != "" {
+				cfg[k] = v
+			}
+		}
+		if o.ModifiedAt > modAt {
+			modAt = o.ModifiedAt
+		}
+	}
+
+	return &clientapi.Strategy{ModifiedAt: modAt, ConfigOptions: cfg}, nil
 }
 
 // ConfigOptions is the config_options map pushed to clients. Every managed key

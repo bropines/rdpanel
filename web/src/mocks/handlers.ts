@@ -14,6 +14,7 @@ import { federationHandlers } from "@/mocks/federation";
 import { logHandlers } from "@/mocks/logs";
 import { relayHandlers } from "@/mocks/relays";
 import { liveStream } from "@/mocks/sse";
+import { strategyHandlers } from "@/mocks/strategies";
 
 type S = Schemas;
 const B = "/api/v1/admin";
@@ -1741,6 +1742,7 @@ export const handlers = [
   ...relayHandlers,
   ...logHandlers,
   ...federationHandlers,
+  ...strategyHandlers,
 ];
 
 function ensureTags(bookId: number, names: string[]) {
