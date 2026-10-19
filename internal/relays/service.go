@@ -50,6 +50,7 @@ const (
 const (
 	SettingRequireApproval   = "relays.require_approval"
 	SettingAllowPrivateHosts = "relays.allow_private_hosts"
+	SettingAutoWeights       = "relays.auto_weights"
 )
 
 // RotationPusher sends the computed relay list to hbbs now
@@ -217,6 +218,14 @@ func (s *Service) Notify() {
 	}
 }
 
+func (s *Service) prepareRelaysForRotation(ctx context.Context, rs []Relay) []Relay {
+	opts, err := s.GetOptions(ctx)
+	if err == nil && opts.AutoWeights {
+		return ApplyAutoWeights(rs, s.getActiveSessionsMap())
+	}
+	return rs
+}
+
 // RelayServers implements reconcile.RelaySource.
 func (s *Service) RelayServers(ctx context.Context) []string {
 	rs, err := s.st.List(ctx)
@@ -224,6 +233,7 @@ func (s *Service) RelayServers(ctx context.Context) []string {
 		s.log.Warn("relays: list for rotation", slog.Any("err", err))
 		return nil
 	}
+	rs = s.prepareRelaysForRotation(ctx, rs)
 	return ComputeRotation(rs).Servers
 }
 
@@ -310,7 +320,7 @@ func (s *Service) Pass(ctx context.Context, probeAll bool) {
 			}
 		}
 	}
-	rot := ComputeRotation(rs)
+	rot := ComputeRotation(s.prepareRelaysForRotation(ctx, rs))
 	s.updateMetrics(rs, rot)
 	s.sampleTraffic(ctx, rs)
 	key := strings.Join(rot.Servers, ",")
@@ -704,6 +714,7 @@ func (s *Service) List(ctx context.Context) ([]View, Rotation, error) {
 	if err != nil {
 		return nil, Rotation{}, err
 	}
+	rs = s.prepareRelaysForRotation(ctx, rs)
 	rot := ComputeRotation(rs)
 	return s.views(rs, rot), rot, nil
 }
@@ -714,6 +725,7 @@ func (s *Service) Get(ctx context.Context, id int64) (View, error) {
 	if err != nil {
 		return View{}, err
 	}
+	rs = s.prepareRelaysForRotation(ctx, rs)
 	rot := ComputeRotation(rs)
 	for _, v := range s.views(rs, rot) {
 		if v.ID == id {
@@ -768,6 +780,7 @@ func newToken() (string, error) {
 type Options struct {
 	RequireApproval   bool `json:"require_approval"`
 	AllowPrivateHosts bool `json:"allow_private_hosts"`
+	AutoWeights       bool `json:"auto_weights"`
 }
 
 // GetOptions reads the relay options (require_approval defaults to on).
@@ -779,6 +792,9 @@ func (s *Service) GetOptions(ctx context.Context) (Options, error) {
 	if err := s.cfg.Panel.Settings.Get(ctx, SettingAllowPrivateHosts, &o.AllowPrivateHosts); err != nil && !errors.Is(err, store.ErrNotFound) {
 		return o, err
 	}
+	if err := s.cfg.Panel.Settings.Get(ctx, SettingAutoWeights, &o.AutoWeights); err != nil && !errors.Is(err, store.ErrNotFound) {
+		return o, err
+	}
 	return o, nil
 }
 
@@ -787,7 +803,29 @@ func (s *Service) SetOptions(ctx context.Context, o Options, by *int64) error {
 	if err := s.cfg.Panel.Settings.Set(ctx, SettingRequireApproval, o.RequireApproval, by); err != nil {
 		return err
 	}
-	return s.cfg.Panel.Settings.Set(ctx, SettingAllowPrivateHosts, o.AllowPrivateHosts, by)
+	if err := s.cfg.Panel.Settings.Set(ctx, SettingAllowPrivateHosts, o.AllowPrivateHosts, by); err != nil {
+		return err
+	}
+	if err := s.cfg.Panel.Settings.Set(ctx, SettingAutoWeights, o.AutoWeights, by); err != nil {
+		return err
+	}
+	s.Notify()
+	return nil
+}
+
+func (s *Service) getActiveSessionsMap() map[int64]int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	m := make(map[int64]int, len(s.liveStats)+len(s.lastTraffic))
+	for id, st := range s.liveStats {
+		m[id] = st.Usage.RelaysActive
+	}
+	for id, ts := range s.lastTraffic {
+		if ts.activeSessions > m[id] {
+			m[id] = ts.activeSessions
+		}
+	}
+	return m
 }
 
 // Create adds a static or agent relay. Agents get their enrollment material.

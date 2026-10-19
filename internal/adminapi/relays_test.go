@@ -351,3 +351,36 @@ func TestRelayPrefixRulesAPI(t *testing.T) {
 }
 
 func itoa(n int64) string { return strconv.FormatInt(n, 10) }
+
+func TestRelayGeoIPAPI(t *testing.T) {
+	e := newRelayEnv(t)
+	admin, _ := e.as("root", store.RoleAdmin)
+
+	// 1. Get status
+	code, m, _ := admin.do(http.MethodGet, "/relays/geoip/status", nil)
+	want(t, "get geoip status", code, 200, m)
+	if m["loaded"] != true || m["country_count"].(float64) <= 0 {
+		t.Fatalf("expected loaded=true, got %+v", m)
+	}
+
+	// 2. Lookup known IP
+	code, m, _ = admin.do(http.MethodGet, "/relays/geoip/lookup?ip=95.165.172.169", nil)
+	want(t, "lookup RU ip", code, 200, m)
+	if m["found"] != true || m["country_code"] != "RU" {
+		t.Fatalf("expected RU for 95.165.172.169, got %+v", m)
+	}
+
+	// 3. Lookup unknown IP
+	code, m, _ = admin.do(http.MethodGet, "/relays/geoip/lookup?ip=10.0.0.1", nil)
+	want(t, "lookup private ip", code, 200, m)
+	if m["found"] != false {
+		t.Fatalf("expected found=false for 10.0.0.1, got %+v", m)
+	}
+
+	// 4. Refresh endpoint
+	code, m, _ = admin.do(http.MethodPost, "/relays/geoip/refresh", map[string]any{})
+	want(t, "refresh geoip", code, 200, m)
+	if m["loaded"] != true {
+		t.Fatalf("expected loaded=true after refresh, got %+v", m)
+	}
+}

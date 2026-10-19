@@ -21,6 +21,7 @@ import (
 	"github.com/bropines/rdpanel/internal/crypto"
 	"github.com/bropines/rdpanel/internal/db"
 	"github.com/bropines/rdpanel/internal/events"
+	"github.com/bropines/rdpanel/internal/federation"
 	"github.com/bropines/rdpanel/internal/hbbs/control"
 	"github.com/bropines/rdpanel/internal/hbbs/hbbstest"
 	"github.com/bropines/rdpanel/internal/hbbs/presence"
@@ -71,6 +72,7 @@ type b2opts struct {
 	updates      UpdateChecker
 	logs         *logs.Buffer
 	logCapture   string
+	federation   *federation.Service
 }
 
 const testPassword = "correct horse battery"
@@ -97,7 +99,7 @@ func newB2Env(t *testing.T, o b2opts) *b2env {
 	deps := Deps{Log: log, Config: cfg, Store: st, AEAD: aead, JWT: jwtSvc, Hasher: cheapHasher,
 		Limiter:      auth.NewBackoff(auth.BackoffConfig{Free: 50, Base: time.Second, Max: time.Minute, Forget: time.Hour}, clk.now),
 		ConsoleLimit: o.consoleLimit, Schema: d, Updates: o.updates, StartedAt: clk.t.Add(-90 * time.Minute),
-		Logs: o.logs, LogCapture: o.logCapture, LogSources: []string{"hbbs", "hbbr", "panel"}}
+		Logs: o.logs, LogCapture: o.logCapture, LogSources: []string{"hbbs", "hbbr", "panel"}, Federation: o.federation}
 	e := &b2env{ctx: ctx, pres: &b2bFakePresence{online: map[string]bool{}}}
 	deps.PresenceSrc = e.pres
 	if o.hbbs {

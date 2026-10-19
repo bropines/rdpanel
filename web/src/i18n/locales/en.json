@@ -717,6 +717,7 @@
       "viewers": "Viewers",
       "console": "Console",
       "relays": "Relays",
+      "federation": "Federation",
       "logs": "Logs"
     },
     "rendezvous": "ID server (hbbs)",
@@ -1278,7 +1279,9 @@
       "requireApproval": "Approve new agents",
       "requireApprovalHint": "An enrolled agent gets its config (and starts hbbr) only after an admin approves it.",
       "allowPrivate": "Allow private relay hosts",
-      "allowPrivateHint": "Let static relays and probes target private, loopback and link-local addresses (off: SSRF guard)."
+      "allowPrivateHint": "Let static relays and probes target private, loopback and link-local addresses (off: SSRF guard).",
+      "autoWeights": "Auto-balance weights by load",
+      "autoWeightsHint": "Dynamically adjust relay rotation weights (1-5) based on active session load."
     },
     "enroll": {
       "title": "Enroll {{name}}",
@@ -1364,7 +1367,66 @@
       "deleteTitle": "Delete prefix rule {{cidr}}?",
       "deleteHint": "Traffic from this subnet will fall back to default rotation (or less specific rules).",
       "ruleCount_one": "{{count}} rule",
-      "ruleCount_other": "{{count}} rules"
+      "ruleCount_other": "{{count}} rules",
+      "geoipStatus": "GeoIP: {{source}} ({{countries}} countries, {{prefixes}} prefixes)",
+      "updateGeoip": "Update GeoIP database",
+      "updatingGeoip": "Updating GeoIP…",
+      "geoipUpdated": "GeoIP database updated successfully",
+      "testIp": "Test IP lookup",
+      "testIpHolder": "IP address (e.g. 95.165.172.169)",
+      "testIpMatched": "Matched: {{country}} ({{code}}), CIDR: {{cidr}}",
+      "testIpNotFound": "No matching country prefix found",
+      "testBtn": "Lookup"
+    }
+  },
+  "federation": {
+    "title": "Panel Federation",
+    "description": "Federate with peer RD Panels to discover distributed relays and bridge infrastructure across geographic regions.",
+    "peers": {
+      "title": "Peered Panels",
+      "description": "Registered RD Panel instances synchronized on a recurring schedule.",
+      "add": "Add peer",
+      "name": "Name",
+      "apiUrl": "API URL",
+      "authToken": "Auth token",
+      "syncRelays": "Sync relays",
+      "syncRelaysDesc": "Automatically import healthy relays announced by this peer into local rotation.",
+      "status": "Status",
+      "lastSync": "Last sync",
+      "syncNow": "Sync now",
+      "syncing": "Syncing...",
+      "deleteTitle": "Remove peer \"{{name}}\"?",
+      "deleteHint": "All announced relays from this peer will be removed from local rotation.",
+      "empty": "No peered panels registered yet. Add a peer to begin discovering external relays."
+    },
+    "relays": {
+      "title": "Announced Federated Relays",
+      "description": "Relays exported by active peered RD Panels and available for client routing.",
+      "remoteName": "Relay Name",
+      "publicHost": "Public Host",
+      "peer": "Origin Peer",
+      "region": "Region",
+      "health": "Health",
+      "lastSync": "Discovered",
+      "empty": "No federated relays discovered yet. Ensure peer panels are active and have \"Sync relays\" enabled."
+    },
+    "status": {
+      "active": "Active",
+      "unreachable": "Unreachable",
+      "unknown": "Unknown"
+    },
+    "addDialog": {
+      "title": "Register Peered Panel",
+      "description": "Enter the URL and authentication token of the remote RD Panel.",
+      "namePlaceholder": "e.g. ams-eu-panel",
+      "urlPlaceholder": "https://rdpanel.example.com",
+      "tokenPlaceholder": "Bearer token or API token",
+      "submit": "Register peer"
+    },
+    "toasts": {
+      "peerAdded": "Peer registered successfully.",
+      "peerDeleted": "Peer removed.",
+      "syncSuccess": "Peer synchronized successfully."
     }
   },
   "apiDocs": {

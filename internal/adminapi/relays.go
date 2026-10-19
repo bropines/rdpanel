@@ -59,6 +59,9 @@ func (c *b2bCore) registerRelays(r chi.Router) {
 		r.Get("/relays/prefix-rules/countries", c.handleListPrefixRuleCountries)
 		r.Post("/relays/prefix-rules/import-country", c.handleImportCountryPrefixRules)
 		r.Delete("/relays/prefix-rules/{id}", c.handleDeletePrefixRule)
+		r.Get("/relays/geoip/status", c.handleGetGeoIPStatus)
+		r.Post("/relays/geoip/refresh", c.handlePostGeoIPRefresh)
+		r.Get("/relays/geoip/lookup", c.handleGetGeoIPLookup)
 		r.Get("/relays/{id}", c.handleGetRelay)
 		r.Patch("/relays/{id}", c.handlePatchRelay)
 		r.Delete("/relays/{id}", c.handleDeleteRelay)
@@ -604,7 +607,7 @@ func (c *b2bCore) handlePutRelayOptions(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	recordAudit(r.Context(), c.d, r, "relay.options.update", "settings", "relays",
-		map[string]any{"require_approval": o.RequireApproval, "allow_private_hosts": o.AllowPrivateHosts})
+		map[string]any{"require_approval": o.RequireApproval, "allow_private_hosts": o.AllowPrivateHosts, "auto_weights": o.AutoWeights})
 	httpx.WriteJSON(w, http.StatusOK, o)
 }
 
@@ -790,5 +793,47 @@ func (c *b2bCore) handleImportCountryPrefixRules(w http.ResponseWriter, r *http.
 	}
 	c.audit(r, "relays.prefix_rule.import_country", "relay_prefix_rule", 0,
 		map[string]any{"country_code": res.CountryCode, "relay_host": res.RelayHost, "added_count": res.AddedCount})
+	httpx.WriteJSON(w, http.StatusOK, res)
+}
+
+func (c *b2bCore) handleGetGeoIPStatus(w http.ResponseWriter, r *http.Request) {
+	if !c.needRelays(w) {
+		return
+	}
+	engine := relays.GetGeoIPEngine()
+	httpx.WriteJSON(w, http.StatusOK, engine.Status())
+}
+
+func (c *b2bCore) handlePostGeoIPRefresh(w http.ResponseWriter, r *http.Request) {
+	if !c.needRelays(w) {
+		return
+	}
+	var body struct {
+		SourceURL string `json:"source_url"`
+	}
+	_ = decodeBody(w, r, &body, 4<<10)
+	engine := relays.GetGeoIPEngine()
+	st, err := engine.RefreshFromURL(r.Context(), body.SourceURL)
+	if err != nil {
+		engine.LoadBuiltin()
+		st = engine.Status()
+		st.Source = "builtin (fallback after error: " + err.Error() + ")"
+	}
+	recordAudit(r.Context(), c.d, r, "relay.geoip.refresh", "settings", "relays",
+		map[string]any{"source": st.Source, "prefixes": st.PrefixCount, "countries": st.CountryCount})
+	httpx.WriteJSON(w, http.StatusOK, st)
+}
+
+func (c *b2bCore) handleGetGeoIPLookup(w http.ResponseWriter, r *http.Request) {
+	if !c.needRelays(w) {
+		return
+	}
+	ip := r.URL.Query().Get("ip")
+	if strings.TrimSpace(ip) == "" {
+		httpx.WriteError(w, http.StatusBadRequest, "invalid_parameter", "ip query parameter is required")
+		return
+	}
+	engine := relays.GetGeoIPEngine()
+	res := engine.Lookup(ip)
 	httpx.WriteJSON(w, http.StatusOK, res)
 }

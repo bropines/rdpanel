@@ -119,3 +119,43 @@ func TestNextHealth(t *testing.T) {
 		}
 	}
 }
+
+func TestApplyAutoWeights(t *testing.T) {
+	relays := []Relay{
+		rel(1, "low-load.example.com", 1, HealthActive),
+		rel(2, "high-load.example.com", 1, HealthActive),
+		rel(3, "mid-load.example.com", 1, HealthActive),
+		rel(4, "offline.example.com", 1, HealthOffline),
+	}
+	sessions := map[int64]int{
+		1: 0,
+		2: 100,
+		3: 50,
+		4: 0,
+	}
+
+	res := ApplyAutoWeights(relays, sessions)
+	// Least loaded (id 1) should get max weight 5
+	if res[0].Weight != 5 {
+		t.Fatalf("expected low-load weight 5, got %d", res[0].Weight)
+	}
+	// Highest loaded (id 2) should get min weight 1
+	if res[1].Weight != 1 {
+		t.Fatalf("expected high-load weight 1, got %d", res[1].Weight)
+	}
+	// Mid-loaded (id 3) should get intermediate weight 3
+	if res[2].Weight != 3 {
+		t.Fatalf("expected mid-load weight 3, got %d", res[2].Weight)
+	}
+	// Offline relay remains unchanged
+	if res[3].Weight != 1 {
+		t.Fatalf("expected offline weight 1, got %d", res[3].Weight)
+	}
+
+	// When all have equal load, original weights are kept
+	equalSessions := map[int64]int{1: 10, 2: 10, 3: 10}
+	equalRes := ApplyAutoWeights(relays, equalSessions)
+	if equalRes[0].Weight != 1 || equalRes[1].Weight != 1 || equalRes[2].Weight != 1 {
+		t.Fatalf("expected original weights preserved when load equal, got %v", equalRes)
+	}
+}

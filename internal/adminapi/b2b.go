@@ -81,6 +81,7 @@ func registerB2b(r chi.Router, d Deps, sessLoad func(http.Handler) http.Handler)
 	c.registerAudit(r)
 	c.registerServer(r)
 	c.registerRelays(r)
+	c.registerFederation(r)
 	c.registerAbout(r)
 }
 

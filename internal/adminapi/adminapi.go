@@ -18,6 +18,7 @@ import (
 	"github.com/bropines/rdpanel/internal/clientopts"
 	"github.com/bropines/rdpanel/internal/config"
 	"github.com/bropines/rdpanel/internal/crypto"
+	"github.com/bropines/rdpanel/internal/federation"
 	"github.com/bropines/rdpanel/internal/loginlog"
 	"github.com/bropines/rdpanel/internal/logs"
 	"github.com/bropines/rdpanel/internal/mailauth"
@@ -85,6 +86,8 @@ type Deps struct {
 	Reconciler SettingsReconciler
 	// Relays manages relays and relay agents (nil: /relays/* answer 503).
 	Relays RelayManager
+	// Federation manages peering and federated relays (nil: /federation/* answer 503).
+	Federation *federation.Service
 	// ClientOptions are the client options pushed in heartbeats (default:
 	// clientopts.New over Store and AEAD; the app shares one with clientapi).
 	ClientOptions *clientopts.Service

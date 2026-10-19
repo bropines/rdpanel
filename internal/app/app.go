@@ -22,6 +22,7 @@ import (
 	"github.com/bropines/rdpanel/internal/crypto"
 	"github.com/bropines/rdpanel/internal/db"
 	"github.com/bropines/rdpanel/internal/events"
+	"github.com/bropines/rdpanel/internal/federation"
 	"github.com/bropines/rdpanel/internal/httpx"
 	"github.com/bropines/rdpanel/internal/logs"
 	"github.com/bropines/rdpanel/internal/mailauth"
@@ -63,6 +64,8 @@ type App struct {
 	// Relays manages relays (local, static, agents), the computed hbbs relay
 	// list and the agent hub at /agent/v1/*.
 	Relays *relays.Service
+	// Federation manages peer panels and federated relays.
+	Federation *federation.Service
 	// Kicks queues admin "disconnect" requests delivered by client heartbeats;
 	// shared by the client API (Take) and the admin API (Kick).
 	Kicks *clientapi.MemKickQueue
@@ -135,6 +138,7 @@ func New(ctx context.Context, cfg *config.Config, log *slog.Logger, opts ...Opti
 		_ = a.DB.Close()
 		return nil, err
 	}
+	a.initFederation()
 	if cfg.Webhook.Enabled() {
 		a.Webhook = webhook.New(webhook.Config{
 			URL:    cfg.Webhook.URL,
@@ -201,6 +205,17 @@ func keyFileAttr(src crypto.KeySource, path string) string {
 		return ""
 	}
 	return path
+}
+
+func (a *App) initFederation() {
+	st := &federation.Store{DB: a.DB}
+	a.Federation = federation.NewService(federation.Config{
+		Store:   st,
+		Relays:  a.Relays,
+		Version: buildinfo.Get().Version,
+		Log:     a.Log.With("component", "federation"),
+	})
+	a.Federation.Start(context.Background())
 }
 
 // Close releases resources.

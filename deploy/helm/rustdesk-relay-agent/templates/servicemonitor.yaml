@@ -15,4 +15,5 @@ spec:
   endpoints:
     - port: relay
       interval: {{ .Values.serviceMonitor.interval }}
+      scrapeTimeout: {{ .Values.serviceMonitor.scrapeTimeout }}
 {{- end }}

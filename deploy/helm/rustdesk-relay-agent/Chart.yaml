@@ -1,11 +1,11 @@
 apiVersion: v2
 name: rustdesk-relay-agent
 description: >-
-  Remote relay agent (hbbr + rdpanel agent) for RD Panel: connects remote hbbr
-  instances to an RD Panel instance for automated rotation, limits, and monitoring.
+  Remote hbbr relay agent for RD Panel (RustDesk): manages a distributed hbbr relay,
+  auto-enrolled into and supervised by the central RD Panel.
 type: application
 version: 0.1.0
-appVersion: "0.5.3"
+appVersion: "0.5.9"
 kubeVersion: ">=1.25.0-0"
 home: https://github.com/bropines/rdpanel
 sources:
@@ -16,8 +16,8 @@ maintainers:
     url: https://github.com/bropines
 keywords:
   - rustdesk
-  - relay
   - hbbr
+  - relay
   - rdpanel
 annotations:
   artifacthub.io/license: MIT

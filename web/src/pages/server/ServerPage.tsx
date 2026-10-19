@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { Activity, Network, Radio, ScrollText, Server, SlidersHorizontal, TerminalSquare, View } from "lucide-react";
+import { Activity, Globe2, Network, Radio, ScrollText, Server, SlidersHorizontal, TerminalSquare, View } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 import type { Schemas } from "@/api/client";
@@ -11,6 +11,7 @@ import { Skeleton, Tabs, TabsContent, TabsList, TabsTrigger } from "@/components
 import { useTableSearch } from "@/lib/use-table";
 import { cn } from "@/lib/utils";
 import { Console } from "@/pages/server/Console";
+import { FederationTab } from "@/pages/server/Federation";
 import { LogsTab } from "@/pages/server/Logs";
 import { RelaysTab } from "@/pages/server/Relays";
 import { ClientConfigCard } from "@/pages/server/ClientConfigCard";
@@ -112,6 +113,10 @@ export function ServerPage() {
             <Network />
             {t("server.tabs.relays")}
           </TabsTrigger>
+          <TabsTrigger value="federation">
+            <Globe2 />
+            {t("server.tabs.federation")}
+          </TabsTrigger>
           <TabsTrigger value="viewers">
             <View />
             {t("server.tabs.viewers")}
@@ -135,6 +140,7 @@ export function ServerPage() {
           )}
         </TabsContent>
         <TabsContent value="relays">{tab === "relays" && <RelaysTab />}</TabsContent>
+        <TabsContent value="federation">{tab === "federation" && <FederationTab />}</TabsContent>
         <TabsContent value="viewers">{tab === "viewers" && <Viewers />}</TabsContent>
         <TabsContent value="console">{tab === "console" && <Console />}</TabsContent>
         <TabsContent value="logs">{tab === "logs" && <LogsTab />}</TabsContent>

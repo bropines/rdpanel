@@ -3,6 +3,7 @@ import {
   AlertTriangle,
   CheckCircle2,
   CircleDashed,
+  Globe,
   KeyRound,
   Loader2,
   MoreHorizontal,
@@ -33,6 +34,7 @@ import {
   type OverrideDraft,
   type Relay,
   type RelayEnrollment,
+  type RelayGeoIPLookupResult,
   type RelayList,
   type RelayPrefixRule,
 } from "@/api/relays";
@@ -150,7 +152,7 @@ function OptionsCard() {
   const o = q.data;
   return (
     <Card>
-      <CardContent className="grid gap-4 p-4 md:grid-cols-2">
+      <CardContent className="grid gap-4 p-4 md:grid-cols-3">
         <label className="flex items-start justify-between gap-3 text-sm">
           <span>
             <span className="font-medium">{t("relays.options.requireApproval")}</span>
@@ -165,6 +167,13 @@ function OptionsCard() {
           </span>
           <Switch checked={o.allow_private_hosts} disabled={save.isPending} onCheckedChange={(v) => save.mutate({ ...o, allow_private_hosts: v })} />
         </label>
+        <label className="flex items-start justify-between gap-3 text-sm">
+          <span>
+            <span className="font-medium">{t("relays.options.autoWeights")}</span>
+            <span className="block text-xs text-muted-foreground">{t("relays.options.autoWeightsHint")}</span>
+          </span>
+          <Switch checked={!!o.auto_weights} disabled={save.isPending} onCheckedChange={(v) => save.mutate({ ...o, auto_weights: v })} />
+        </label>
       </CardContent>
     </Card>
   );
@@ -178,8 +187,12 @@ function PrefixRulesCard({ relays }: { relays: Relay[] }) {
   const onError = useRelayError();
   const [adding, setAdding] = useState(false);
   const [deleting, setDeleting] = useState<RelayPrefixRule | null>(null);
+  const [testIp, setTestIp] = useState("");
+  const [lookupResult, setLookupResult] = useState<RelayGeoIPLookupResult | null>(null);
+  const [lookingUp, setLookingUp] = useState(false);
 
   const q = useQuery({ queryKey: relayKeys.prefixRules, queryFn: relaysApi.prefixRules });
+  const geoipStatus = useQuery({ queryKey: relayKeys.geoipStatus, queryFn: relaysApi.geoipStatus });
 
   const del = useMutation({
     mutationFn: (id: number) => relaysApi.deletePrefixRule(id),
@@ -191,11 +204,36 @@ function PrefixRulesCard({ relays }: { relays: Relay[] }) {
     onError,
   });
 
+  const refreshGeoip = useMutation({
+    mutationFn: () => relaysApi.geoipRefresh(),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: relayKeys.geoipStatus });
+      void qc.invalidateQueries({ queryKey: relayKeys.prefixCountries });
+      toast.success(t("relays.prefixRules.geoipUpdated"));
+    },
+    onError,
+  });
+
+  const handleTestIp = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!testIp.trim()) return;
+    setLookingUp(true);
+    try {
+      const res = await relaysApi.geoipLookup(testIp.trim());
+      setLookupResult(res);
+    } catch (err) {
+      onError(err);
+    } finally {
+      setLookingUp(false);
+    }
+  };
+
   const rules = q.data ?? [];
+  const geo = geoipStatus.data;
 
   return (
     <Card>
-      <CardHeader className="flex flex-row items-start justify-between gap-4 p-4 pb-2">
+      <CardHeader className="flex flex-col gap-3 p-4 pb-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <div className="flex items-center gap-2">
             <Route className="h-4 w-4 text-muted-foreground" />
@@ -205,14 +243,71 @@ function PrefixRulesCard({ relays }: { relays: Relay[] }) {
                 {t("relays.prefixRules.ruleCount", { count: rules.length })}
               </Badge>
             )}
+            {geo && (
+              <Badge variant="outline" className="font-normal text-[11px] gap-1 text-muted-foreground hidden md:inline-flex">
+                <Globe className="h-3 w-3" />
+                {t("relays.prefixRules.geoipStatus", {
+                  source: geo.source.length > 25 ? "DB-IP Lite" : geo.source,
+                  countries: geo.country_count,
+                  prefixes: geo.prefix_count,
+                })}
+              </Badge>
+            )}
           </div>
           <p className="mt-1 text-xs text-muted-foreground">{t("relays.prefixRules.hint")}</p>
         </div>
-        <Button size="sm" variant="outline" className="gap-1 shrink-0" onClick={() => setAdding(true)}>
-          <Plus className="h-3.5 w-3.5" />
-          {t("relays.prefixRules.add")}
-        </Button>
+        <div className="flex items-center gap-2 shrink-0">
+          <Button
+            size="sm"
+            variant="ghost"
+            className="gap-1 text-xs"
+            disabled={refreshGeoip.isPending}
+            onClick={() => refreshGeoip.mutate()}
+          >
+            <RefreshCw className={`h-3.5 w-3.5 ${refreshGeoip.isPending ? "animate-spin" : ""}`} />
+            {refreshGeoip.isPending ? t("relays.prefixRules.updatingGeoip") : t("relays.prefixRules.updateGeoip")}
+          </Button>
+          <Button size="sm" variant="outline" className="gap-1 shrink-0" onClick={() => setAdding(true)}>
+            <Plus className="h-3.5 w-3.5" />
+            {t("relays.prefixRules.add")}
+          </Button>
+        </div>
       </CardHeader>
+
+      <div className="px-4 pb-3 pt-0 border-b bg-muted/20">
+        <form onSubmit={handleTestIp} className="flex flex-wrap items-center gap-2">
+          <span className="text-xs font-medium text-muted-foreground">{t("relays.prefixRules.testIp")}:</span>
+          <Input
+            value={testIp}
+            onChange={(e) => {
+              setTestIp(e.target.value);
+              setLookupResult(null);
+            }}
+            placeholder={t("relays.prefixRules.testIpHolder")}
+            className="h-7 w-48 font-mono text-xs"
+          />
+          <Button size="sm" variant="secondary" type="submit" className="h-7 text-xs px-2.5" disabled={lookingUp || !testIp.trim()}>
+            {lookingUp && <Loader2 className="mr-1 h-3 w-3 animate-spin" />}
+            {t("relays.prefixRules.testBtn")}
+          </Button>
+          {lookupResult && (
+            <span className="text-xs">
+              {lookupResult.found ? (
+                <span className="text-green-600 dark:text-green-400 font-medium">
+                  {t("relays.prefixRules.testIpMatched", {
+                    country: lookupResult.country_name,
+                    code: lookupResult.country_code,
+                    cidr: lookupResult.matched_cidr,
+                  })}
+                </span>
+              ) : (
+                <span className="text-muted-foreground italic">{t("relays.prefixRules.testIpNotFound")}</span>
+              )}
+            </span>
+          )}
+        </form>
+      </div>
+
       <CardContent className="p-0">
         {rules.length === 0 ? (
           <div className="p-6">
