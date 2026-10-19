@@ -7,6 +7,7 @@ toolchain go1.23.6
 require (
 	github.com/coder/websocket v1.8.14
 	github.com/go-chi/chi/v5 v5.3.2
+	github.com/go-ldap/ldap/v3 v3.4.10
 	github.com/go-webauthn/webauthn v0.13.4
 	github.com/golang-jwt/jwt/v5 v5.3.1
 	github.com/pquerna/otp v1.5.0
@@ -26,7 +27,6 @@ require (
 	github.com/dustin/go-humanize v1.0.1 // indirect
 	github.com/fxamacker/cbor/v2 v2.9.0 // indirect
 	github.com/go-asn1-ber/asn1-ber v1.5.7 // indirect
-	github.com/go-ldap/ldap/v3 v3.4.10 // indirect
 	github.com/go-webauthn/x v0.1.23 // indirect
 	github.com/google/go-tpm v0.9.5 // indirect
 	github.com/google/uuid v1.6.0 // indirect
