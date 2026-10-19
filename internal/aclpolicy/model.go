@@ -2,10 +2,10 @@ package aclpolicy
 
 // Document represents a declarative HuJSON/JSON ACL policy file.
 type Document struct {
-	Version int                    `json:"version,omitempty"`
-	Roles   map[string]RoleSpec    `json:"roles,omitempty"`
-	ACLs    []ACLRuleSpec          `json:"acls,omitempty"`
-	Tests   []TestCase             `json:"tests,omitempty"`
+	Version int                 `json:"version,omitempty"`
+	Roles   map[string]RoleSpec `json:"roles,omitempty"`
+	ACLs    []ACLRuleSpec       `json:"acls,omitempty"`
+	Tests   []TestCase          `json:"tests,omitempty"`
 }
 
 // RoleSpec defines a control role's session permissions in the policy document.
@@ -35,10 +35,10 @@ type ACLRuleSpec struct {
 
 // TestCase defines an assertion evaluated before applying policy changes.
 type TestCase struct {
-	Src    string `json:"src"`              // e.g. "user:alice", "alice"
-	Dst    string `json:"dst"`              // e.g. "device:12345", "12345"
-	Expect string `json:"expect"`           // "allow" or "deny"
-	Role   string `json:"role,omitempty"`   // expected role name if expect is "allow"
+	Src    string `json:"src"`            // e.g. "user:alice", "alice"
+	Dst    string `json:"dst"`            // e.g. "device:12345", "12345"
+	Expect string `json:"expect"`         // "allow" or "deny"
+	Role   string `json:"role,omitempty"` // expected role name if expect is "allow"
 }
 
 // TestResult reports the outcome of evaluating a TestCase.
