@@ -1506,6 +1506,41 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/acls/policy": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Export access policy in HuJSON format. */
+        get: operations["getACLPolicy"];
+        /** Validate, test, and atomically apply access policy. */
+        put: operations["updateACLPolicy"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/acls/policy/test": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Dry-run validate and evaluate policy test assertions. */
+        post: operations["testACLPolicy"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/address-books": {
         parameters: {
             query?: never;
@@ -4738,6 +4773,39 @@ export interface components {
             matched_rule?: components["schemas"]["ConnectionACL"] | null;
             effective_role?: components["schemas"]["ControlRole"] | null;
         };
+        ACLPolicyExport: {
+            /** @description Human-readable HuJSON access policy document with comments. */
+            policy: string;
+        };
+        ACLPolicyInput: {
+            /** @description Raw HuJSON access policy document. */
+            policy: string;
+        };
+        ACLPolicyTestCase: {
+            /** @example user:alex */
+            src: string;
+            /** @example device:workstation-01 */
+            dst: string;
+            /** @enum {string} */
+            expect: "allow" | "deny";
+            /** @example support-tier1 */
+            role?: string;
+        };
+        ACLPolicyTestResult: {
+            test: components["schemas"]["ACLPolicyTestCase"];
+            passed: boolean;
+            actual_decision: string;
+            actual_role?: string;
+            error?: string;
+        };
+        ACLPolicyValidationResult: {
+            valid: boolean;
+            roles_count: number;
+            rules_count: number;
+            tests_count: number;
+            test_results: components["schemas"]["ACLPolicyTestResult"][];
+            errors?: string[];
+        };
     };
     responses: {
         /** @description hbbs/hbbr unreachable (error code `server_unavailable`). */
@@ -7682,6 +7750,88 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ACLTestResult"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    getACLPolicy: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Exported access policy document. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ACLPolicyExport"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    updateACLPolicy: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Must equal the rdpanel_csrf cookie. */
+                "X-CSRF-Token": components["parameters"]["CsrfHeader"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ACLPolicyInput"];
+            };
+        };
+        responses: {
+            /** @description Policy applied successfully. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ACLPolicyValidationResult"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    testACLPolicy: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Must equal the rdpanel_csrf cookie. */
+                "X-CSRF-Token": components["parameters"]["CsrfHeader"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ACLPolicyInput"];
+            };
+        };
+        responses: {
+            /** @description Validation and assertions evaluation result. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ACLPolicyValidationResult"];
                 };
             };
             400: components["responses"]["ValidationFailed"];

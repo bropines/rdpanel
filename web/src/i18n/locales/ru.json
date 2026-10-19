@@ -1754,6 +1754,35 @@
     "matchedRule": "Сработавшее правило",
     "effectiveRole": "Действующая роль управления",
     "selectRole": "Выберите роль",
-    "noRole": "Без роли"
+    "noRole": "Без роли",
+    "policyTab": "Файл политики",
+    "policy": {
+      "editorTitle": "Политика ACL (HuJSON / JSON)",
+      "editorDescription": "Декларативный файл конфигурации с ролями, правилами и встроенными тестами ассершенов.",
+      "unsavedChanges": "Есть несохраненные изменения",
+      "resetBtn": "Сбросить из БД",
+      "runTestsBtn": "Запустить тесты",
+      "saveBtn": "Применить политику",
+      "linesCount": "Строк: {{count}}",
+      "shortcutsHint": "Ctrl+S — применить, Ctrl+Enter — запуск тестов, Tab — отступ",
+      "loadError": "Не удалось загрузить файл политики",
+      "resetDone": "Восстановлена активная политика из базы данных",
+      "saveSuccess": "Политика доступа успешно сохранена и применена",
+      "saveError": "Ошибка применения политики доступа",
+      "testError": "Ошибка тестирования политики",
+      "testsPassedToast": "Все тесты пройдены ({{count}})",
+      "testsFailedToast": "Обнаружено ошибок: {{count}}",
+      "validationPassedTitle": "Политика валидна",
+      "validationFailedTitle": "Ошибки валидации политики",
+      "testsPassedBadge": "Пройдено тестов: {{count}}",
+      "validationFailedBadge": "Ошибка валидации",
+      "summaryDetails": "Проверено: {{roles}} ролей, {{rules}} правил, {{tests}} тестов-ассершенов",
+      "errorsHeader": "Ошибки валидации",
+      "assertionsBreakdown": "Результаты тестов-ассершенов",
+      "assertionPassed": "Пройден",
+      "assertionFailed": "Ошибка",
+      "expected": "Ожидалось",
+      "actual": "Фактически"
+    }
   }
 }

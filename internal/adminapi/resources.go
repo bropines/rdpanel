@@ -141,6 +141,9 @@ func registerResources(r chi.Router, c *authCore) {
 
 		r.Get("/acls", a.handleListACLs)
 		r.Post("/acls", a.handleCreateACL)
+		r.Get("/acls/policy", a.handleGetACLPolicy)
+		r.Put("/acls/policy", a.handleUpdateACLPolicy)
+		r.Post("/acls/policy/test", a.handleTestACLPolicy)
 		r.Get("/acls/{acl_id}", a.handleGetACL)
 		r.Patch("/acls/{acl_id}", a.handleUpdateACL)
 		r.Delete("/acls/{acl_id}", a.handleDeleteACL)

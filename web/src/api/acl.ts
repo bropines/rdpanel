@@ -12,6 +12,12 @@ export type ConnectionACLPatch = components["schemas"]["ConnectionACLPatch"];
 export type ACLTestRequest = components["schemas"]["ACLTestRequest"];
 export type ACLTestResult = components["schemas"]["ACLTestResult"];
 
+export type ACLPolicyExport = components["schemas"]["ACLPolicyExport"];
+export type ACLPolicyInput = components["schemas"]["ACLPolicyInput"];
+export type ACLPolicyTestCase = components["schemas"]["ACLPolicyTestCase"];
+export type ACLPolicyTestResult = components["schemas"]["ACLPolicyTestResult"];
+export type ACLPolicyValidationResult = components["schemas"]["ACLPolicyValidationResult"];
+
 export const aclApi = {
   // Control Roles
   listRoles: () => api.request<{ items: ControlRole[] }>("/control-roles"),
@@ -30,10 +36,17 @@ export const aclApi = {
 
   // Test access simulation
   testAccess: (body: ACLTestRequest) => api.request<ACLTestResult>("/acls/test", { method: "POST", body }),
+
+  // Declarative HuJSON Access Policy
+  getPolicy: () => api.request<ACLPolicyExport>("/acls/policy"),
+  testPolicy: (body: ACLPolicyInput) => api.request<ACLPolicyValidationResult>("/acls/policy/test", { method: "POST", body }),
+  updatePolicy: (body: ACLPolicyInput) => api.request<ACLPolicyValidationResult>("/acls/policy", { method: "PUT", body }),
 };
 
 export const aclKeys = {
   all: ["acl"] as const,
   roles: () => [...aclKeys.all, "roles"] as const,
   rules: () => [...aclKeys.all, "rules"] as const,
+  policy: () => [...aclKeys.all, "policy"] as const,
 };
+

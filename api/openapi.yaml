@@ -2005,6 +2005,62 @@ paths:
         "401": { $ref: "#/components/responses/Unauthorized" }
         "403": { $ref: "#/components/responses/Forbidden" }
 
+  /acls/policy:
+    get:
+      tags: [acls]
+      operationId: getACLPolicy
+      summary: Export access policy in HuJSON format.
+      responses:
+        "200":
+          description: Exported access policy document.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ACLPolicyExport" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+    put:
+      tags: [acls]
+      operationId: updateACLPolicy
+      summary: Validate, test, and atomically apply access policy.
+      parameters:
+        - $ref: "#/components/parameters/CsrfHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ACLPolicyInput" }
+      responses:
+        "200":
+          description: Policy applied successfully.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ACLPolicyValidationResult" }
+        "400": { $ref: "#/components/responses/ValidationFailed" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
+  /acls/policy/test:
+    post:
+      tags: [acls]
+      operationId: testACLPolicy
+      summary: Dry-run validate and evaluate policy test assertions.
+      parameters:
+        - $ref: "#/components/parameters/CsrfHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ACLPolicyInput" }
+      responses:
+        "200":
+          description: Validation and assertions evaluation result.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ACLPolicyValidationResult" }
+        "400": { $ref: "#/components/responses/ValidationFailed" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
   /address-books:
     get:
       tags: [address-books]
@@ -6131,5 +6187,71 @@ components:
             - $ref: "#/components/schemas/ControlRole"
           nullable: true
 
+    ACLPolicyExport:
+      type: object
+      required: [policy]
+      properties:
+        policy:
+          type: string
+          description: Human-readable HuJSON access policy document with comments.
 
+    ACLPolicyInput:
+      type: object
+      required: [policy]
+      properties:
+        policy:
+          type: string
+          description: Raw HuJSON access policy document.
 
+    ACLPolicyTestCase:
+      type: object
+      required: [src, dst, expect]
+      properties:
+        src:
+          type: string
+          example: "user:alex"
+        dst:
+          type: string
+          example: "device:workstation-01"
+        expect:
+          type: string
+          enum: [allow, deny]
+        role:
+          type: string
+          example: "support-tier1"
+
+    ACLPolicyTestResult:
+      type: object
+      required: [test, passed, actual_decision]
+      properties:
+        test:
+          $ref: "#/components/schemas/ACLPolicyTestCase"
+        passed:
+          type: boolean
+        actual_decision:
+          type: string
+        actual_role:
+          type: string
+        error:
+          type: string
+
+    ACLPolicyValidationResult:
+      type: object
+      required: [valid, roles_count, rules_count, tests_count, test_results]
+      properties:
+        valid:
+          type: boolean
+        roles_count:
+          type: integer
+        rules_count:
+          type: integer
+        tests_count:
+          type: integer
+        test_results:
+          type: array
+          items:
+            $ref: "#/components/schemas/ACLPolicyTestResult"
+        errors:
+          type: array
+          items:
+            type: string

@@ -337,4 +337,124 @@ export const aclHandlers = [
     };
     return ok(res);
   }),
+
+  // --- ACL Policy File Endpoints ---
+  http.get(`${B}/acls/policy`, () => {
+    return ok({ policy: mockPolicyText });
+  }),
+
+  http.post(`${B}/acls/policy/test`, async ({ request }) => {
+    const body = (await request.json()) as S["ACLPolicyInput"];
+    if (!body?.policy) {
+      return err(400, "validation_failed", "policy is required");
+    }
+    const res: S["ACLPolicyValidationResult"] = {
+      valid: true,
+      roles_count: 2,
+      rules_count: 1,
+      tests_count: 1,
+      test_results: [
+        {
+          test: {
+            src: "user:admin",
+            dst: "device:dev-mock-1",
+            expect: "allow",
+            role: "Full Access",
+          },
+          passed: true,
+          actual_decision: "allow",
+          actual_role: "Full Access",
+        },
+      ],
+      errors: [],
+    };
+    return ok(res);
+  }),
+
+  http.put(`${B}/acls/policy`, async ({ request }) => {
+    const body = (await request.json()) as S["ACLPolicyInput"];
+    if (!body?.policy) {
+      return err(400, "validation_failed", "policy is required");
+    }
+    mockPolicyText = body.policy;
+    const res: S["ACLPolicyValidationResult"] = {
+      valid: true,
+      roles_count: 2,
+      rules_count: 1,
+      tests_count: 1,
+      test_results: [
+        {
+          test: {
+            src: "user:admin",
+            dst: "device:dev-mock-1",
+            expect: "allow",
+            role: "Full Access",
+          },
+          passed: true,
+          actual_decision: "allow",
+          actual_role: "Full Access",
+        },
+      ],
+      errors: [],
+    };
+    return ok(res);
+  }),
 ];
+
+let mockPolicyText = `// RD Panel Connection Access Control (ACL) Policy File
+// Declarative authorization matrix and session capabilities.
+{
+  "version": 1,
+
+  // Control Roles define granular session capabilities.
+  "roles": {
+    "Full Access": {
+      "note": "Full remote control permissions",
+      "allow_keyboard_mouse": true,
+      "allow_clipboard": true,
+      "allow_file_transfer": true,
+      "allow_audio": true,
+      "allow_tcp_tunneling": true,
+      "allow_terminal": true,
+      "allow_restart": true,
+      "is_default": true
+    },
+    "View Only": {
+      "note": "Screen observation only",
+      "allow_keyboard_mouse": false,
+      "allow_clipboard": false,
+      "allow_file_transfer": false,
+      "allow_audio": true,
+      "allow_tcp_tunneling": false,
+      "allow_terminal": false,
+      "allow_restart": false,
+      "is_default": false
+    }
+  },
+
+  // Connection Access Rules evaluated by priority order.
+  "acls": [
+    {
+      "name": "Default Allow All",
+      "action": "allow",
+      "note": "Allow connections by default",
+      "src": ["*"],
+      "dst": ["*"],
+      "role": "Full Access",
+      "priority": 100,
+      "enabled": true
+    }
+  ],
+
+  // Inline test assertions verified before policy changes are applied.
+  "tests": [
+    {
+      "src": "user:admin",
+      "dst": "device:dev-mock-1",
+      "expect": "allow",
+      "role": "Full Access"
+    }
+  ]
+}
+`;
+

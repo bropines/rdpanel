@@ -1684,6 +1684,35 @@
     "matchedRule": "Matched Rule",
     "effectiveRole": "Effective Control Role",
     "selectRole": "Select control role",
-    "noRole": "No role"
+    "noRole": "No role",
+    "policyTab": "Policy File",
+    "policy": {
+      "editorTitle": "ACL Policy (HuJSON / JSON)",
+      "editorDescription": "Declarative policy document defining roles, rules, and inline test assertions.",
+      "unsavedChanges": "Unsaved changes",
+      "resetBtn": "Reset from DB",
+      "runTestsBtn": "Run Tests",
+      "saveBtn": "Apply Policy",
+      "linesCount": "{{count}} lines",
+      "shortcutsHint": "Ctrl+S to save, Ctrl+Enter to test, Tab for indent",
+      "loadError": "Failed to load policy file",
+      "resetDone": "Reset to currently active database policy",
+      "saveSuccess": "Access policy applied successfully",
+      "saveError": "Failed to apply access policy",
+      "testError": "Failed to run policy tests",
+      "testsPassedToast": "All {{count}} tests passed",
+      "testsFailedToast": "{{count}} policy errors detected",
+      "validationPassedTitle": "Policy is valid",
+      "validationFailedTitle": "Policy validation failed",
+      "testsPassedBadge": "{{count}} tests passed",
+      "validationFailedBadge": "Validation failed",
+      "summaryDetails": "{{roles}} roles, {{rules}} connection rules, {{tests}} test assertions evaluated",
+      "errorsHeader": "Validation errors",
+      "assertionsBreakdown": "Test Assertions",
+      "assertionPassed": "Passed",
+      "assertionFailed": "Failed",
+      "expected": "Expected",
+      "actual": "Actual"
+    }
   }
 }
