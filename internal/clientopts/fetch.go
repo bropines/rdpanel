@@ -72,9 +72,6 @@ func FetchPublicSTUN(ctx context.Context, sourceURL string, limit int, allowPriv
 	// Pick a diverse sample of up to 20 candidates to probe concurrently
 	sample := selectCandidates(candidates, 20)
 
-	type probeOutcome struct {
-		res ProbeResult
-	}
 	results := make([]ProbeResult, len(sample))
 	var wg sync.WaitGroup
 	for i, s := range sample {
