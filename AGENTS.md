@@ -28,7 +28,7 @@ Product spec: [`SPEC.md`](SPEC.md). User-facing docs: [`README.md`](README.md),
 
 ## Toolchain
 
-- Go 1.23 (CI also runs Go stable), Node 20.19+ with npm. The maintainer's Go, Docker,
+- Go 1.26 (CI also runs Go stable), Node 20.19+ with npm. The maintainer's Go, Docker,
   gcc and Helm live in **WSL (Debian)**, not on Windows — run Go/make/docker there and
   never install toolchains on the Windows host.
 - No CGO: the binary is built with `CGO_ENABLED=0`.

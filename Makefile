@@ -1,4 +1,4 @@
-# RD Panel (rdpanel) build targets. Requires Go 1.23 and Node 20.19+ (npm).
+# RD Panel (rdpanel) build targets. Requires Go 1.26 and Node 20.19+ (npm).
 #
 #   make web      build the SPA into web/dist (embedded by the Go binary)
 #   make build    build bin/rdpanel (static, CGO disabled)

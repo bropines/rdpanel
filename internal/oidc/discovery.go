@@ -3,7 +3,6 @@ package oidc
 import (
 	"context"
 	"crypto"
-	"crypto/ecdh"
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rsa"
@@ -179,16 +178,15 @@ func (k jwk) publicKey() (crypto.PublicKey, error) {
 	case "EC":
 		var (
 			curve elliptic.Curve
-			ec    ecdh.Curve
 			size  int
 		)
 		switch k.Crv {
 		case "P-256":
-			curve, ec, size = elliptic.P256(), ecdh.P256(), 32
+			curve, size = elliptic.P256(), 32
 		case "P-384":
-			curve, ec, size = elliptic.P384(), ecdh.P384(), 48
+			curve, size = elliptic.P384(), 48
 		case "P-521":
-			curve, ec, size = elliptic.P521(), ecdh.P521(), 66
+			curve, size = elliptic.P521(), 66
 		default:
 			return nil, fmt.Errorf("unsupported curve %q", k.Crv)
 		}
@@ -197,12 +195,12 @@ func (k jwk) publicKey() (crypto.PublicKey, error) {
 		if err1 != nil || err2 != nil || len(x) != size || len(y) != size {
 			return nil, errors.New("bad EC point")
 		}
-		// Validate the point is on the curve via crypto/ecdh.
 		point := append(append([]byte{4}, x...), y...)
-		if _, err := ec.NewPublicKey(point); err != nil {
+		pk, err := ecdsa.ParseUncompressedPublicKey(curve, point)
+		if err != nil {
 			return nil, errors.New("EC point not on curve")
 		}
-		return &ecdsa.PublicKey{Curve: curve, X: new(big.Int).SetBytes(x), Y: new(big.Int).SetBytes(y)}, nil
+		return pk, nil
 	default:
 		return nil, fmt.Errorf("unsupported key type %q", k.Kty)
 	}

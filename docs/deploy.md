@@ -703,7 +703,7 @@ make hbb                                    # only (re)build deploy/bin/<arch>/h
 - **Stages:**
   - `web` (node 22, `npm ci && npm run build`);
   - `panel` (newest stable Go image, `CGO_ENABLED=0`, `GOTOOLCHAIN=local`, cross-compiled
-    with `GOOS/GOARCH` from the build platform; the code stays go1.23-compatible);
+    with `GOOS/GOARCH` from the build platform; the code stays go1.26-compatible);
   - `s6` (downloads s6-overlay, verifies pinned SHA-256 sums);
   - final `alpine` with `ca-certificates` and `tzdata`.
 - **Prebuilt hbbs/hbbr.** They come from `deploy/bin/<TARGETARCH>/` in the build context

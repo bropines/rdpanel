@@ -49,7 +49,7 @@ Non-goals (v1)
        data volume: /data  → panel.db (SQLite WAL), secret.key, hbbs key + db_v2.sqlite3
 ```
 
-### Backend (Go 1.23, module `github.com/bropines/rdpanel`)
+### Backend (Go 1.26, module `github.com/bropines/rdpanel`)
 - `CGO_ENABLED=0`, SQLite via `modernc.org/sqlite`, WAL, `foreign_keys=ON`, `busy_timeout=5000`.
 - Router: `github.com/go-chi/chi/v5`. No global singletons: an `app.App` struct with injected deps; `context.Context` everywhere.
 - DB access: `database/sql` + small typed repositories (no ORM). Migrations: embedded SQL files, applied by

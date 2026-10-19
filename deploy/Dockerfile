@@ -23,7 +23,7 @@
 
 ARG ALPINE_VERSION=3.24
 # Newest stable Go for the build (stdlib security fixes); the code itself stays
-# go1.23-compatible (go.mod), so GOTOOLCHAIN=local never downloads anything.
+# go1.26-compatible (go.mod), so GOTOOLCHAIN=local never downloads anything.
 ARG GO_IMAGE=golang:1.27-alpine
 ARG NODE_IMAGE=node:22-alpine
 

@@ -144,7 +144,7 @@ pair, then run `rdpanel migrate-legacy --from rustdeskapi.db --dry-run`.
 
 ## Building from source
 
-Requirements: Go 1.23+, Node 20.19+ (only to build the UI).
+Requirements: Go 1.26+, Node 20.19+ (only to build the UI).
 
 ```sh
 make web build                      # builds web/dist, then bin/rdpanel with the UI embedded
