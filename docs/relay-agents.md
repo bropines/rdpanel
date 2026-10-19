@@ -252,7 +252,9 @@ recorded with the actor `agent:<id>`.
 - Run agents with **host networking** (`network_mode: host`, or Kubernetes
   `hostNetwork`): otherwise hbbr sees the Docker proxy's address, and lists and
   usage are useless. Never forward the relay port from a loopback address: hbbr
-  treats loopback peers as its admin console.
+  treats loopback peers as its admin console. (If bridge mode is required for the
+  central panel or agent, see [deploy.md § Networking](deploy.md#networking-host-mode-vs-bridge-mode-and-vpnstailscale)
+  for required iptables forwarding and masquerade rules).
 
 ## Metrics
 

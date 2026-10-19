@@ -213,6 +213,56 @@ server {
   authentication besides "connection comes from loopback". With `network_mode: host`,
   every process on the host can use it.
 
+## Networking: Host mode vs Bridge mode (and VPNs/Tailscale)
+
+By default, RD Panel uses `network_mode: host`. This is the strongly recommended setup for both the main panel and remote relay agents.
+
+### Why Host Mode is Recommended
+1. **Real Client IPs:** `hbbs` (UDP 21116) and `hbbr` (TCP 21117) need to see authentic client source IP addresses for NAT traversal, session pairing, geographic prefix routing, bandwidth throttling, and IP blocklists. Under Docker bridge networking, `docker-proxy` or source-NAT masks all incoming client connections with the bridge gateway IP (e.g., `172.18.0.1`).
+2. **Transparent VPN / Overlay Network Access:** When the panel probes relays or clients over WireGuard (`wg0`), Tailscale (`tailscale0`), or local subnets, host networking allows direct route resolution without needing iptables forwarding rules.
+
+### If Docker Bridge Mode is Required
+
+If host networking cannot be used (e.g. running on macOS Docker Desktop, cloud providers with strict multi-tenant networking, or port conflicts), configure the compose file:
+
+```yaml
+services:
+  rdpanel:
+    image: ghcr.io/bropines/rdpanel:latest
+    ports:
+      - "21114:21114/tcp"         # RD Panel API & UI
+      - "21115:21115/tcp"         # hbbs NAT test
+      - "21116:21116/tcp"         # hbbs TCP
+      - "21116:21116/udp"         # hbbs UDP rendezvous
+      - "21117:21117/tcp"         # hbbr relay
+      - "21118:21118/tcp"         # hbbs WebSocket (optional)
+      - "21119:21119/tcp"         # hbbr WebSocket (optional)
+```
+
+#### Tailscale / WireGuard Forwarding & Masquerade
+When the container runs in bridge mode (e.g. subnet `172.18.0.0/16`) and attempts to probe or connect to a relay hosted on a Tailscale net (`100.64.0.0/10`) or WireGuard interface (`wg0`), packets exit the container with a source IP in the `172.18.x.x` subnet.
+
+By default, the host kernel drops these packets because Docker sets the default policy of the iptables `FORWARD` chain to `DROP`. This results in silent packet drops and `i/o timeout` errors when probing relays (causing them to show as degraded or offline).
+
+To fix this on the host:
+```bash
+# 1. Ensure kernel IPv4 forwarding is enabled
+sudo sysctl -w net.ipv4.ip_forward=1
+
+# 2. Allow forwarding between Docker bridge and Tailscale/Wireguard interface
+# (Replace br-+ with your specific docker bridge name if desired, e.g. docker0 or br-xxxx)
+sudo iptables -A FORWARD -i br-+ -o tailscale0 -j ACCEPT
+sudo iptables -A FORWARD -i tailscale0 -o br-+ -m state --state RELATED,ESTABLISHED -j ACCEPT
+
+# 3. Enable NAT masquerade so packets from the bridge leave the Tailscale interface with the host's 100.x.x.x IP
+sudo iptables -t nat -A POSTROUTING -o tailscale0 -j MASQUERADE
+```
+*(For WireGuard, replace `tailscale0` with `wg0` or your tunnel interface name).*
+
+#### SSRF Guard for Private / Overlay Addresses
+RD Panel contains built-in SSRF protection that rejects connections to RFC1918 private subnets and CGNAT ranges (`100.64.0.0/10`, used by Tailscale).
+When using Tailscale or private relay IPs, open **Server → Relays → Options** in the panel (or set `allow_private_hosts: true` / `RDPANEL_RELAYS_ALLOW_PRIVATE_HOSTS=true`) to permit private and CGNAT addresses for relay probes and health checks.
+
 ## Environment reference
 
 `deploy/rdpanel.env.example` documents the commonly set variables with their defaults.

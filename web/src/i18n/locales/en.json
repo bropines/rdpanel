@@ -821,9 +821,15 @@
       "presets": {
         "label": "Presets",
         "global": "Global",
+        "worldwide": "Worldwide Open",
         "ru": "RU / Anti-Censorship",
         "cloudflare": "Cloudflare",
         "default": "Default"
+      },
+      "fetchStun": {
+        "button": "Fetch public STUNs",
+        "fetching": "Fetching & probing...",
+        "success": "Updated with {{count}} working public STUN servers"
       },
       "probe": {
         "button": "Test servers",
@@ -1334,9 +1340,18 @@
     "prefixRules": {
       "title": "Prefix routing (CIDR)",
       "hint": "Direct client pairs to specific relays based on IP subnets (CIDR) using longest-prefix match. Sessions without a match fall back to standard rotation.",
+      "modes": {
+        "cidr": "CIDR prefix",
+        "country": "Country preset"
+      },
       "add": "Add rule",
       "cidr": "CIDR prefix",
       "cidrPlaceholder": "e.g. 192.168.1.0/24 or 2001:db8::/32",
+      "country": "Country",
+      "countryPlaceholder": "Select country",
+      "prefixes": "prefixes",
+      "importCountryBtn": "Import country prefixes",
+      "countryImported": "Imported {{count}} prefixes for {{country}}",
       "relayHost": "Target relay host",
       "relayHostPlaceholder": "Select relay or enter host:port",
       "customHost": "Custom host:port…",

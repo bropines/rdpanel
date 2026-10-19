@@ -42,6 +42,7 @@ export type ClientOptions = Schemas["ClientOptions"];
 export type ClientOptionsInput = Schemas["ClientOptionsInput"];
 export type IceServerProbeList = Schemas["IceServerProbeList"];
 export type IceServerProbeItem = Schemas["IceServerProbeItem"];
+export type PublicStunList = Schemas["PublicStunList"];
 export type ClientConfig = Schemas["ClientConfig"];
 
 export const serverApi = {
@@ -55,6 +56,8 @@ export const serverApi = {
     api.request<ClientOptions>("/server/client-options", { method: "PUT", body }),
   probeIceServers: (body: { ice_servers: string }) =>
     api.request<IceServerProbeList>("/server/client-options/probe", { method: "POST", body }),
+  fetchPublicStun: (body?: { source_url?: string; limit?: number }) =>
+    api.request<PublicStunList>("/server/client-options/fetch-stun", { method: "POST", body }),
   clientConfig: () => api.request<ClientConfig>("/server/client-config"),
   ipBlocker: (q: QueryOf<"listIpBlocker">) => api.request<Schemas["IpBlockerPage"]>("/server/ip-blocker", { query: q }),
   unblockIp: (ip: string) => api.request<void>(`/server/ip-blocker/${encodeURIComponent(ip)}`, { method: "DELETE" }),

@@ -251,7 +251,18 @@ function PrefixRulesCard({ relays }: { relays: Relay[] }) {
                       <Mono className="text-xs text-muted-foreground">{rule.relay_host}</Mono>
                     </TableCell>
                     <TableCell className="hidden text-xs text-muted-foreground md:table-cell">
-                      {rule.comment || "—"}
+                      {rule.comment ? (
+                        <span className="flex items-center gap-1.5">
+                          {/^\[([A-Z]{2})\]/.test(rule.comment) && (
+                            <Badge variant="outline" className="text-[10px] px-1 py-0 h-4 font-mono font-normal">
+                              {rule.comment.match(/^\[([A-Z]{2})\]/)?.[1]}
+                            </Badge>
+                          )}
+                          <span>{rule.comment}</span>
+                        </span>
+                      ) : (
+                        "—"
+                      )}
                     </TableCell>
                     <TableCell>
                       <Button
@@ -299,10 +310,18 @@ function AddPrefixRuleDialog({
   const { t } = useTranslation();
   const qc = useQueryClient();
   const onError = useRelayError();
+  const [mode, setMode] = useState<"cidr" | "country">("cidr");
   const [cidr, setCidr] = useState("");
+  const [selectedCountry, setSelectedCountry] = useState("RU");
   const [selectedHost, setSelectedHost] = useState("");
   const [customHost, setCustomHost] = useState("");
   const [comment, setComment] = useState("");
+
+  const countriesQuery = useQuery({
+    queryKey: relayKeys.prefixCountries,
+    queryFn: relaysApi.prefixCountries,
+    enabled: open,
+  });
 
   const candidateHosts = useMemo(() => {
     const set = new Set<string>();
@@ -314,7 +333,9 @@ function AddPrefixRuleDialog({
 
   useEffect(() => {
     if (open) {
+      setMode("cidr");
       setCidr("");
+      setSelectedCountry("RU");
       setSelectedHost(candidateHosts[0] ?? "custom");
       setCustomHost("");
       setComment("");
@@ -324,9 +345,9 @@ function AddPrefixRuleDialog({
   const effectiveHost = selectedHost === "custom" ? customHost.trim() : selectedHost;
   const cidrOk = isCIDR(cidr.trim());
   const hostOk = isHostPort(effectiveHost);
-  const canSubmit = cidrOk && hostOk;
+  const canSubmit = (mode === "cidr" ? cidrOk : Boolean(selectedCountry)) && hostOk;
 
-  const save = useMutation({
+  const saveCidr = useMutation({
     mutationFn: () =>
       relaysApi.createPrefixRule({
         cidr: cidr.trim(),
@@ -341,6 +362,23 @@ function AddPrefixRuleDialog({
     onError,
   });
 
+  const importCountry = useMutation({
+    mutationFn: () =>
+      relaysApi.importCountryPrefixRules({
+        country_code: selectedCountry,
+        relay_host: effectiveHost,
+        comment: comment.trim() || undefined,
+      }),
+    onSuccess: (res) => {
+      void qc.invalidateQueries({ queryKey: relayKeys.prefixRules });
+      toast.success(t("relays.prefixRules.countryImported", { count: res.added_count, country: res.country_code }));
+      onOpenChange(false);
+    },
+    onError,
+  });
+
+  const pending = saveCidr.isPending || importCountry.isPending;
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent closeLabel={t("common.close")} className="sm:max-w-md">
@@ -348,23 +386,61 @@ function AddPrefixRuleDialog({
           <DialogTitle>{t("relays.prefixRules.add")}</DialogTitle>
           <DialogDescription>{t("relays.prefixRules.hint")}</DialogDescription>
         </DialogHeader>
+
+        <div className="flex border rounded-md p-0.5 bg-muted/40 mb-1">
+          <button
+            type="button"
+            className={`flex-1 text-xs py-1 px-2 rounded-sm font-medium transition-colors ${mode === "cidr" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
+            onClick={() => setMode("cidr")}
+          >
+            {t("relays.prefixRules.modes.cidr")}
+          </button>
+          <button
+            type="button"
+            className={`flex-1 text-xs py-1 px-2 rounded-sm font-medium transition-colors ${mode === "country" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
+            onClick={() => setMode("country")}
+          >
+            {t("relays.prefixRules.modes.country")}
+          </button>
+        </div>
+
         <form
           onSubmit={(e) => {
             e.preventDefault();
-            if (canSubmit && !save.isPending) save.mutate();
+            if (canSubmit && !pending) {
+              if (mode === "cidr") saveCidr.mutate();
+              else importCountry.mutate();
+            }
           }}
           className="space-y-4"
         >
-          <Field label={t("relays.prefixRules.cidr")} htmlFor="prefix-rule-cidr" error={cidr.trim() && !cidrOk ? t("validation.invalidCidr") : undefined}>
-            <Input
-              id="prefix-rule-cidr"
-              className="font-mono text-xs"
-              value={cidr}
-              onChange={(e) => setCidr(e.target.value)}
-              placeholder={t("relays.prefixRules.cidrPlaceholder")}
-              autoFocus
-            />
-          </Field>
+          {mode === "cidr" ? (
+            <Field label={t("relays.prefixRules.cidr")} htmlFor="prefix-rule-cidr" error={cidr.trim() && !cidrOk ? t("validation.invalidCidr") : undefined}>
+              <Input
+                id="prefix-rule-cidr"
+                className="font-mono text-xs"
+                value={cidr}
+                onChange={(e) => setCidr(e.target.value)}
+                placeholder={t("relays.prefixRules.cidrPlaceholder")}
+                autoFocus
+              />
+            </Field>
+          ) : (
+            <Field label={t("relays.prefixRules.country")}>
+              <Select value={selectedCountry} onValueChange={setSelectedCountry}>
+                <SelectTrigger>
+                  <SelectValue placeholder={t("relays.prefixRules.countryPlaceholder")} />
+                </SelectTrigger>
+                <SelectContent>
+                  {countriesQuery.data?.map((c) => (
+                    <SelectItem key={c.code} value={c.code}>
+                      {c.name} ({c.prefix_count} {t("relays.prefixRules.prefixes")})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </Field>
+          )}
 
           <Field label={t("relays.prefixRules.relayHost")} error={effectiveHost && !hostOk ? t("validation.invalidHostPort") : undefined}>
             {candidateHosts.length > 0 ? (
@@ -409,7 +485,7 @@ function AddPrefixRuleDialog({
               id="prefix-rule-comment"
               value={comment}
               onChange={(e) => setComment(e.target.value)}
-              placeholder={t("relays.prefixRules.commentPlaceholder")}
+              placeholder={mode === "country" ? `[${selectedCountry}] ${countriesQuery.data?.find((c) => c.code === selectedCountry)?.name ?? ""}` : t("relays.prefixRules.commentPlaceholder")}
             />
           </Field>
 
@@ -417,9 +493,9 @@ function AddPrefixRuleDialog({
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
               {t("common.cancel")}
             </Button>
-            <Button type="submit" disabled={!canSubmit || save.isPending}>
-              {save.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              {t("common.add")}
+            <Button type="submit" disabled={!canSubmit || pending}>
+              {pending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              {mode === "country" ? t("relays.prefixRules.importCountryBtn") : t("common.add")}
             </Button>
           </DialogFooter>
         </form>

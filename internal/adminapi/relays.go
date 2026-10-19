@@ -43,6 +43,7 @@ type RelayManager interface {
 	ListPrefixRules(ctx context.Context) ([]relays.PrefixRule, error)
 	CreatePrefixRule(ctx context.Context, rule *relays.PrefixRule) error
 	DeletePrefixRule(ctx context.Context, id int64) error
+	ImportCountryRules(ctx context.Context, countryCode, relayHost, customComment string) (*relays.ImportCountryRulesResult, error)
 }
 
 func (c *b2bCore) registerRelays(r chi.Router) {
@@ -55,6 +56,8 @@ func (c *b2bCore) registerRelays(r chi.Router) {
 		r.Put("/relays/options", c.handlePutRelayOptions)
 		r.Get("/relays/prefix-rules", c.handleListPrefixRules)
 		r.Post("/relays/prefix-rules", c.handleCreatePrefixRule)
+		r.Get("/relays/prefix-rules/countries", c.handleListPrefixRuleCountries)
+		r.Post("/relays/prefix-rules/import-country", c.handleImportCountryPrefixRules)
 		r.Delete("/relays/prefix-rules/{id}", c.handleDeletePrefixRule)
 		r.Get("/relays/{id}", c.handleGetRelay)
 		r.Patch("/relays/{id}", c.handlePatchRelay)
@@ -758,3 +761,35 @@ func (c *b2bCore) handleDeletePrefixRule(w http.ResponseWriter, r *http.Request)
 	c.audit(r, "relays.prefix_rule.delete", "relay_prefix_rule", id, nil)
 	w.WriteHeader(http.StatusNoContent)
 }
+
+type importCountryPrefixRulesInput struct {
+	CountryCode string `json:"country_code"`
+	RelayHost   string `json:"relay_host"`
+	Comment     string `json:"comment"`
+}
+
+func (c *b2bCore) handleListPrefixRuleCountries(w http.ResponseWriter, r *http.Request) {
+	if !c.needRelays(w) {
+		return
+	}
+	httpx.WriteJSON(w, http.StatusOK, relays.ListCountryPrefixInfo())
+}
+
+func (c *b2bCore) handleImportCountryPrefixRules(w http.ResponseWriter, r *http.Request) {
+	if !c.needRelays(w) {
+		return
+	}
+	var in importCountryPrefixRulesInput
+	if !decodeBody(w, r, &in, 64<<10) {
+		return
+	}
+	res, err := c.d.Relays.ImportCountryRules(r.Context(), in.CountryCode, in.RelayHost, in.Comment)
+	if err != nil {
+		validationFailed(w, "invalid country import", map[string]string{"country_code": err.Error()})
+		return
+	}
+	c.audit(r, "relays.prefix_rule.import_country", "relay_prefix_rule", 0,
+		map[string]any{"country_code": res.CountryCode, "relay_host": res.RelayHost, "added_count": res.AddedCount})
+	httpx.WriteJSON(w, http.StatusOK, res)
+}
+

@@ -315,6 +315,40 @@ func TestRelayPrefixRulesAPI(t *testing.T) {
 	// Delete nonexistent rule
 	code, m, _ = admin.do(http.MethodDelete, "/relays/prefix-rules/99999", nil)
 	wantErr(t, "delete nonexistent", code, 404, m, "not_found")
+
+	// List countries
+	code, m, _ = user.do(http.MethodGet, "/relays/prefix-rules/countries", nil)
+	wantErr(t, "user get countries", code, 403, m, "forbidden")
+
+	code, m, _ = admin.do(http.MethodGet, "/relays/prefix-rules/countries", nil)
+	if code != http.StatusOK {
+		t.Fatalf("expected 200 on list countries, got %d", code)
+	}
+	raw, _ := m["_raw"].(string)
+	if !strings.Contains(raw, `"code":"RU"`) || !strings.Contains(raw, `"code":"DE"`) {
+		t.Fatalf("expected RU and DE in countries, got %s", raw)
+	}
+
+	// Import country rules
+	code, m, _ = admin.do(http.MethodPost, "/relays/prefix-rules/import-country", map[string]any{
+		"country_code": "RU",
+		"relay_host":   "relay-ru.example.com",
+	})
+	want(t, "import country rules", code, 200, m)
+	if m["country_code"] != "RU" || m["added_count"].(float64) <= 0 {
+		t.Fatalf("expected added_count > 0, got %v", m)
+	}
+
+	// Importing again should not duplicate
+	code, m, _ = admin.do(http.MethodPost, "/relays/prefix-rules/import-country", map[string]any{
+		"country_code": "RU",
+		"relay_host":   "relay-ru.example.com",
+	})
+	want(t, "import country rules again", code, 200, m)
+	if m["added_count"].(float64) != 0 {
+		t.Fatalf("expected added_count 0 on repeat import, got %v", m)
+	}
 }
 
 func itoa(n int64) string { return strconv.FormatInt(n, 10) }
+

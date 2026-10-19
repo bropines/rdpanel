@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Activity, Save } from "lucide-react";
+import { Activity, Save, Sparkles } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
@@ -28,6 +28,10 @@ const PRESETS: Preset[] = [
   {
     id: "global",
     servers: "stun:stun.cloudflare.com:3478\nstun:stun.l.google.com:19302\nstun:stun1.l.google.com:19302",
+  },
+  {
+    id: "worldwide",
+    servers: "stun:stun.cloudflare.com:3478\nstun:stun.l.google.com:19302\nstun:stun.syncthing.net:3478\nstun:stun.qq.com:3478",
   },
   {
     id: "ru",
@@ -118,6 +122,20 @@ export function ClientOptionsCard() {
     onError: toastError,
   });
 
+  const fetchStun = useMutation({
+    mutationFn: () => serverApi.fetchPublicStun({ limit: 6 }),
+    onSuccess: (res) => {
+      if (!draft) return;
+      setProbeResults(res.items);
+      const turnEntries = iceEntries(draft.ice_servers).filter((e) => /^turns?:/i.test(e));
+      const newStuns = res.items.filter((r) => r.reachable).map((r) => r.server);
+      const combined = [...newStuns, ...turnEntries];
+      setDraft({ ...draft, ice_servers: combined.join("\n") });
+      toast.success(t("server.clientOptions.fetchStun.success", { count: newStuns.length }));
+    },
+    onError: toastError,
+  });
+
   const applyPreset = (presetServers: string) => {
     if (!draft) return;
     setProbeResults(null);
@@ -194,18 +212,31 @@ export function ClientOptionsCard() {
               spellCheck={false}
             />
             {error && <p className="text-xs text-destructive">{t(error)}</p>}
-            <div className="flex items-center justify-between gap-2 pt-0.5">
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="h-7 text-xs px-2"
-                disabled={!iceEntries(draft.ice_servers).length || !!error || probe.isPending}
-                onClick={() => probe.mutate(draft.ice_servers)}
-              >
-                <Activity className="size-3.5 mr-1" />
-                {probe.isPending ? t("server.clientOptions.probe.testing") : t("server.clientOptions.probe.button")}
-              </Button>
+            <div className="flex flex-wrap items-center justify-between gap-2 pt-0.5">
+              <div className="flex items-center gap-1.5">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="h-7 text-xs px-2"
+                  disabled={!iceEntries(draft.ice_servers).length || !!error || probe.isPending}
+                  onClick={() => probe.mutate(draft.ice_servers)}
+                >
+                  <Activity className="size-3.5 mr-1" />
+                  {probe.isPending ? t("server.clientOptions.probe.testing") : t("server.clientOptions.probe.button")}
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="h-7 text-xs px-2"
+                  disabled={fetchStun.isPending}
+                  onClick={() => fetchStun.mutate()}
+                >
+                  <Sparkles className="size-3.5 mr-1 text-primary" />
+                  {fetchStun.isPending ? t("server.clientOptions.fetchStun.fetching") : t("server.clientOptions.fetchStun.button")}
+                </Button>
+              </div>
               {probeResults && probeResults.length > 0 && (
                 <span className="text-xs text-muted-foreground font-mono">
                   {probeResults.filter((r) => r.reachable).length}/{probeResults.length} {t("server.clientOptions.probe.reachableCount")}

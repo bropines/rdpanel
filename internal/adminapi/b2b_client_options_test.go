@@ -94,3 +94,30 @@ func TestClientOptionsProbe(t *testing.T) {
 		t.Fatalf("expected SSRF error on 127.0.0.1, got %v", item0)
 	}
 }
+
+func TestClientOptionsFetchSTUN(t *testing.T) {
+	e := newB2Env(t, b2opts{})
+	admin, _ := e.as("root", store.RoleAdmin)
+	user, _ := e.as("bob", store.RoleUser)
+
+	code, m, _ := user.do(http.MethodPost, "/server/client-options/fetch-stun", nil)
+	wantErr(t, "user fetch-stun", code, 403, m, "forbidden")
+
+	code, m, _ = admin.do(http.MethodPost, "/server/client-options/fetch-stun", map[string]any{
+		"source_url": "ftp://bad-url",
+	})
+	wantErr(t, "invalid scheme", code, 400, m, "validation_failed")
+
+	// Valid POST with empty body (uses default list and fallback)
+	code, m, _ = admin.do(http.MethodPost, "/server/client-options/fetch-stun", map[string]any{
+		"limit": 3,
+	})
+	want(t, "admin fetch-stun", code, 200, m)
+	if _, ok := m["source"].(string); !ok {
+		t.Fatalf("expected source string, got %v", m)
+	}
+	if _, ok := m["items"].([]any); !ok {
+		t.Fatalf("expected items array, got %v", m)
+	}
+}
+

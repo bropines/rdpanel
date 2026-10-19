@@ -2368,6 +2368,41 @@ paths:
         "400": { $ref: "#/components/responses/ValidationFailed" }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "403": { $ref: "#/components/responses/Forbidden" }
+  /server/client-options/fetch-stun:
+    post:
+      tags: [server]
+      operationId: fetchPublicStunServers
+      summary: Fetch and probe public STUN servers
+      description: |
+        Fetches open STUN servers from a public community list,
+        probes candidates concurrently, and returns working servers sorted by lowest latency.
+      parameters:
+        - $ref: "#/components/parameters/CsrfHeader"
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                source_url:
+                  type: string
+                  description: Optional custom URL to fetch raw STUN hosts from.
+                limit:
+                  type: integer
+                  minimum: 1
+                  maximum: 16
+                  default: 6
+                  description: Maximum number of lowest-latency working STUN servers to return.
+      responses:
+        "200":
+          description: Fast working public STUN servers.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PublicStunList" }
+        "400": { $ref: "#/components/responses/ValidationFailed" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
   /server/client-config:
     get:
       tags: [server]
@@ -2774,6 +2809,42 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/RelayPrefixRule" }
+        "400": { $ref: "#/components/responses/ValidationFailed" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /relays/prefix-rules/countries:
+    get:
+      tags: [relays]
+      operationId: listPrefixRuleCountries
+      summary: List supported country codes and prefix counts for geographic relay routing.
+      responses:
+        "200":
+          description: Supported country presets.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/CountryPrefixInfo" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /relays/prefix-rules/import-country:
+    post:
+      tags: [relays]
+      operationId: importCountryPrefixRules
+      summary: Import aggregated CIDRs for a country to route towards a specified relay host.
+      parameters:
+        - $ref: "#/components/parameters/CsrfHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ImportCountryPrefixRulesInput" }
+      responses:
+        "200":
+          description: Import result.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ImportCountryPrefixRulesResult" }
         "400": { $ref: "#/components/responses/ValidationFailed" }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "403": { $ref: "#/components/responses/Forbidden" }
@@ -4626,6 +4697,38 @@ components:
         items:
           type: array
           items: { $ref: "#/components/schemas/IceServerProbeItem" }
+    PublicStunList:
+      type: object
+      required: [source, fetched_count, working_count, items]
+      properties:
+        source: { type: string }
+        fetched_count: { type: integer }
+        working_count: { type: integer }
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/IceServerProbeItem" }
+    CountryPrefixInfo:
+      type: object
+      required: [code, name, prefix_count]
+      properties:
+        code: { type: string }
+        name: { type: string }
+        prefix_count: { type: integer }
+    ImportCountryPrefixRulesInput:
+      type: object
+      required: [country_code, relay_host]
+      properties:
+        country_code: { type: string }
+        relay_host: { type: string }
+        comment: { type: string }
+    ImportCountryPrefixRulesResult:
+      type: object
+      required: [country_code, relay_host, added_count, total_rules]
+      properties:
+        country_code: { type: string }
+        relay_host: { type: string }
+        added_count: { type: integer }
+        total_rules: { type: integer }
     RelayPrefixRule:
       type: object
       required: [id, cidr, relay_host, comment, created_at, updated_at]
