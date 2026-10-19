@@ -104,6 +104,25 @@ export const relays: S["Relay"][] = [
   }),
 ];
 
+export const prefixRules: S["RelayPrefixRule"][] = [
+  {
+    id: 1,
+    cidr: "192.168.1.0/24",
+    relay_host: "rustdesk.example.com",
+    comment: "Local office",
+    created_at: iso(86_400_000 * 5),
+    updated_at: iso(86_400_000 * 5),
+  },
+  {
+    id: 2,
+    cidr: "10.0.0.0/8",
+    relay_host: "relay-de.example.com",
+    comment: "Internal VPN",
+    created_at: iso(86_400_000 * 2),
+    updated_at: iso(86_400_000 * 2),
+  },
+];
+
 const options: S["RelayOptions"] = { require_approval: true, allow_private_hosts: false };
 const overrides: Record<number, S["RelaySettingsValues"]> = { 2: { total_bandwidth_mbps: 500 } };
 const globalProfile: S["RelaySettingsValues"] = {
@@ -174,6 +193,29 @@ export const relayHandlers = [
   http.put(`${B}/relays/options`, async ({ request }) => {
     Object.assign(options, (await request.json()) as S["RelayOptions"]);
     return ok(options);
+  }),
+  http.get(`${B}/relays/prefix-rules`, () => ok(prefixRules)),
+  http.post(`${B}/relays/prefix-rules`, async ({ request }) => {
+    const b = (await request.json()) as S["RelayPrefixRuleInput"];
+    if (!b.cidr || !b.relay_host) return err(400, "validation_failed", "cidr and relay_host are required");
+    const nextId = prefixRules.length ? Math.max(...prefixRules.map((r) => r.id)) + 1 : 1;
+    const rule: S["RelayPrefixRule"] = {
+      id: nextId,
+      cidr: b.cidr,
+      relay_host: b.relay_host,
+      comment: b.comment ?? "",
+      created_at: nowIso(),
+      updated_at: nowIso(),
+    };
+    prefixRules.push(rule);
+    return ok(rule, 201);
+  }),
+  http.delete(`${B}/relays/prefix-rules/:id`, ({ params }) => {
+    const id = Number(params.id);
+    const idx = prefixRules.findIndex((r) => r.id === id);
+    if (idx === -1) return err(404, "not_found", "rule not found");
+    prefixRules.splice(idx, 1);
+    return new HttpResponse(null, { status: 204 });
   }),
   http.post(`${B}/relays`, async ({ request }) => {
     const b = (await request.json()) as S["RelayCreate"];

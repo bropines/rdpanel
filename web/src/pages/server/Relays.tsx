@@ -12,6 +12,7 @@ import {
   Power,
   Radar,
   RefreshCw,
+  Route,
   ShieldCheck,
   ShieldOff,
   SlidersHorizontal,
@@ -33,11 +34,12 @@ import {
   type Relay,
   type RelayEnrollment,
   type RelayList,
+  type RelayPrefixRule,
 } from "@/api/relays";
 import { ConfirmDialog, CopyButton, EmptyState, ErrorState, Field, KeyValue, Mono, RelativeTime, SectionTitle, Sparkline, useErrorMessage } from "@/components";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
   DropdownMenu,
@@ -52,7 +54,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Sheet, SheetBody, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { cn } from "@/lib/utils";
-import { isHostPort } from "@/lib/validate";
+import { isCIDR, isHostPort } from "@/lib/validate";
 
 type Health = Relay["health"];
 
@@ -165,6 +167,264 @@ function OptionsCard() {
         </label>
       </CardContent>
     </Card>
+  );
+}
+
+/* ── prefix rules (CIDR routing) ────────────────────────────────────────── */
+
+function PrefixRulesCard({ relays }: { relays: Relay[] }) {
+  const { t } = useTranslation();
+  const qc = useQueryClient();
+  const onError = useRelayError();
+  const [adding, setAdding] = useState(false);
+  const [deleting, setDeleting] = useState<RelayPrefixRule | null>(null);
+
+  const q = useQuery({ queryKey: relayKeys.prefixRules, queryFn: relaysApi.prefixRules });
+
+  const del = useMutation({
+    mutationFn: (id: number) => relaysApi.deletePrefixRule(id),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: relayKeys.prefixRules });
+      toast.success(t("relays.prefixRules.deleted"));
+      setDeleting(null);
+    },
+    onError,
+  });
+
+  const rules = q.data ?? [];
+
+  return (
+    <Card>
+      <CardHeader className="flex flex-row items-start justify-between gap-4 p-4 pb-2">
+        <div>
+          <div className="flex items-center gap-2">
+            <Route className="h-4 w-4 text-muted-foreground" />
+            <h3 className="text-sm font-medium">{t("relays.prefixRules.title")}</h3>
+            {rules.length > 0 && (
+              <Badge variant="secondary" className="font-normal text-xs">
+                {t("relays.prefixRules.ruleCount", { count: rules.length })}
+              </Badge>
+            )}
+          </div>
+          <p className="mt-1 text-xs text-muted-foreground">{t("relays.prefixRules.hint")}</p>
+        </div>
+        <Button size="sm" variant="outline" className="gap-1 shrink-0" onClick={() => setAdding(true)}>
+          <Plus className="h-3.5 w-3.5" />
+          {t("relays.prefixRules.add")}
+        </Button>
+      </CardHeader>
+      <CardContent className="p-0">
+        {rules.length === 0 ? (
+          <div className="p-6">
+            <EmptyState
+              icon={Route}
+              title={t("relays.prefixRules.empty")}
+              description={t("relays.prefixRules.emptyHint")}
+              action={
+                <Button size="sm" variant="outline" onClick={() => setAdding(true)}>
+                  <Plus className="mr-1 h-3.5 w-3.5" />
+                  {t("relays.prefixRules.add")}
+                </Button>
+              }
+            />
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>{t("relays.prefixRules.cidr")}</TableHead>
+                  <TableHead>{t("relays.prefixRules.relayHost")}</TableHead>
+                  <TableHead className="hidden md:table-cell">{t("relays.prefixRules.comment")}</TableHead>
+                  <TableHead className="w-12">
+                    <span className="sr-only">{t("common.actions")}</span>
+                  </TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {rules.map((rule) => (
+                  <TableRow key={rule.id}>
+                    <TableCell>
+                      <Mono className="font-semibold text-xs">{rule.cidr}</Mono>
+                    </TableCell>
+                    <TableCell>
+                      <Mono className="text-xs text-muted-foreground">{rule.relay_host}</Mono>
+                    </TableCell>
+                    <TableCell className="hidden text-xs text-muted-foreground md:table-cell">
+                      {rule.comment || "—"}
+                    </TableCell>
+                    <TableCell>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="text-muted-foreground hover:text-destructive"
+                        aria-label={t("common.delete")}
+                        onClick={() => setDeleting(rule)}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        )}
+      </CardContent>
+
+      <AddPrefixRuleDialog open={adding} relays={relays} onOpenChange={setAdding} />
+      <ConfirmDialog
+        open={deleting !== null}
+        onOpenChange={(o) => !o && setDeleting(null)}
+        title={t("relays.prefixRules.deleteTitle", { cidr: deleting?.cidr ?? "" })}
+        description={t("relays.prefixRules.deleteHint")}
+        confirmLabel={t("common.delete")}
+        destructive
+        pending={del.isPending}
+        onConfirm={() => deleting && del.mutate(deleting.id)}
+      />
+    </Card>
+  );
+}
+
+function AddPrefixRuleDialog({
+  open,
+  relays,
+  onOpenChange,
+}: {
+  open: boolean;
+  relays: Relay[];
+  onOpenChange: (open: boolean) => void;
+}) {
+  const { t } = useTranslation();
+  const qc = useQueryClient();
+  const onError = useRelayError();
+  const [cidr, setCidr] = useState("");
+  const [selectedHost, setSelectedHost] = useState("");
+  const [customHost, setCustomHost] = useState("");
+  const [comment, setComment] = useState("");
+
+  const candidateHosts = useMemo(() => {
+    const set = new Set<string>();
+    for (const r of relays) {
+      if (r.public_host) set.add(r.public_host);
+    }
+    return Array.from(set);
+  }, [relays]);
+
+  useEffect(() => {
+    if (open) {
+      setCidr("");
+      setSelectedHost(candidateHosts[0] ?? "custom");
+      setCustomHost("");
+      setComment("");
+    }
+  }, [open, candidateHosts]);
+
+  const effectiveHost = selectedHost === "custom" ? customHost.trim() : selectedHost;
+  const cidrOk = isCIDR(cidr.trim());
+  const hostOk = isHostPort(effectiveHost);
+  const canSubmit = cidrOk && hostOk;
+
+  const save = useMutation({
+    mutationFn: () =>
+      relaysApi.createPrefixRule({
+        cidr: cidr.trim(),
+        relay_host: effectiveHost,
+        comment: comment.trim() || undefined,
+      }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: relayKeys.prefixRules });
+      toast.success(t("relays.prefixRules.created"));
+      onOpenChange(false);
+    },
+    onError,
+  });
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent closeLabel={t("common.close")} className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>{t("relays.prefixRules.add")}</DialogTitle>
+          <DialogDescription>{t("relays.prefixRules.hint")}</DialogDescription>
+        </DialogHeader>
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (canSubmit && !save.isPending) save.mutate();
+          }}
+          className="space-y-4"
+        >
+          <Field label={t("relays.prefixRules.cidr")} htmlFor="prefix-rule-cidr" error={cidr.trim() && !cidrOk ? t("validation.invalidCidr") : undefined}>
+            <Input
+              id="prefix-rule-cidr"
+              className="font-mono text-xs"
+              value={cidr}
+              onChange={(e) => setCidr(e.target.value)}
+              placeholder={t("relays.prefixRules.cidrPlaceholder")}
+              autoFocus
+            />
+          </Field>
+
+          <Field label={t("relays.prefixRules.relayHost")} error={effectiveHost && !hostOk ? t("validation.invalidHostPort") : undefined}>
+            {candidateHosts.length > 0 ? (
+              <div className="space-y-2">
+                <Select value={selectedHost} onValueChange={setSelectedHost}>
+                  <SelectTrigger>
+                    <SelectValue placeholder={t("relays.prefixRules.relayHostPlaceholder")} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {candidateHosts.map((h) => (
+                      <SelectItem key={h} value={h}>
+                        {h}
+                      </SelectItem>
+                    ))}
+                    <SelectItem value="custom">{t("relays.prefixRules.customHost")}</SelectItem>
+                  </SelectContent>
+                </Select>
+                {selectedHost === "custom" && (
+                  <Input
+                    className="font-mono text-xs"
+                    value={customHost}
+                    onChange={(e) => setCustomHost(e.target.value)}
+                    placeholder="relay.example.com:21117"
+                  />
+                )}
+              </div>
+            ) : (
+              <Input
+                className="font-mono text-xs"
+                value={customHost}
+                onChange={(e) => {
+                  setCustomHost(e.target.value);
+                  setSelectedHost("custom");
+                }}
+                placeholder="relay.example.com:21117"
+              />
+            )}
+          </Field>
+
+          <Field label={t("relays.prefixRules.comment")} htmlFor="prefix-rule-comment">
+            <Input
+              id="prefix-rule-comment"
+              value={comment}
+              onChange={(e) => setComment(e.target.value)}
+              placeholder={t("relays.prefixRules.commentPlaceholder")}
+            />
+          </Field>
+
+          <DialogFooter className="pt-2">
+            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+              {t("common.cancel")}
+            </Button>
+            <Button type="submit" disabled={!canSubmit || save.isPending}>
+              {save.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              {t("common.add")}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -969,6 +1229,8 @@ export function RelaysTab() {
           </Table>
         </div>
       )}
+
+      <PrefixRulesCard relays={data.items} />
 
       <OptionsCard />
 

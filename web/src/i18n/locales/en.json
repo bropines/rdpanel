@@ -113,7 +113,9 @@
     "email": "Enter a valid email address",
     "integer": "Enter a whole number",
     "range": "Out of the allowed range",
-    "passwordMin": "At least 8 characters"
+    "passwordMin": "At least 8 characters",
+    "invalidCidr": "Enter a valid CIDR prefix (e.g. 192.168.1.0/24)",
+    "invalidHostPort": "Enter a valid host:port"
   },
   "table": {
     "clearSelection": "Clear",
@@ -1328,6 +1330,26 @@
       "inherit": "inherit",
       "save": "Save overrides",
       "saved": "Overrides saved; the agent applies them"
+    },
+    "prefixRules": {
+      "title": "Prefix routing (CIDR)",
+      "hint": "Direct client pairs to specific relays based on IP subnets (CIDR) using longest-prefix match. Sessions without a match fall back to standard rotation.",
+      "add": "Add rule",
+      "cidr": "CIDR prefix",
+      "cidrPlaceholder": "e.g. 192.168.1.0/24 or 2001:db8::/32",
+      "relayHost": "Target relay host",
+      "relayHostPlaceholder": "Select relay or enter host:port",
+      "customHost": "Custom host:port…",
+      "comment": "Comment",
+      "commentPlaceholder": "Optional description (e.g. Moscow Office, DC VPN)",
+      "empty": "No prefix rules configured",
+      "emptyHint": "All client sessions currently use standard rotation. Add a CIDR prefix rule to route traffic from specific subnets to dedicated relays.",
+      "created": "Prefix rule created",
+      "deleted": "Prefix rule deleted",
+      "deleteTitle": "Delete prefix rule {{cidr}}?",
+      "deleteHint": "Traffic from this subnet will fall back to default rotation (or less specific rules).",
+      "ruleCount_one": "{{count}} rule",
+      "ruleCount_other": "{{count}} rules"
     }
   },
   "apiDocs": {
