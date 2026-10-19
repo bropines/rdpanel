@@ -54,6 +54,9 @@ func (a *App) startWorkers(ctx context.Context, wg *sync.WaitGroup) {
 	if a.Webhook != nil {
 		run("webhook", a.Webhook.Run)
 	}
+	if a.LDAP != nil {
+		run("ldap-sync", a.LDAP.Run)
+	}
 }
 
 func (a *App) runJanitor(ctx context.Context) {

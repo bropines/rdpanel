@@ -32,6 +32,7 @@ type UserDTO struct {
 	TOTPRequired    bool       `json:"totp_required"`
 	EmailVerified   bool       `json:"email_verified"`
 	Email2FAEnabled bool       `json:"email_2fa_enabled"`
+	IsLDAP          bool       `json:"is_ldap"`
 	LastLoginAt     *time.Time `json:"last_login_at"`
 	CreatedAt       time.Time  `json:"created_at"`
 	UpdatedAt       time.Time  `json:"updated_at"`
@@ -42,7 +43,7 @@ func NewUserDTO(u *store.User, totpEnabled bool) UserDTO {
 	d := UserDTO{ID: u.ID, Username: u.Username, DisplayName: u.DisplayName, AvatarURL: u.AvatarURL,
 		Note: u.Note, Role: u.Role, Status: string(u.Status), UserGroupID: u.UserGroupID,
 		HasPassword: u.HasPassword(), TOTPEnabled: totpEnabled, TOTPRequired: u.TOTPRequired,
-		EmailVerified: u.EmailVerified(), Email2FAEnabled: u.Email2FAEnabled,
+		EmailVerified: u.EmailVerified(), Email2FAEnabled: u.Email2FAEnabled, IsLDAP: u.IsLDAP,
 		LastLoginAt: u.LastLoginAt, CreatedAt: u.CreatedAt, UpdatedAt: u.UpdatedAt}
 	if u.Email != "" {
 		e := u.Email

@@ -437,6 +437,11 @@ export function UserDrawer({ userId, onClose }: { userId: number | undefined; on
               <SheetTitle className="flex flex-wrap items-center gap-2">
                 {u.display_name || u.username}
                 <Badge variant={u.role === "admin" ? "default" : "secondary"}>{t(`roles.${u.role}`)}</Badge>
+                {u.is_ldap && (
+                  <Badge variant="outline" className="border-blue-500/30 text-blue-600 dark:text-blue-400">
+                    LDAP
+                  </Badge>
+                )}
                 {u.status === "disabled" && <Badge variant="destructive">{t("users.disabled")}</Badge>}
               </SheetTitle>
               <SheetDescription>

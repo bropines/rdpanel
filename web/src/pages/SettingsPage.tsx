@@ -16,6 +16,7 @@ import { Input } from "@/components/ui/input";
 import { Skeleton, Switch, Tabs, TabsContent, TabsList, TabsTrigger, Textarea } from "@/components/ui/misc";
 import { displayName, useMe } from "@/lib/session";
 import { EmailSettingsCard } from "@/pages/EmailSettingsCard";
+import { LDAPSettingsCard } from "@/pages/LDAPSettingsCard";
 
 const int = (min: number, max = Number.MAX_SAFE_INTEGER) =>
   z
@@ -246,6 +247,7 @@ export function SettingsPage() {
           <TabsTrigger value="general">{t("settings.tabs.general")}</TabsTrigger>
           <TabsTrigger value="branding">{t("settings.tabs.branding")}</TabsTrigger>
           <TabsTrigger value="security">{t("settings.tabs.security")}</TabsTrigger>
+          <TabsTrigger value="ldap">{t("settings.tabs.ldap")}</TabsTrigger>
           <TabsTrigger value="email">{t("settings.tabs.email")}</TabsTrigger>
           <TabsTrigger value="retention">{t("settings.tabs.retention")}</TabsTrigger>
         </TabsList>
@@ -331,6 +333,10 @@ export function SettingsPage() {
               </ConfigValue>
             </div>
           </Section>
+        </TabsContent>
+
+        <TabsContent value="ldap" className="space-y-4">
+          <LDAPSettingsCard />
         </TabsContent>
 
         <TabsContent value="email" className="space-y-4">

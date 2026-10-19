@@ -239,12 +239,22 @@ func (h *handler) checkPassword(r *http.Request, username, password string) (*st
 		}
 	}
 	if u == nil || !u.HasPassword() {
+		if h.LDAP != nil {
+			if ldapUser, err := h.LDAP.Authenticate(r.Context(), username, password); err == nil {
+				return ldapUser, true, nil
+			}
+		}
 		// Spend comparable time so unknown usernames are not distinguishable.
 		dummyHashOnce.Do(func() { dummyHash, _, _ = h.Hasher.Hash("rdpanel-dummy-password") })
 		_ = h.Hasher.Verify(dummyHash, password)
 		return u, false, nil
 	}
 	if !h.Hasher.Verify(u.PasswordHash, password) {
+		if h.LDAP != nil {
+			if ldapUser, err := h.LDAP.Authenticate(r.Context(), username, password); err == nil {
+				return ldapUser, true, nil
+			}
+		}
 		return u, false, nil
 	}
 	if h.Hasher.NeedsRehash(u.PasswordHash) {

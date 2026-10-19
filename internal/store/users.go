@@ -48,6 +48,8 @@ type User struct {
 	Email2FAEnabled bool
 	// Locale of e-mails ("" = panel default).
 	Locale            string
+	IsLDAP            bool
+	LDAPDN            string
 	PasswordChangedAt *time.Time
 	LastLoginAt       *time.Time
 	CreatedAt         time.Time
@@ -71,7 +73,7 @@ type Users struct {
 
 const userColumns = `id, username, email, display_name, avatar_url, note, password_hash, password_algo,
 	role, status, user_group_id, totp_required, password_changed_at, last_login_at, created_at, updated_at,
-	email_verified_at, email_2fa_enabled, locale`
+	email_verified_at, email_2fa_enabled, locale, is_ldap, coalesce(ldap_dn, '')`
 
 func scanUser(row interface{ Scan(...any) error }) (*User, error) {
 	var (
@@ -79,17 +81,20 @@ func scanUser(row interface{ Scan(...any) error }) (*User, error) {
 		email, hash, algo, locale sql.NullString
 		groupID, pwAt, lastAt     sql.NullInt64
 		verifiedAt                sql.NullInt64
-		totp, email2FA            int
+		totp, email2FA, isLDAP    int
+		ldapDN                    string
 		createdAt, updatedAt      int64
 	)
 	err := row.Scan(&u.ID, &u.Username, &email, &u.DisplayName, &u.AvatarURL, &u.Note, &hash, &algo,
 		&u.Role, &u.Status, &groupID, &totp, &pwAt, &lastAt, &createdAt, &updatedAt,
-		&verifiedAt, &email2FA, &locale)
+		&verifiedAt, &email2FA, &locale, &isLDAP, &ldapDN)
 	if err != nil {
 		return nil, mapErr(err)
 	}
 	u.Email, u.PasswordHash, u.PasswordAlgo = email.String, hash.String, algo.String
 	u.EmailVerifiedAt, u.Email2FAEnabled, u.Locale = ptrMs(verifiedAt), email2FA == 1, locale.String
+	u.IsLDAP = isLDAP == 1
+	u.LDAPDN = ldapDN
 	u.UserGroupID = ptrID(groupID)
 	u.TOTPRequired = totp == 1
 	u.PasswordChangedAt, u.LastLoginAt = ptrMs(pwAt), ptrMs(lastAt)
@@ -117,13 +122,14 @@ func (r *Users) Create(ctx context.Context, u *User) error {
 	}
 	err := r.q.QueryRowContext(ctx, `INSERT INTO users (id, username, email, display_name, avatar_url, note,
 		password_hash, password_algo, role, status, user_group_id, totp_required, password_changed_at,
-		last_login_at, created_at, updated_at, email_verified_at, email_2fa_enabled, locale)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`,
+		last_login_at, created_at, updated_at, email_verified_at, email_2fa_enabled, locale, is_ldap, ldap_dn)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`,
 		id, strings.TrimSpace(u.Username), nullStr(u.Email), u.DisplayName, u.AvatarURL, u.Note,
 		nullStr(u.PasswordHash), nullStr(u.PasswordAlgo), u.Role, u.Status, nullID(u.UserGroupID),
 		boolInt(u.TOTPRequired), nullMs(u.PasswordChangedAt), nullMs(u.LastLoginAt),
 		toMs(u.CreatedAt), toMs(u.UpdatedAt), nullMs(u.EmailVerifiedAt),
-		boolInt(u.Email2FAEnabled && u.EmailVerifiedAt != nil), nullStr(u.Locale)).Scan(&u.ID)
+		boolInt(u.Email2FAEnabled && u.EmailVerifiedAt != nil), nullStr(u.Locale),
+		boolInt(u.IsLDAP), nullStr(u.LDAPDN)).Scan(&u.ID)
 	return mapErr(err)
 }
 
@@ -136,6 +142,14 @@ func (r *Users) GetByID(ctx context.Context, id int64) (*User, error) {
 func (r *Users) GetByUsername(ctx context.Context, username string) (*User, error) {
 	return scanUser(r.q.QueryRowContext(ctx, `SELECT `+userColumns+` FROM users WHERE username = ?`,
 		strings.TrimSpace(username)))
+}
+
+// GetByLDAPDN returns the user with ldap_dn (exact match).
+func (r *Users) GetByLDAPDN(ctx context.Context, dn string) (*User, error) {
+	if dn == "" {
+		return nil, ErrNotFound
+	}
+	return scanUser(r.q.QueryRowContext(ctx, `SELECT `+userColumns+` FROM users WHERE ldap_dn = ?`, dn))
 }
 
 // ListUsersParams filters and pages List.
@@ -206,11 +220,14 @@ func (r *Users) Update(ctx context.Context, u *User) error {
 	u.UpdatedAt = r.now()
 	return expectOne(r.q.ExecContext(ctx, `UPDATE users SET username = ?, email = ?, display_name = ?,
 		avatar_url = ?, note = ?, role = ?, status = ?, user_group_id = ?, totp_required = ?, locale = ?,
+		is_ldap = ?, ldap_dn = ?,
 		email_verified_at = CASE WHEN coalesce(email, '') = coalesce(?, '') COLLATE NOCASE THEN email_verified_at END,
 		email_2fa_enabled = CASE WHEN coalesce(email, '') = coalesce(?, '') COLLATE NOCASE THEN email_2fa_enabled ELSE 0 END,
 		updated_at = ? WHERE id = ?`,
 		strings.TrimSpace(u.Username), nullStr(u.Email), u.DisplayName, u.AvatarURL, u.Note, u.Role, u.Status,
-		nullID(u.UserGroupID), boolInt(u.TOTPRequired), nullStr(u.Locale), nullStr(u.Email), nullStr(u.Email),
+		nullID(u.UserGroupID), boolInt(u.TOTPRequired), nullStr(u.Locale),
+		boolInt(u.IsLDAP), nullStr(u.LDAPDN),
+		nullStr(u.Email), nullStr(u.Email),
 		toMs(u.UpdatedAt), u.ID))
 }
 

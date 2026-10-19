@@ -77,3 +77,11 @@ const ScopeICEServers = "settings.ice_servers"
 
 // ICEServersAD is the AD of the stored client ICE server list.
 func ICEServersAD() string { return AD(ScopeICEServers, 0) }
+
+// ScopeLDAPBindPassword seals the LDAP bind password stored in ldap_settings
+// (a single value, id 0).
+const ScopeLDAPBindPassword = "settings.ldap_bind_password"
+
+// LDAPBindPasswordAD is the AD of the stored LDAP bind password.
+func LDAPBindPasswordAD() string { return AD(ScopeLDAPBindPassword, 0) }
+

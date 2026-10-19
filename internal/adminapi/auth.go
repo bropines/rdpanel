@@ -210,13 +210,47 @@ func (c *authCore) handleLogin(w http.ResponseWriter, r *http.Request) {
 	reason := "bad_credentials"
 	switch {
 	case user == nil:
-		c.d.Hasher.Verify(c.dummyHash(), req.Password)
-		reason = "unknown_user"
+		if c.d.LDAP != nil {
+			if ldapUser, err := c.d.LDAP.Authenticate(ctx, req.Username, req.Password); err == nil {
+				if !ldapUser.IsActive() {
+					ok, reason = false, "disabled"
+				} else {
+					ok = true
+					user = ldapUser
+				}
+			}
+		}
+		if !ok {
+			c.d.Hasher.Verify(c.dummyHash(), req.Password)
+			reason = "unknown_user"
+		}
 	case !user.HasPassword():
-		c.d.Hasher.Verify(c.dummyHash(), req.Password)
-		reason = "no_password"
+		if c.d.LDAP != nil {
+			if ldapUser, err := c.d.LDAP.Authenticate(ctx, req.Username, req.Password); err == nil {
+				if !ldapUser.IsActive() {
+					ok, reason = false, "disabled"
+				} else {
+					ok = true
+					user = ldapUser
+				}
+			}
+		}
+		if !ok {
+			c.d.Hasher.Verify(c.dummyHash(), req.Password)
+			reason = "no_password"
+		}
 	default:
 		ok = c.d.Hasher.Verify(user.PasswordHash, req.Password)
+		if !ok && c.d.LDAP != nil {
+			if ldapUser, err := c.d.LDAP.Authenticate(ctx, req.Username, req.Password); err == nil {
+				if !ldapUser.IsActive() {
+					ok, reason = false, "disabled"
+				} else {
+					ok = true
+					user = ldapUser
+				}
+			}
+		}
 		if ok && !user.IsActive() {
 			ok, reason = false, "disabled"
 		}

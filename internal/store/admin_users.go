@@ -85,7 +85,8 @@ type UserRow struct {
 
 const userRowSelect = `SELECT u.id, u.username, u.email, u.display_name, u.avatar_url, u.note, u.password_hash,
 	u.password_algo, u.role, u.status, u.user_group_id, u.totp_required, u.password_changed_at, u.last_login_at,
-	u.created_at, u.updated_at, u.email_verified_at, u.email_2fa_enabled, u.locale, coalesce(g.name, ''),
+	u.created_at, u.updated_at, u.email_verified_at, u.email_2fa_enabled, u.locale, u.is_ldap, coalesce(u.ldap_dn, ''),
+	coalesce(g.name, ''),
 	(SELECT count(*) FROM devices d WHERE d.owner_user_id = u.id),
 	EXISTS (SELECT 1 FROM totp_secrets t WHERE t.user_id = u.id AND t.confirmed_at IS NOT NULL)
 	FROM users u LEFT JOIN user_groups g ON g.id = u.user_group_id`

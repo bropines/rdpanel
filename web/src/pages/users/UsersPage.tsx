@@ -54,6 +54,11 @@ export function UsersPage() {
         cell: ({ row: { original: u } }) => (
           <div className="flex items-center gap-1.5">
             <Badge variant={u.role === "admin" ? "default" : "secondary"}>{t(`roles.${u.role}`)}</Badge>
+            {u.is_ldap && (
+              <Badge variant="outline" className="border-blue-500/30 text-blue-600 dark:text-blue-400">
+                LDAP
+              </Badge>
+            )}
             {u.is_last_admin && (
               <span className="text-[11px] text-muted-foreground" title={t("users.lastAdminHint")}>
                 {t("users.lastAdmin")}
