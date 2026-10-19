@@ -30,10 +30,13 @@ import {
   Users,
   X,
 } from "lucide-react";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
+import CodeMirror, { Prec, keymap } from "@uiw/react-codemirror";
+import { json } from "@codemirror/lang-json";
 
+import { useTheme } from "@/lib/theme-provider";
 import {
   aclApi,
   aclKeys,
@@ -54,7 +57,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSepara
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Skeleton, Switch, Tabs, TabsContent, TabsList, TabsTrigger, Textarea } from "@/components/ui/misc";
+import { Skeleton, Switch, Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/misc";
 import { cn } from "@/lib/utils";
 
 export function AclPage() {
@@ -594,25 +597,30 @@ function PolicyTab() {
     }
   };
 
-  // Keyboard shortcuts: Tab key support in textarea, Ctrl+Enter / Cmd+Enter to run tests, Ctrl+S / Cmd+S to save
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
-      e.preventDefault();
-      testMutation.mutate();
-    } else if ((e.ctrlKey || e.metaKey) && e.key === "s") {
-      e.preventDefault();
-      saveMutation.mutate();
-    } else if (e.key === "Tab") {
-      e.preventDefault();
-      const target = e.currentTarget;
-      const start = target.selectionStart;
-      const end = target.selectionEnd;
-      const value = target.value;
-      target.value = value.substring(0, start) + "  " + value.substring(end);
-      target.selectionStart = target.selectionEnd = start + 2;
-      setPolicyText(target.value);
-    }
-  };
+  const { theme } = useTheme();
+  const isDark = theme === "dark" || (theme === "system" && typeof window !== "undefined" && window.matchMedia("(prefers-color-scheme: dark)").matches);
+
+  const extensions = useMemo(() => [
+    json(),
+    Prec.highest(
+      keymap.of([
+        {
+          key: "Mod-Enter",
+          run: () => {
+            testMutation.mutate();
+            return true;
+          },
+        },
+        {
+          key: "Mod-s",
+          run: () => {
+            saveMutation.mutate();
+            return true;
+          },
+        },
+      ])
+    ),
+  ], [testMutation, saveMutation]);
 
   if (isLoading) {
     return (
@@ -676,14 +684,36 @@ function PolicyTab() {
           </div>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="relative rounded-md border border-input bg-muted/20 font-mono focus-within:ring-1 focus-within:ring-ring">
-            <Textarea
+          <div className="rounded-md border border-input overflow-hidden font-mono text-xs sm:text-sm focus-within:ring-1 focus-within:ring-ring">
+            <CodeMirror
               value={policyText}
-              onChange={(e) => setPolicyText(e.target.value)}
-              onKeyDown={handleKeyDown}
-              spellCheck={false}
-              className="min-h-[480px] w-full resize-y border-0 bg-transparent p-4 font-mono text-xs sm:text-sm leading-relaxed focus-visible:ring-0"
-              placeholder="// { ... policy ... }"
+              height="520px"
+              theme={isDark ? "dark" : "light"}
+              extensions={extensions}
+              onChange={(val) => setPolicyText(val)}
+              basicSetup={{
+                lineNumbers: true,
+                highlightActiveLineGutter: true,
+                highlightSpecialChars: true,
+                foldGutter: true,
+                dropCursor: true,
+                allowMultipleSelections: true,
+                indentOnInput: true,
+                bracketMatching: true,
+                closeBrackets: true,
+                autocompletion: true,
+                rectangularSelection: true,
+                crosshairCursor: true,
+                highlightActiveLine: true,
+                highlightSelectionMatches: true,
+                closeBracketsKeymap: true,
+                defaultKeymap: true,
+                searchKeymap: true,
+                historyKeymap: true,
+                foldKeymap: true,
+                completionKeymap: true,
+                lintKeymap: true,
+              }}
             />
           </div>
           <div className="flex items-center justify-between text-xs text-muted-foreground">
