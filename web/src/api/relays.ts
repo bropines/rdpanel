@@ -19,6 +19,9 @@ export type RelayPrefixRuleInput = Schemas["RelayPrefixRuleInput"];
 export type CountryPrefixInfo = Schemas["CountryPrefixInfo"];
 export type ImportCountryPrefixRulesInput = Schemas["ImportCountryPrefixRulesInput"];
 export type ImportCountryPrefixRulesResult = Schemas["ImportCountryPrefixRulesResult"];
+export type RelayGeoIPStatus = Schemas["RelayGeoIPStatus"];
+export type RelayGeoIPRefreshInput = Schemas["RelayGeoIPRefreshInput"];
+export type RelayGeoIPLookupResult = Schemas["RelayGeoIPLookupResult"];
 
 export const relayKeys = {
   all: ["relays"] as const,
@@ -26,6 +29,7 @@ export const relayKeys = {
   options: ["relays", "options"] as const,
   prefixRules: ["relays", "prefix-rules"] as const,
   prefixCountries: ["relays", "prefix-rules", "countries"] as const,
+  geoipStatus: ["relays", "geoip", "status"] as const,
   settings: (id: number) => ["relays", "settings", id] as const,
   usage: (id: number) => ["relays", "usage", id] as const,
   traffic: (id: number, hours?: number) => ["relays", "traffic", id, hours ?? 24] as const,
@@ -57,6 +61,11 @@ export const relaysApi = {
   prefixCountries: () => api.request<CountryPrefixInfo[]>("/relays/prefix-rules/countries"),
   importCountryPrefixRules: (body: ImportCountryPrefixRulesInput) =>
     api.request<ImportCountryPrefixRulesResult>("/relays/prefix-rules/import-country", { method: "POST", body }),
+  geoipStatus: () => api.request<RelayGeoIPStatus>("/relays/geoip/status"),
+  geoipRefresh: (body?: RelayGeoIPRefreshInput) =>
+    api.request<RelayGeoIPStatus>("/relays/geoip/refresh", { method: "POST", body }),
+  geoipLookup: (ip: string) =>
+    api.request<RelayGeoIPLookupResult>(`/relays/geoip/lookup?ip=${encodeURIComponent(ip)}`),
 };
 
 /** The relay keys of the per-relay override form (same as the hbbr part of server settings). */

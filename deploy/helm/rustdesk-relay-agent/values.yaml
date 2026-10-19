@@ -1,5 +1,5 @@
 # Default values for rustdesk-relay-agent.
-# This chart deploys an RD Panel relay agent (hbbr + rdpanel agent) connecting to an RD Panel instance.
+# This runs an extra hbbr relay managed by the central RD Panel (RDPANEL_MODE=agent).
 
 image:
   repository: ghcr.io/bropines/rdpanel
@@ -11,56 +11,31 @@ imagePullSecrets: []
 nameOverride: ""
 fullnameOverride: ""
 
-commonLabels: {}
-commonAnnotations: {}
-
-agent:
-  # Base URL of the RD Panel instance (e.g. "https://panel.example.com" or internal address).
-  # The agent dials ${panelUrl}/agent/v1/enroll and ${panelUrl}/agent/v1/connect (WebSocket).
-  panelUrl: ""
-
-  # One-time enrollment token issued by the panel (Server -> Relays -> Add Agent).
-  # Stored in a Kubernetes Secret. Ignored if existingSecret is set.
-  token: ""
-
-  # Reference to an existing Secret containing the enrollment token.
+# Central RD Panel connection settings
+panel:
+  # The public client API URL of your central RD Panel (e.g., https://desk-api.example.com)
+  # The reverse proxy must allow /agent/v1/ (WebSocket) and /agent/install.sh.
+  url: "https://desk-api.example.com"
+  # One-time enrollment token issued by RD Panel (Server -> Relays -> Add Relay -> Relay agent).
+  # Once enrolled, the agent persists its ed25519 key in the data volume.
+  enrollToken: ""
+  # Existing secret name holding the token under the key `enroll-token`
   existingSecret: ""
-  # Key inside existingSecret containing the token.
-  tokenSecretKey: "token"
+  # Optional secret holding a custom CA bundle (key `ca.crt`)
+  caSecret: ""
 
-  # Optional public host[:port] advertised to RustDesk clients (hbbs rs).
-  # If omitted, uses the value configured in the panel at agent creation.
-  publicHost: ""
-
-  # Optional management host[:port] used by the panel for reachability probes.
-  mgmtHost: ""
-
-  # Optional PEM certificate bundle to trust a self-signed or internal panel CA.
-  panelCA: ""
-
-# State persistence for the agent: stores agent.key (ed25519 identity), hbbr key, and state.
-persistence:
-  enabled: true
-  existingClaim: ""
-  storageClassName: ""
-  accessModes:
-    - ReadWriteOnce
-  size: 1Gi
-  annotations: {}
-
-# Run with host networking if hbbr should bind directly to node network interfaces.
-hostNetwork: false
-
-# Kubernetes Service exposing hbbr (TCP port 21117).
-# Note: when hostNetwork is true, Service is usually disabled or internal only.
-service:
-  enabled: true
-  type: LoadBalancer
-  # Preserves client IP for geo-routing / logging when supported by the cloud provider.
-  externalTrafficPolicy: Local
+relay:
+  # hbbr port (default 21117)
   port: 21117
-  nodePort: null
-  annotations: {}
+  # Custom hostname reported to the panel (defaults to pod name)
+  hostname: ""
+  # Log format: text or json
+  logFormat: text
+
+# Whether the pod should use the host network namespace.
+# Recommended for bare-metal / dedicated K8s nodes so hbbr sees real client source IPs
+# and avoids NAT hairpinning.
+hostNetwork: false
 
 serviceAccount:
   create: true
@@ -70,24 +45,46 @@ serviceAccount:
 podAnnotations: {}
 podLabels: {}
 
-podSecurityContext: {}
+podSecurityContext:
+  fsGroup: 10001
 
-securityContext: {}
+securityContext:
+  runAsUser: 10001
+  runAsGroup: 10001
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop:
+      - ALL
+
+service:
+  enabled: true
+  type: LoadBalancer
+  annotations: {}
+  port: 21117
+  nodePort: null
+
+persistence:
+  enabled: true
+  storageClassName: ""
+  accessModes:
+    - ReadWriteOnce
+  size: 1Gi
+  annotations: {}
 
 resources:
-  requests:
-    cpu: 100m
-    memory: 128Mi
   limits:
     cpu: 1000m
     memory: 512Mi
+  requests:
+    cpu: 100m
+    memory: 128Mi
+
+serviceMonitor:
+  enabled: false
+  interval: 30s
+  scrapeTimeout: 10s
+  labels: {}
 
 nodeSelector: {}
 tolerations: []
 affinity: {}
-
-# Prometheus Operator ServiceMonitor.
-serviceMonitor:
-  enabled: false
-  interval: 30s
-  labels: {}

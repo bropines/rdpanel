@@ -1,8 +1,8 @@
-{{- if and .Values.persistence.enabled (not .Values.persistence.existingClaim) }}
+{{- if .Values.persistence.enabled }}
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
-  name: {{ include "rustdesk-relay-agent.fullname" . }}
+  name: {{ include "rustdesk-relay-agent.fullname" . }}-data
   labels:
     {{- include "rustdesk-relay-agent.labels" . | nindent 4 }}
   {{- with .Values.persistence.annotations }}
@@ -12,10 +12,10 @@ metadata:
 spec:
   accessModes:
     {{- toYaml .Values.persistence.accessModes | nindent 4 }}
-  resources:
-    requests:
-      storage: {{ .Values.persistence.size | quote }}
   {{- if .Values.persistence.storageClassName }}
   storageClassName: {{ .Values.persistence.storageClassName | quote }}
   {{- end }}
+  resources:
+    requests:
+      storage: {{ .Values.persistence.size | quote }}
 {{- end }}

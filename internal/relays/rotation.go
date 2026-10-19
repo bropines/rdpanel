@@ -2,6 +2,7 @@ package relays
 
 import (
 	"fmt"
+	"math"
 	"strings"
 )
 
@@ -37,6 +38,56 @@ type Rotation struct {
 func Eligible(r Relay) bool {
 	return r.InRotation && r.AdminState == StateEnabled && r.Weight > 0 &&
 		(r.Health == HealthActive || r.Health == HealthDegraded)
+}
+
+// ApplyAutoWeights adjusts weights of eligible relays inversely to their active load.
+// Relays with fewer active sessions receive higher weight (up to 5), relays with more sessions receive lower weight (down to 1).
+// If maxLoad == minLoad or fewer than 2 eligible relays exist, original weights are kept.
+func ApplyAutoWeights(relays []Relay, activeSessions map[int64]int) []Relay {
+	if len(relays) == 0 {
+		return relays
+	}
+	minLoad, maxLoad := -1, -1
+	count := 0
+	for _, r := range relays {
+		if !Eligible(r) {
+			continue
+		}
+		load := 0
+		if activeSessions != nil {
+			load = activeSessions[r.ID]
+		}
+		if count == 0 || load < minLoad {
+			minLoad = load
+		}
+		if count == 0 || load > maxLoad {
+			maxLoad = load
+		}
+		count++
+	}
+	if count <= 1 || maxLoad == minLoad {
+		return relays
+	}
+	out := make([]Relay, len(relays))
+	copy(out, relays)
+	for i := range out {
+		if !Eligible(out[i]) {
+			continue
+		}
+		load := 0
+		if activeSessions != nil {
+			load = activeSessions[out[i].ID]
+		}
+		ratio := float64(load-minLoad) / float64(maxLoad-minLoad)
+		w := int(math.Round(5.0 - ratio*4.0))
+		if w < 1 {
+			w = 1
+		} else if w > 5 {
+			w = 5
+		}
+		out[i].Weight = w
+	}
+	return out
 }
 
 // ComputeRotation builds the weighted relay list from relays (in id order).

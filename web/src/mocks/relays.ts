@@ -123,7 +123,7 @@ export const prefixRules: S["RelayPrefixRule"][] = [
   },
 ];
 
-const options: S["RelayOptions"] = { require_approval: true, allow_private_hosts: false };
+const options: S["RelayOptions"] = { require_approval: true, allow_private_hosts: false, auto_weights: false };
 const overrides: Record<number, S["RelaySettingsValues"]> = { 2: { total_bandwidth_mbps: 500 } };
 const globalProfile: S["RelaySettingsValues"] = {
   blacklist: [],
@@ -256,6 +256,47 @@ export const relayHandlers = [
     if (idx === -1) return err(404, "not_found", "rule not found");
     prefixRules.splice(idx, 1);
     return new HttpResponse(null, { status: 204 });
+  }),
+  http.get(`${B}/relays/geoip/status`, () =>
+    ok({
+      loaded: true,
+      source: "builtin",
+      country_count: 18,
+      prefix_count: 210,
+      updated_at: nowIso(),
+    } satisfies S["RelayGeoIPStatus"]),
+  ),
+  http.post(`${B}/relays/geoip/refresh`, () =>
+    ok({
+      loaded: true,
+      source: "https://raw.githubusercontent.com/sapics/ip-location-db/main/dbip-country/dbip-country-ipv4.csv",
+      country_count: 240,
+      prefix_count: 15420,
+      updated_at: nowIso(),
+    } satisfies S["RelayGeoIPStatus"]),
+  ),
+  http.get(`${B}/relays/geoip/lookup`, ({ request }) => {
+    const url = new URL(request.url);
+    const ip = url.searchParams.get("ip") ?? "";
+    if (ip.startsWith("95.165.") || ip.startsWith("178.62.")) {
+      return ok({
+        ip,
+        country_code: "RU",
+        country_name: "Russia",
+        matched_cidr: "95.165.0.0/16",
+        found: true,
+      } satisfies S["RelayGeoIPLookupResult"]);
+    }
+    if (ip.startsWith("185.183.") || ip.startsWith("185.107.")) {
+      return ok({
+        ip,
+        country_code: "NL",
+        country_name: "Netherlands",
+        matched_cidr: "185.183.0.0/16",
+        found: true,
+      } satisfies S["RelayGeoIPLookupResult"]);
+    }
+    return ok({ ip, found: false } satisfies S["RelayGeoIPLookupResult"]);
   }),
   http.post(`${B}/relays`, async ({ request }) => {
     const b = (await request.json()) as S["RelayCreate"];

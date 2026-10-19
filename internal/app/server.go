@@ -63,6 +63,7 @@ func (a *App) Handler() http.Handler {
 			DeviceRate: adminapi.DeviceRateInfo{Rate: clientapi.DefaultDeviceRate.Rate, Burst: clientapi.DefaultDeviceRate.Burst},
 			StartedAt:  a.StartedAt, Schema: a.DB,
 			ClientOptions: a.ClientOptions,
+			Federation:    a.Federation,
 			Logs:          a.Logs, LogSources: a.logSources(), LogCapture: a.logCapture(),
 		}
 		if a.Updates != nil {
@@ -89,6 +90,28 @@ func (a *App) Handler() http.Handler {
 			r.NotFound(httpx.NotFound)
 			events.Register(r, events.Deps{
 				Log: a.Log.With("component", "events"), Store: a.Store, Bus: a.Events, Auth: eventsAuth,
+			})
+		})
+		api.Route("/v1/federation", func(r chi.Router) {
+			r.NotFound(httpx.NotFound)
+			r.Get("/health", func(w http.ResponseWriter, req *http.Request) {
+				if a.Federation == nil {
+					httpx.WriteError(w, http.StatusServiceUnavailable, "service_unavailable", "federation disabled")
+					return
+				}
+				httpx.WriteJSON(w, http.StatusOK, a.Federation.PublicHealth(req.Context()))
+			})
+			r.Get("/relays", func(w http.ResponseWriter, req *http.Request) {
+				if a.Federation == nil {
+					httpx.WriteError(w, http.StatusServiceUnavailable, "service_unavailable", "federation disabled")
+					return
+				}
+				res, err := a.Federation.PublicRelays(req.Context())
+				if err != nil {
+					httpx.WriteError(w, http.StatusInternalServerError, "internal_error", err.Error())
+					return
+				}
+				httpx.WriteJSON(w, http.StatusOK, res)
 			})
 		})
 		// Admin API contract and its interactive docs (RDPANEL_API_DOCS).

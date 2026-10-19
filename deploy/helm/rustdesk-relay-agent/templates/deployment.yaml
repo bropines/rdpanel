@@ -5,7 +5,6 @@ metadata:
   labels:
     {{- include "rustdesk-relay-agent.labels" . | nindent 4 }}
 spec:
-  # Do NOT increase replicas: hbbr pairing state is local to each process.
   replicas: 1
   strategy:
     type: Recreate
@@ -14,24 +13,24 @@ spec:
       {{- include "rustdesk-relay-agent.selectorLabels" . | nindent 6 }}
   template:
     metadata:
+      annotations:
+        {{- with .Values.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
       labels:
         {{- include "rustdesk-relay-agent.selectorLabels" . | nindent 8 }}
         {{- with .Values.podLabels }}
         {{- toYaml . | nindent 8 }}
         {{- end }}
-      {{- with .Values.podAnnotations }}
-      annotations:
-        {{- toYaml . | nindent 8 }}
-      {{- end }}
     spec:
       {{- with .Values.imagePullSecrets }}
       imagePullSecrets:
         {{- toYaml . | nindent 8 }}
       {{- end }}
       serviceAccountName: {{ include "rustdesk-relay-agent.serviceAccountName" . }}
-      hostNetwork: {{ .Values.hostNetwork }}
       securityContext:
         {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      hostNetwork: {{ .Values.hostNetwork }}
       containers:
         - name: relay-agent
           securityContext:
@@ -42,72 +41,63 @@ spec:
             - name: RDPANEL_MODE
               value: "agent"
             - name: RDPANEL_AGENT_PANEL_URL
-              value: {{ .Values.agent.panelUrl | quote }}
-            {{- if or .Values.agent.token .Values.agent.existingSecret }}
-            - name: RDPANEL_AGENT_TOKEN
+              value: {{ .Values.panel.url | quote }}
+            - name: RDPANEL_AGENT_RELAY_PORT
+              value: {{ .Values.relay.port | quote }}
+            - name: RDPANEL_LOG_FORMAT
+              value: {{ .Values.relay.logFormat | quote }}
+            {{- if .Values.relay.hostname }}
+            - name: RDPANEL_AGENT_HOSTNAME
+              value: {{ .Values.relay.hostname | quote }}
+            {{- end }}
+            - name: RDPANEL_AGENT_ENROLL_TOKEN
               valueFrom:
                 secretKeyRef:
                   name: {{ include "rustdesk-relay-agent.secretName" . }}
-                  key: {{ .Values.agent.tokenSecretKey | default "token" }}
-            {{- end }}
-            {{- if .Values.agent.publicHost }}
-            - name: RDPANEL_AGENT_PUBLIC_HOST
-              value: {{ .Values.agent.publicHost | quote }}
-            {{- end }}
-            {{- if .Values.agent.mgmtHost }}
-            - name: RDPANEL_AGENT_MGMT_HOST
-              value: {{ .Values.agent.mgmtHost | quote }}
-            {{- end }}
-            {{- if .Values.agent.panelCA }}
+                  key: enroll-token
+                  optional: true
+            {{- if .Values.panel.caSecret }}
             - name: RDPANEL_AGENT_PANEL_CA
-              value: "/etc/ssl/certs/panel-ca.crt"
+              value: "/etc/ssl/panel/ca.crt"
             {{- end }}
           ports:
             - name: relay
-              containerPort: 21117
+              containerPort: {{ .Values.relay.port }}
               protocol: TCP
           livenessProbe:
-            exec:
-              command:
-                - /usr/libexec/rdpanel/healthcheck
-            initialDelaySeconds: 15
-            periodSeconds: 20
-            timeoutSeconds: 5
-            failureThreshold: 3
-          readinessProbe:
-            exec:
-              command:
-                - /usr/libexec/rdpanel/healthcheck
+            tcpSocket:
+              port: relay
             initialDelaySeconds: 5
+            periodSeconds: 15
+            timeoutSeconds: 3
+          readinessProbe:
+            tcpSocket:
+              port: relay
+            initialDelaySeconds: 2
             periodSeconds: 10
-            timeoutSeconds: 5
-            failureThreshold: 2
+            timeoutSeconds: 3
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
           volumeMounts:
             - name: data
               mountPath: /data
-            {{- if .Values.agent.panelCA }}
+            {{- if .Values.panel.caSecret }}
             - name: panel-ca
-              mountPath: /etc/ssl/certs/panel-ca.crt
-              subPath: panel-ca.crt
+              mountPath: /etc/ssl/panel
               readOnly: true
             {{- end }}
       volumes:
         - name: data
           {{- if .Values.persistence.enabled }}
           persistentVolumeClaim:
-            claimName: {{ .Values.persistence.existingClaim | default (include "rustdesk-relay-agent.fullname" .) }}
+            claimName: {{ include "rustdesk-relay-agent.fullname" . }}-data
           {{- else }}
           emptyDir: {}
           {{- end }}
-        {{- if .Values.agent.panelCA }}
+        {{- if .Values.panel.caSecret }}
         - name: panel-ca
           secret:
-            secretName: {{ include "rustdesk-relay-agent.secretName" . }}
-            items:
-              - key: panel-ca.crt
-                path: panel-ca.crt
+            secretName: {{ .Values.panel.caSecret }}
         {{- end }}
       {{- with .Values.nodeSelector }}
       nodeSelector:

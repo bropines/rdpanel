@@ -2115,6 +2115,57 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/relays/geoip/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get status of the geographic prefix lookup engine. */
+        get: operations["getRelayGeoIPStatus"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/relays/geoip/refresh": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Refresh or download updated geographic IP ranges database. */
+        post: operations["refreshRelayGeoIP"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/relays/geoip/lookup": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Resolve geographic country and matching prefix for an IP address. */
+        get: operations["lookupRelayGeoIP"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/relays/prefix-rules/{id}": {
         parameters: {
             query?: never;
@@ -2129,6 +2180,79 @@ export interface paths {
         post?: never;
         /** Delete a CIDR prefix to relay routing rule. */
         delete: operations["deleteRelayPrefixRule"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/federation/peers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List all registered peer RD Panels. */
+        get: operations["listFederationPeers"];
+        put?: never;
+        /** Register a new peer RD Panel. */
+        post: operations["createFederationPeer"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/federation/peers/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Delete a peer RD Panel and its announced relays. */
+        delete: operations["deleteFederationPeer"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/federation/peers/{id}/sync": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Trigger an immediate synchronization with a peer panel. */
+        post: operations["syncFederationPeer"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/federation/relays": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List all relays announced by peered panels. */
+        get: operations["listFederatedRelays"];
+        put?: never;
+        post?: never;
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -3934,6 +4058,8 @@ export interface components {
             require_approval: boolean;
             /** @description Allow static relays / probes to private */
             allow_private_hosts: boolean;
+            /** @description Automatically balance relay rotation weights based on active session load (default false). */
+            auto_weights?: boolean;
         };
         /** @description hbbr settings (same keys as ServerSettingsValues). In overrides, null = inherit the global profile. */
         RelaySettingsValues: {
@@ -4075,6 +4201,61 @@ export interface components {
                 punch_requests_days?: number;
             };
         };
+        RelayGeoIPStatus: {
+            loaded: boolean;
+            source: string;
+            country_count: number;
+            prefix_count: number;
+            /** Format: date-time */
+            updated_at: string;
+        };
+        RelayGeoIPRefreshInput: {
+            /** @description Optional custom URL for IP ranges dataset. */
+            source_url?: string;
+        };
+        RelayGeoIPLookupResult: {
+            ip: string;
+            country_code?: string;
+            country_name?: string;
+            matched_cidr?: string;
+            found: boolean;
+        };
+        FederationPeer: {
+            /** Format: int64 */
+            id: number;
+            name: string;
+            api_url: string;
+            sync_relays: boolean;
+            /** @enum {string} */
+            status: "unknown" | "active" | "unreachable";
+            /** Format: date-time */
+            last_sync_at?: string | null;
+            last_error?: string | null;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+        };
+        CreateFederationPeerInput: {
+            name: string;
+            api_url: string;
+            auth_token: string;
+            /** @default true */
+            sync_relays: boolean;
+        };
+        FederatedRelay: {
+            /** Format: int64 */
+            id: number;
+            /** Format: int64 */
+            peer_id: number;
+            peer_name?: string;
+            remote_name: string;
+            public_host: string;
+            region?: string;
+            health: string;
+            /** Format: date-time */
+            last_sync_at: string;
+        };
     };
     responses: {
         /** @description hbbs/hbbr unreachable (error code `server_unavailable`). */
@@ -4136,6 +4317,15 @@ export interface components {
             headers: {
                 /** @description Seconds to wait. */
                 "Retry-After"?: number;
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["Error"];
+            };
+        };
+        /** @description Upstream server or peer unreachable. */
+        BadGateway: {
+            headers: {
                 [name: string]: unknown;
             };
             content: {
@@ -8117,6 +8307,83 @@ export interface operations {
             403: components["responses"]["Forbidden"];
         };
     };
+    getRelayGeoIPStatus: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description GeoIP engine status. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RelayGeoIPStatus"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    refreshRelayGeoIP: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Must equal the rdpanel_csrf cookie. */
+                "X-CSRF-Token": components["parameters"]["CsrfHeader"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["RelayGeoIPRefreshInput"];
+            };
+        };
+        responses: {
+            /** @description Updated GeoIP engine status. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RelayGeoIPStatus"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    lookupRelayGeoIP: {
+        parameters: {
+            query: {
+                /** @description IPv4 address to inspect. */
+                ip: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description GeoIP lookup result. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RelayGeoIPLookupResult"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
     deleteRelayPrefixRule: {
         parameters: {
             query?: never;
@@ -8137,6 +8404,136 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    listFederationPeers: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description List of peers. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FederationPeer"][];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    createFederationPeer: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Must equal the rdpanel_csrf cookie. */
+                "X-CSRF-Token": components["parameters"]["CsrfHeader"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateFederationPeerInput"];
+            };
+        };
+        responses: {
+            /** @description Peer registered. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FederationPeer"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    deleteFederationPeer: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Must equal the rdpanel_csrf cookie. */
+                "X-CSRF-Token": components["parameters"]["CsrfHeader"];
+            };
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Peer deleted. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    syncFederationPeer: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Must equal the rdpanel_csrf cookie. */
+                "X-CSRF-Token": components["parameters"]["CsrfHeader"];
+            };
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Peer synchronization status. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FederationPeer"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            502: components["responses"]["BadGateway"];
+        };
+    };
+    listFederatedRelays: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description List of announced relays. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FederatedRelay"][];
+                };
             };
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];

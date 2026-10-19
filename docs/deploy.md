@@ -12,6 +12,7 @@ single host. Kubernetes: see the [Helm chart](../deploy/helm/rdpanel/README.md);
 - [Reverse proxy](#reverse-proxy) — [single host](#single-host),
   [split hosts](#split-hosts-public-client-api--internal-admin-panel),
   [security checklist](#security-checklist-proxies-and-ports)
+- [Networking: Host vs Bridge (Tailscale / VPNs)](#networking-host-mode-vs-bridge-mode-and-vpnstailscale)
 - [Environment reference](#environment-reference)
 - [Data layout and backups](#data-layout-and-backups)
 - Optional features: [passkeys](#passkeys), [e-mail](#e-mail-verification-codes-and-password-reset),

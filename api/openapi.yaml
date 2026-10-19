@@ -2848,6 +2848,59 @@ paths:
         "400": { $ref: "#/components/responses/ValidationFailed" }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "403": { $ref: "#/components/responses/Forbidden" }
+  /relays/geoip/status:
+    get:
+      tags: [relays]
+      operationId: getRelayGeoIPStatus
+      summary: Get status of the geographic prefix lookup engine.
+      responses:
+        "200":
+          description: GeoIP engine status.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RelayGeoIPStatus" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /relays/geoip/refresh:
+    post:
+      tags: [relays]
+      operationId: refreshRelayGeoIP
+      summary: Refresh or download updated geographic IP ranges database.
+      parameters:
+        - $ref: "#/components/parameters/CsrfHeader"
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/RelayGeoIPRefreshInput" }
+      responses:
+        "200":
+          description: Updated GeoIP engine status.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RelayGeoIPStatus" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /relays/geoip/lookup:
+    get:
+      tags: [relays]
+      operationId: lookupRelayGeoIP
+      summary: Resolve geographic country and matching prefix for an IP address.
+      parameters:
+        - name: ip
+          in: query
+          required: true
+          schema: { type: string }
+          description: IPv4 address to inspect.
+      responses:
+        "200":
+          description: GeoIP lookup result.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RelayGeoIPLookupResult" }
+        "400": { $ref: "#/components/responses/ValidationFailed" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
   /relays/prefix-rules/{id}:
     parameters:
       - name: id
@@ -2863,6 +2916,97 @@ paths:
       responses:
         "204":
           description: Deleted.
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /federation/peers:
+    get:
+      tags: [federation]
+      operationId: listFederationPeers
+      summary: List all registered peer RD Panels.
+      responses:
+        "200":
+          description: List of peers.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/FederationPeer" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+    post:
+      tags: [federation]
+      operationId: createFederationPeer
+      summary: Register a new peer RD Panel.
+      parameters:
+        - $ref: "#/components/parameters/CsrfHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateFederationPeerInput" }
+      responses:
+        "201":
+          description: Peer registered.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/FederationPeer" }
+        "400": { $ref: "#/components/responses/ValidationFailed" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409": { $ref: "#/components/responses/Conflict" }
+  /federation/peers/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: integer, format: int64 }
+    delete:
+      tags: [federation]
+      operationId: deleteFederationPeer
+      summary: Delete a peer RD Panel and its announced relays.
+      parameters:
+        - $ref: "#/components/parameters/CsrfHeader"
+      responses:
+        "204":
+          description: Peer deleted.
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /federation/peers/{id}/sync:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: integer, format: int64 }
+    post:
+      tags: [federation]
+      operationId: syncFederationPeer
+      summary: Trigger an immediate synchronization with a peer panel.
+      parameters:
+        - $ref: "#/components/parameters/CsrfHeader"
+      responses:
+        "200":
+          description: Peer synchronization status.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/FederationPeer" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "502": { $ref: "#/components/responses/BadGateway" }
+  /federation/relays:
+    get:
+      tags: [federation]
+      operationId: listFederatedRelays
+      summary: List all relays announced by peered panels.
+      responses:
+        "200":
+          description: List of announced relays.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/FederatedRelay" }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/NotFound" }
@@ -3441,6 +3585,11 @@ components:
         Retry-After:
           schema: { type: integer }
           description: Seconds to wait.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    BadGateway:
+      description: Upstream server or peer unreachable.
       content:
         application/json:
           schema: { $ref: "#/components/schemas/Error" }
@@ -5051,6 +5200,7 @@ components:
       properties:
         require_approval: { type: boolean, description: New agents wait for an admin's approval after enrolling (default true). }
         allow_private_hosts: { type: boolean, description: Allow static relays / probes to private, loopback and link-local addresses (SSRF guard; default false). }
+        auto_weights: { type: boolean, description: Automatically balance relay rotation weights based on active session load (default false). }
     RelaySettingsValues:
       type: object
       additionalProperties: false
@@ -5220,3 +5370,61 @@ components:
             alarm_audits_days: { type: integer, minimum: 0 }
             admin_audit_days: { type: integer, minimum: 0 }
             punch_requests_days: { type: integer, minimum: 0 }
+    RelayGeoIPStatus:
+      type: object
+      required: [loaded, source, country_count, prefix_count, updated_at]
+      properties:
+        loaded: { type: boolean }
+        source: { type: string }
+        country_count: { type: integer }
+        prefix_count: { type: integer }
+        updated_at: { type: string, format: date-time }
+    RelayGeoIPRefreshInput:
+      type: object
+      properties:
+        source_url: { type: string, description: Optional custom URL for IP ranges dataset. }
+    RelayGeoIPLookupResult:
+      type: object
+      required: [ip, found]
+      properties:
+        ip: { type: string }
+        country_code: { type: string }
+        country_name: { type: string }
+        matched_cidr: { type: string }
+        found: { type: boolean }
+    FederationPeer:
+      type: object
+      required: [id, name, api_url, sync_relays, status, created_at, updated_at]
+      properties:
+        id: { type: integer, format: int64 }
+        name: { type: string }
+        api_url: { type: string }
+        sync_relays: { type: boolean }
+        status:
+          type: string
+          enum: [unknown, active, unreachable]
+        last_sync_at: { type: string, format: date-time, nullable: true }
+        last_error: { type: string, nullable: true }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+    CreateFederationPeerInput:
+      type: object
+      required: [name, api_url, auth_token]
+      properties:
+        name: { type: string }
+        api_url: { type: string }
+        auth_token: { type: string }
+        sync_relays: { type: boolean, default: true }
+    FederatedRelay:
+      type: object
+      required: [id, peer_id, remote_name, public_host, health, last_sync_at]
+      properties:
+        id: { type: integer, format: int64 }
+        peer_id: { type: integer, format: int64 }
+        peer_name: { type: string }
+        remote_name: { type: string }
+        public_host: { type: string }
+        region: { type: string }
+        health: { type: string }
+        last_sync_at: { type: string, format: date-time }
+
