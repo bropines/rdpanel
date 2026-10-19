@@ -59,6 +59,7 @@ func (a *App) Handler() http.Handler {
 		adminDeps := adminapi.Deps{
 			Log: a.Log.With("component", "adminapi"), Config: cfg, Store: a.Store, AEAD: a.AEAD,
 			JWT: a.JWT, Hasher: a.Hasher, Limiter: a.Limiter, Metrics: a.Registry, TOTP: a.TOTP, Mail: a.Mail,
+			LDAP:       a.LDAP,
 			Telemetry:  a.Telemetry,
 			DeviceRate: adminapi.DeviceRateInfo{Rate: clientapi.DefaultDeviceRate.Rate, Burst: clientapi.DefaultDeviceRate.Burst},
 			StartedAt:  a.StartedAt, Schema: a.DB,
@@ -122,7 +123,7 @@ func (a *App) Handler() http.Handler {
 		clientapi.Register(api, clientapi.Deps{
 			Log: a.Log.With("component", "clientapi"), Config: cfg, Store: a.Store, AEAD: a.AEAD,
 			JWT: a.JWT, Hasher: a.Hasher, Limiter: a.Limiter, Metrics: a.Registry, Kicks: a.Kicks,
-			TOTP: clientTOTP{a.TOTP}, Email: a.Mail, Telemetry: a.Telemetry,
+			TOTP: clientTOTP{a.TOTP}, Email: a.Mail, LDAP: a.LDAP, Telemetry: a.Telemetry,
 			Strategies: a.ClientOptions,
 		})
 	})

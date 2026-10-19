@@ -56,6 +56,11 @@ type Store struct {
 	APITokens *APITokens
 	// ClientStrategies manages client MDM configuration strategies.
 	ClientStrategies *ClientStrategies
+	// ControlRoles and ConnectionACLs manage remote session permissions and access matrix.
+	ControlRoles   *ControlRoles
+	ConnectionACLs *ConnectionACLs
+	// LDAPSettings manages directory service configuration.
+	LDAPSettings *LDAPSettingsRepo
 }
 
 // Option configures a Store.
@@ -118,6 +123,9 @@ func build(d *db.DB, q db.Querier, o options) *Store {
 	s.WebAuthnChallenges = &WebAuthnChallenges{q: q, now: now}
 	s.APITokens = &APITokens{q: q, now: now}
 	s.ClientStrategies = &ClientStrategies{q: q, now: now}
+	s.ControlRoles = &ControlRoles{q: q, now: now}
+	s.ConnectionACLs = &ConnectionACLs{q: q, now: now}
+	s.LDAPSettings = &LDAPSettingsRepo{q: q, now: now}
 	return s
 }
 

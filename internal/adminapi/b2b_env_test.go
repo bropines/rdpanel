@@ -26,6 +26,7 @@ import (
 	"github.com/bropines/rdpanel/internal/hbbs/hbbstest"
 	"github.com/bropines/rdpanel/internal/hbbs/presence"
 	"github.com/bropines/rdpanel/internal/hbbs/reconcile"
+	"github.com/bropines/rdpanel/internal/ldap"
 	"github.com/bropines/rdpanel/internal/logs"
 	"github.com/bropines/rdpanel/internal/store"
 )
@@ -99,7 +100,8 @@ func newB2Env(t *testing.T, o b2opts) *b2env {
 	deps := Deps{Log: log, Config: cfg, Store: st, AEAD: aead, JWT: jwtSvc, Hasher: cheapHasher,
 		Limiter:      auth.NewBackoff(auth.BackoffConfig{Free: 50, Base: time.Second, Max: time.Minute, Forget: time.Hour}, clk.now),
 		ConsoleLimit: o.consoleLimit, Schema: d, Updates: o.updates, StartedAt: clk.t.Add(-90 * time.Minute),
-		Logs: o.logs, LogCapture: o.logCapture, LogSources: []string{"hbbs", "hbbr", "panel"}, Federation: o.federation}
+		Logs: o.logs, LogCapture: o.logCapture, LogSources: []string{"hbbs", "hbbr", "panel"}, Federation: o.federation,
+		LDAP: ldap.NewService(st, aead, log)}
 	e := &b2env{ctx: ctx, pres: &b2bFakePresence{online: map[string]bool{}}}
 	deps.PresenceSrc = e.pres
 	if o.hbbs {

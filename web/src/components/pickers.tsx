@@ -5,6 +5,7 @@ import { useTranslation } from "react-i18next";
 
 import { addressBooksApi } from "@/api/addressBooks";
 import { devicesApi } from "@/api/devices";
+import { aclApi } from "@/api/acl";
 import { strategiesApi } from "@/api/strategies";
 import { groupsApi, lookupApi, type GroupRef, type UserRef } from "@/api/users";
 import { Button } from "@/components/ui/button";
@@ -301,6 +302,37 @@ export function DevicePicker(props: {
       }
       placeholder={t("pickers.selectDevice")}
       noneLabel={props.allowNone ? (props.noneLabel ?? t("pickers.noDevice")) : undefined}
+    />
+  );
+}
+
+export function ControlRolePicker(props: {
+  value: number | null | undefined;
+  valueLabel?: ReactNode;
+  onChange: (id: number | null, role?: { id: number; name: string }) => void;
+  allowNone?: boolean;
+  noneLabel?: string;
+  disabled?: boolean;
+  id?: string;
+}) {
+  const { t } = useTranslation();
+  return (
+    <AsyncCombobox
+      id={props.id}
+      value={props.value}
+      valueLabel={props.valueLabel}
+      disabled={props.disabled}
+      onChange={(id, o) => props.onChange(id, o ? { id: o.id, name: o.label } : undefined)}
+      queryKey="control-roles"
+      fetchOptions={async () =>
+        (await aclApi.listRoles()).items.map((r) => ({
+          id: r.id,
+          label: r.name,
+          hint: r.is_default ? t("acl.defaultRole") : undefined,
+        }))
+      }
+      placeholder={t("acl.selectRole")}
+      noneLabel={props.allowNone ? (props.noneLabel ?? t("acl.defaultRole")) : undefined}
     />
   );
 }

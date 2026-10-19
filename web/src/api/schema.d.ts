@@ -1392,6 +1392,120 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/control-roles": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List control roles (admin). */
+        get: operations["listControlRoles"];
+        put?: never;
+        /** Create control role (admin). */
+        post: operations["createControlRole"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/control-roles/{role_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                role_id: components["parameters"]["RoleId"];
+            };
+            cookie?: never;
+        };
+        /** Get control role detail. */
+        get: operations["getControlRole"];
+        put?: never;
+        post?: never;
+        /** Delete control role. */
+        delete: operations["deleteControlRole"];
+        options?: never;
+        head?: never;
+        /** Update control role. */
+        patch: operations["updateControlRole"];
+        trace?: never;
+    };
+    "/control-roles/{role_id}/default": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                role_id: components["parameters"]["RoleId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Mark control role as default. */
+        post: operations["setDefaultControlRole"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/acls": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List connection ACL rules (admin). */
+        get: operations["listACLs"];
+        put?: never;
+        /** Create connection ACL rule (admin). */
+        post: operations["createACL"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/acls/{acl_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                acl_id: components["parameters"]["AclId"];
+            };
+            cookie?: never;
+        };
+        /** Get ACL rule detail. */
+        get: operations["getACL"];
+        put?: never;
+        post?: never;
+        /** Delete ACL rule. */
+        delete: operations["deleteACL"];
+        options?: never;
+        head?: never;
+        /** Update ACL rule. */
+        patch: operations["updateACL"];
+        trace?: never;
+    };
+    "/acls/test": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Test access permissions for a user and target device. */
+        post: operations["testACL"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/address-books": {
         parameters: {
             query?: never;
@@ -2554,6 +2668,58 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/settings/ldap": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** LDAP / Active Directory directory synchronization and authentication configuration. */
+        get: operations["getLDAPSettings"];
+        /** Update LDAP / Active Directory configuration. */
+        put: operations["updateLDAPSettings"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/settings/ldap/test": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Test LDAP connection, bind credentials, user search or user password. */
+        post: operations["testLDAPSettings"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/settings/ldap/sync": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Trigger an immediate background synchronization from LDAP / Active Directory. */
+        post: operations["syncLDAPDirectory"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/events": {
         parameters: {
             query?: never;
@@ -2755,6 +2921,84 @@ export interface components {
         };
         TestEmailResult: {
             to: string;
+        };
+        LDAPSettings: {
+            enabled: boolean;
+            server_url: string;
+            start_tls: boolean;
+            insecure_skip_verify: boolean;
+            bind_dn: string;
+            has_bind_password: boolean;
+            base_dn: string;
+            user_search_base: string;
+            user_filter: string;
+            username_attribute: string;
+            display_name_attribute: string;
+            email_attribute: string;
+            group_attribute: string;
+            group_mappings: {
+                [key: string]: number;
+            };
+            /** Format: int64 */
+            default_user_group_id?: number | null;
+            default_user_group_name?: string;
+            auto_register: boolean;
+            sync_interval_mins: number;
+            /** Format: date-time */
+            last_sync_at?: string | null;
+            last_sync_status?: string | null;
+            last_sync_count: number;
+            /** Format: date-time */
+            updated_at: string;
+        };
+        LDAPSettingsInput: {
+            enabled?: boolean;
+            server_url?: string;
+            start_tls?: boolean;
+            insecure_skip_verify?: boolean;
+            bind_dn?: string;
+            /** @description Omit to keep; empty string clears; plaintext sealed with AEAD. */
+            bind_password?: string;
+            base_dn?: string;
+            user_search_base?: string;
+            user_filter?: string;
+            username_attribute?: string;
+            display_name_attribute?: string;
+            email_attribute?: string;
+            group_attribute?: string;
+            group_mappings?: {
+                [key: string]: number;
+            };
+            /** Format: int64 */
+            default_user_group_id?: number | null;
+            auto_register?: boolean;
+            sync_interval_mins?: number;
+        };
+        LDAPTestRequest: {
+            settings?: components["schemas"]["LDAPSettingsInput"];
+            bind_password?: string;
+            test_username?: string;
+            test_password?: string;
+        };
+        LDAPTestResult: {
+            ok: boolean;
+            message: string;
+            connected: boolean;
+            bound: boolean;
+            user_found: boolean;
+            user_dn?: string;
+            user_bound: boolean;
+            attributes?: {
+                [key: string]: string;
+            };
+            groups?: string[];
+            /** Format: int64 */
+            mapped_group_id?: number | null;
+        };
+        LDAPSyncResult: {
+            synced_count: number;
+            status: string;
+            error?: string;
         };
         /** @enum {string} */
         ProviderKind: "github" | "google" | "oidc";
@@ -2996,6 +3240,7 @@ export interface components {
             /** @description The current address was confirmed with an e-mailed code (or by an admin). */
             email_verified: boolean;
             email_2fa_enabled: boolean;
+            is_ldap: boolean;
             /** Format: date-time */
             last_login_at?: string | null;
             /** Format: date-time */
@@ -4367,6 +4612,132 @@ export interface components {
         ClientStrategyList: {
             items: components["schemas"]["ClientStrategy"][];
         };
+        ControlRole: {
+            /** Format: int64 */
+            id: number;
+            name: string;
+            note?: string;
+            allow_keyboard_mouse: boolean;
+            allow_clipboard: boolean;
+            allow_file_transfer: boolean;
+            allow_audio: boolean;
+            allow_tcp_tunneling: boolean;
+            allow_terminal: boolean;
+            allow_restart: boolean;
+            is_default: boolean;
+            rule_count?: number;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+        };
+        ControlRoleInput: {
+            name: string;
+            note?: string;
+            allow_keyboard_mouse?: boolean;
+            allow_clipboard?: boolean;
+            allow_file_transfer?: boolean;
+            allow_audio?: boolean;
+            allow_tcp_tunneling?: boolean;
+            allow_terminal?: boolean;
+            allow_restart?: boolean;
+            is_default?: boolean;
+        };
+        ControlRolePatch: {
+            name?: string;
+            note?: string;
+            allow_keyboard_mouse?: boolean;
+            allow_clipboard?: boolean;
+            allow_file_transfer?: boolean;
+            allow_audio?: boolean;
+            allow_tcp_tunneling?: boolean;
+            allow_terminal?: boolean;
+            allow_restart?: boolean;
+            is_default?: boolean;
+        };
+        ControlRoleList: {
+            items: components["schemas"]["ControlRole"][];
+        };
+        ConnectionACL: {
+            /** Format: int64 */
+            id: number;
+            name: string;
+            note?: string;
+            /** Format: int64 */
+            user_id?: number | null;
+            user_name?: string;
+            /** Format: int64 */
+            user_group_id?: number | null;
+            user_group_name?: string;
+            /** Format: int64 */
+            device_id?: number | null;
+            device_name?: string;
+            /** Format: int64 */
+            device_group_id?: number | null;
+            device_group_name?: string;
+            /** Format: int64 */
+            control_role_id?: number | null;
+            control_role_name?: string;
+            /** @enum {string} */
+            action: "allow" | "deny";
+            priority: number;
+            enabled: boolean;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+        };
+        ConnectionACLInput: {
+            name: string;
+            note?: string;
+            /** Format: int64 */
+            user_id?: number | null;
+            /** Format: int64 */
+            user_group_id?: number | null;
+            /** Format: int64 */
+            device_id?: number | null;
+            /** Format: int64 */
+            device_group_id?: number | null;
+            /** Format: int64 */
+            control_role_id?: number | null;
+            /** @enum {string} */
+            action: "allow" | "deny";
+            priority?: number;
+            enabled?: boolean;
+        };
+        ConnectionACLPatch: {
+            name?: string;
+            note?: string;
+            /** Format: int64 */
+            user_id?: number | null;
+            /** Format: int64 */
+            user_group_id?: number | null;
+            /** Format: int64 */
+            device_id?: number | null;
+            /** Format: int64 */
+            device_group_id?: number | null;
+            /** Format: int64 */
+            control_role_id?: number | null;
+            /** @enum {string} */
+            action?: "allow" | "deny";
+            priority?: number;
+            enabled?: boolean;
+        };
+        ConnectionACLList: {
+            items: components["schemas"]["ConnectionACL"][];
+        };
+        ACLTestRequest: {
+            /** Format: int64 */
+            user_id: number;
+            /** Format: int64 */
+            device_id: number;
+        };
+        ACLTestResult: {
+            /** @enum {string} */
+            decision: "allow" | "deny" | "owner" | "no_rules";
+            matched_rule?: components["schemas"]["ConnectionACL"] | null;
+            effective_role?: components["schemas"]["ControlRole"] | null;
+        };
     };
     responses: {
         /** @description hbbs/hbbr unreachable (error code `server_unavailable`). */
@@ -4470,6 +4841,8 @@ export interface components {
         UserId: number;
         GroupId: number;
         StrategyId: number;
+        RoleId: number;
+        AclId: number;
         BookId: number;
         SessionId: number;
         DeviceOnline: boolean;
@@ -6983,6 +7356,339 @@ export interface operations {
             404: components["responses"]["NotFound"];
         };
     };
+    listControlRoles: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Control roles list. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ControlRoleList"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    createControlRole: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Must equal the rdpanel_csrf cookie. */
+                "X-CSRF-Token": components["parameters"]["CsrfHeader"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ControlRoleInput"];
+            };
+        };
+        responses: {
+            /** @description Created control role. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ControlRole"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    getControlRole: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                role_id: components["parameters"]["RoleId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Role detail. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ControlRole"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    deleteControlRole: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Must equal the rdpanel_csrf cookie. */
+                "X-CSRF-Token": components["parameters"]["CsrfHeader"];
+            };
+            path: {
+                role_id: components["parameters"]["RoleId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Deleted. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    updateControlRole: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Must equal the rdpanel_csrf cookie. */
+                "X-CSRF-Token": components["parameters"]["CsrfHeader"];
+            };
+            path: {
+                role_id: components["parameters"]["RoleId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ControlRolePatch"];
+            };
+        };
+        responses: {
+            /** @description Updated role. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ControlRole"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    setDefaultControlRole: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Must equal the rdpanel_csrf cookie. */
+                "X-CSRF-Token": components["parameters"]["CsrfHeader"];
+            };
+            path: {
+                role_id: components["parameters"]["RoleId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Updated default role. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ControlRole"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    listACLs: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description ACL rules list. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConnectionACLList"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    createACL: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Must equal the rdpanel_csrf cookie. */
+                "X-CSRF-Token": components["parameters"]["CsrfHeader"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ConnectionACLInput"];
+            };
+        };
+        responses: {
+            /** @description Created rule. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConnectionACL"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    getACL: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                acl_id: components["parameters"]["AclId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Rule detail. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConnectionACL"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    deleteACL: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Must equal the rdpanel_csrf cookie. */
+                "X-CSRF-Token": components["parameters"]["CsrfHeader"];
+            };
+            path: {
+                acl_id: components["parameters"]["AclId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Deleted. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    updateACL: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Must equal the rdpanel_csrf cookie. */
+                "X-CSRF-Token": components["parameters"]["CsrfHeader"];
+            };
+            path: {
+                acl_id: components["parameters"]["AclId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ConnectionACLPatch"];
+            };
+        };
+        responses: {
+            /** @description Updated rule. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConnectionACL"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    testACL: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Must equal the rdpanel_csrf cookie. */
+                "X-CSRF-Token": components["parameters"]["CsrfHeader"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ACLTestRequest"];
+            };
+        };
+        responses: {
+            /** @description Evaluation result. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ACLTestResult"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
     listAddressBooks: {
         parameters: {
             query?: {
@@ -9332,6 +10038,114 @@ export interface operations {
                 };
                 content?: never;
             };
+        };
+    };
+    getLDAPSettings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Effective configuration. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LDAPSettings"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    updateLDAPSettings: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Must equal the rdpanel_csrf cookie. */
+                "X-CSRF-Token": components["parameters"]["CsrfHeader"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LDAPSettingsInput"];
+            };
+        };
+        responses: {
+            /** @description Settings after the update. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LDAPSettings"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    testLDAPSettings: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Must equal the rdpanel_csrf cookie. */
+                "X-CSRF-Token": components["parameters"]["CsrfHeader"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["LDAPTestRequest"];
+            };
+        };
+        responses: {
+            /** @description Test execution result. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LDAPTestResult"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    syncLDAPDirectory: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Must equal the rdpanel_csrf cookie. */
+                "X-CSRF-Token": components["parameters"]["CsrfHeader"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Sync result. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LDAPSyncResult"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
         };
     };
     streamEvents: {

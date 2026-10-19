@@ -196,6 +196,29 @@ func (h *handler) auditConn(w http.ResponseWriter, r *http.Request) {
 			if len(req.Peer) > 1 {
 				a.ControllerName = clip(req.Peer[1], 255)
 			}
+			if h.Kicks != nil && len(req.Peer) > 0 && req.Peer[0] != "" {
+				targetDev, err := tx.Devices.GetByRustdeskID(ctx, req.ID)
+				if err == nil && targetDev != nil {
+					var controllerUserID int64
+					ctrlDev, err := tx.Devices.GetByRustdeskID(ctx, req.Peer[0])
+					if err == nil && ctrlDev != nil && ctrlDev.OwnerUserID != nil {
+						controllerUserID = *ctrlDev.OwnerUserID
+					}
+					dec, rule, _, err := tx.ConnectionACLs.Evaluate(ctx, controllerUserID, targetDev.ID)
+					if err == nil && dec == store.ACLDecisionDeny {
+						ruleName := "unmatched"
+						if rule != nil {
+							ruleName = rule.Name
+						}
+						h.log.WarnContext(ctx, "audit: connection denied by ACL",
+							slog.String("target_device", req.ID),
+							slog.String("controller", req.Peer[0]),
+							slog.Int("conn_id", int(req.ConnID)),
+							slog.String("rule", ruleName))
+						h.Kicks.Kick(req.ID, int32(req.ConnID))
+					}
+				}
+			}
 			if create {
 				return tx.ConnectionAudits.Create(ctx, a)
 			}

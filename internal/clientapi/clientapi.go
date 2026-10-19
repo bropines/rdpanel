@@ -114,6 +114,11 @@ type RateConfig struct {
 // sends a heartbeat every 3-15 s).
 var DefaultDeviceRate = RateConfig{Rate: 50, Burst: 300}
 
+// LDAPAuthenticator verifies corporate credentials and provisions/refreshes users.
+type LDAPAuthenticator interface {
+	Authenticate(ctx context.Context, username, password string) (*store.User, error)
+}
+
 // Deps are the collaborators the client API needs.
 type Deps struct {
 	Log     *slog.Logger
@@ -127,6 +132,8 @@ type Deps struct {
 	// Telemetry counts logins, issued tokens and audit records (nil: none).
 	Telemetry *metrics.Panel
 
+	// LDAP authenticates corporate users when password authentication fails or user is unprovisioned.
+	LDAP LDAPAuthenticator
 	// TOTP verifies the second factor (default NoTOTP).
 	TOTP TOTPVerifier
 	// Email is the e-mail second factor (default NoEmailFactor).

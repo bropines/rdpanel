@@ -24,6 +24,7 @@ import (
 	"github.com/bropines/rdpanel/internal/events"
 	"github.com/bropines/rdpanel/internal/federation"
 	"github.com/bropines/rdpanel/internal/httpx"
+	"github.com/bropines/rdpanel/internal/ldap"
 	"github.com/bropines/rdpanel/internal/logs"
 	"github.com/bropines/rdpanel/internal/mailauth"
 	"github.com/bropines/rdpanel/internal/metrics"
@@ -77,6 +78,8 @@ type App struct {
 	TOTP *adminapi.TOTPService
 	// Mail sends e-mail codes and password reset links (internal/mailauth).
 	Mail *mailauth.Service
+	// LDAP manages directory synchronization and corporate authentication (internal/ldap).
+	LDAP *ldap.Service
 	// Webhook dispatches alerts for critical events (internal/webhook).
 	Webhook *webhook.Service
 	// StartedAt is when New ran (About page uptime).
@@ -119,6 +122,7 @@ func New(ctx context.Context, cfg *config.Config, log *slog.Logger, opts ...Opti
 	a.ClientOptions = clientopts.New(a.Store, a.AEAD, nil)
 	a.TOTP = adminapi.NewTOTPService(a.Store, a.AEAD)
 	a.Mail = mailauth.New(mailauth.Options{Store: a.Store, AEAD: a.AEAD, Config: cfg, Log: log.With("component", "mail")})
+	a.LDAP = ldap.NewService(a.Store, a.AEAD, log.With("component", "ldap"))
 	a.Registry = prometheus.NewRegistry()
 	a.Registry.MustRegister(
 		collectors.NewGoCollector(),

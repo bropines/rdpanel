@@ -56,6 +56,7 @@ const userBase = (u: Partial<MockUser> & Pick<MockUser, "id" | "username" | "dis
   totp_required: false,
   email_verified: false,
   email_2fa_enabled: false,
+  is_ldap: false,
   last_login_at: iso(int(1, 72) * HOUR),
   created_at: iso(int(100, 300) * DAY),
   updated_at: iso(int(1, 30) * DAY),

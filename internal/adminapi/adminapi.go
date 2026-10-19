@@ -19,6 +19,7 @@ import (
 	"github.com/bropines/rdpanel/internal/config"
 	"github.com/bropines/rdpanel/internal/crypto"
 	"github.com/bropines/rdpanel/internal/federation"
+	"github.com/bropines/rdpanel/internal/ldap"
 	"github.com/bropines/rdpanel/internal/loginlog"
 	"github.com/bropines/rdpanel/internal/logs"
 	"github.com/bropines/rdpanel/internal/mailauth"
@@ -51,6 +52,8 @@ type Deps struct {
 	Limiter auth.Limiter
 	Metrics prometheus.Registerer
 
+	// LDAP manages directory synchronization and corporate authentication (nil: disabled).
+	LDAP *ldap.Service
 	// OIDC runs provider flows (nil disables OIDC login/linking).
 	OIDC *oidc.Service
 	// TOTP verifies second factors (default: NewTOTPService(Store, AEAD)).

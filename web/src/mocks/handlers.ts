@@ -15,6 +15,8 @@ import { logHandlers } from "@/mocks/logs";
 import { relayHandlers } from "@/mocks/relays";
 import { liveStream } from "@/mocks/sse";
 import { strategyHandlers } from "@/mocks/strategies";
+import { aclHandlers } from "@/mocks/acl";
+import { ldapHandlers } from "@/mocks/ldap";
 
 type S = Schemas;
 const B = "/api/v1/admin";
@@ -900,6 +902,7 @@ export const handlers = [
       totp_required: !!b.totp_required,
       email_verified: !!b.email_verified && !!b.email,
       email_2fa_enabled: false,
+      is_ldap: false,
       last_login_at: null,
       created_at: nowIso(),
       updated_at: nowIso(),
@@ -1743,6 +1746,8 @@ export const handlers = [
   ...logHandlers,
   ...federationHandlers,
   ...strategyHandlers,
+  ...aclHandlers,
+  ...ldapHandlers,
 ];
 
 function ensureTags(bookId: number, names: string[]) {

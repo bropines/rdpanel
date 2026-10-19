@@ -98,6 +98,7 @@ const devicesRoute = createRoute({ getParentRoute: admin, path: "/devices", vali
 const usersRoute = createRoute({ getParentRoute: admin, path: "/users", validateSearch: S, component: lazyRouteComponent(() => import("@/pages/users/UsersPage"), "UsersPage") });
 const groupsRoute = createRoute({ getParentRoute: admin, path: "/groups", validateSearch: S, component: lazyRouteComponent(() => import("@/pages/GroupsPage"), "GroupsPage") });
 const booksRoute = createRoute({ getParentRoute: admin, path: "/address-books", validateSearch: S, component: lazyRouteComponent(() => import("@/pages/address-books/AddressBooksPage"), "AddressBooksPage") });
+const aclRoute = createRoute({ getParentRoute: admin, path: "/acl", validateSearch: S, component: lazyRouteComponent(() => import("@/pages/acl/AclPage"), "AclPage") });
 const auditRoute = createRoute({ getParentRoute: admin, path: "/audit", validateSearch: S, component: lazyRouteComponent(() => import("@/pages/AuditPage"), "AuditPage") });
 const idpRoute = createRoute({ getParentRoute: admin, path: "/identity-providers", validateSearch: S, component: lazyRouteComponent(() => import("@/pages/IdentityProvidersPage"), "IdentityProvidersPage") });
 const serverRoute = createRoute({ getParentRoute: admin, path: "/server", validateSearch: S, component: lazyRouteComponent(() => import("@/pages/server/ServerPage"), "ServerPage") });
@@ -114,7 +115,7 @@ const routeTree = rootRoute.addChildren([
     mySessionsRoute,
     aboutRoute,
     forbiddenRoute,
-    adminRoute.addChildren([devicesRoute, usersRoute, groupsRoute, booksRoute, auditRoute, idpRoute, serverRoute, settingsRoute]),
+    adminRoute.addChildren([devicesRoute, usersRoute, groupsRoute, booksRoute, aclRoute, auditRoute, idpRoute, serverRoute, settingsRoute]),
   ]),
 ]);
 

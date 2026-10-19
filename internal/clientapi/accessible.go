@@ -136,6 +136,21 @@ func (h *handler) peers(w http.ResponseWriter, r *http.Request) {
 		h.listFail(ctx, w, err)
 		return
 	}
+	user := sessionFrom(ctx).user
+	if !user.IsAdmin() {
+		filtered, err := h.st.ConnectionACLs.FilterAccessibleDevices(ctx, user.ID, devs)
+		if err != nil {
+			h.listFail(ctx, w, err)
+			return
+		}
+		if len(filtered) < len(devs) {
+			total -= (len(devs) - len(filtered))
+			if total < len(filtered) {
+				total = len(filtered)
+			}
+		}
+		devs = filtered
+	}
 	out := make([]peerPayload, 0, len(devs))
 	for _, d := range devs {
 		out = append(out, peerPayload{

@@ -132,10 +132,28 @@ func registerResources(r chi.Router, c *authCore) {
 		r.Delete("/strategies/{strategy_id}", a.handleDeleteStrategy)
 		r.Post("/strategies/{strategy_id}/default", a.handleSetDefaultStrategy)
 
+		r.Get("/control-roles", a.handleListControlRoles)
+		r.Post("/control-roles", a.handleCreateControlRole)
+		r.Get("/control-roles/{role_id}", a.handleGetControlRole)
+		r.Patch("/control-roles/{role_id}", a.handleUpdateControlRole)
+		r.Delete("/control-roles/{role_id}", a.handleDeleteControlRole)
+		r.Post("/control-roles/{role_id}/default", a.handleSetDefaultControlRole)
+
+		r.Get("/acls", a.handleListACLs)
+		r.Post("/acls", a.handleCreateACL)
+		r.Get("/acls/{acl_id}", a.handleGetACL)
+		r.Patch("/acls/{acl_id}", a.handleUpdateACL)
+		r.Delete("/acls/{acl_id}", a.handleDeleteACL)
+		r.Post("/acls/test", a.handleTestACL)
+
 		r.Get("/settings", a.handleGetSettings)
 		r.Patch("/settings", a.handleUpdateSettings)
 		r.Put("/settings/logo", a.handleUploadLogo)
 		r.Delete("/settings/logo", a.handleDeleteLogo)
+		r.Get("/settings/ldap", a.handleGetLDAPSettings)
+		r.Put("/settings/ldap", a.handleUpdateLDAPSettings)
+		r.Post("/settings/ldap/test", a.handleTestLDAP)
+		r.Post("/settings/ldap/sync", a.handleSyncLDAP)
 	})
 }
 

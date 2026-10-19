@@ -96,7 +96,6 @@ tags:
   - name: server
   - name: relays
   - name: strategies
-    description: Client MDM configuration strategies pushed in heartbeat responses.
   - name: settings
   - name: lookup
   - name: events
@@ -1800,6 +1799,212 @@ paths:
         "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/NotFound" }
 
+  /control-roles:
+    get:
+      tags: [control-roles]
+      operationId: listControlRoles
+      summary: List control roles (admin).
+      responses:
+        "200":
+          description: Control roles list.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ControlRoleList" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+    post:
+      tags: [control-roles]
+      operationId: createControlRole
+      summary: Create control role (admin).
+      parameters:
+        - $ref: "#/components/parameters/CsrfHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ControlRoleInput" }
+      responses:
+        "201":
+          description: Created control role.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ControlRole" }
+        "400": { $ref: "#/components/responses/ValidationFailed" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409": { $ref: "#/components/responses/Conflict" }
+  /control-roles/{role_id}:
+    parameters:
+      - $ref: "#/components/parameters/RoleId"
+    get:
+      tags: [control-roles]
+      operationId: getControlRole
+      summary: Get control role detail.
+      responses:
+        "200":
+          description: Role detail.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ControlRole" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    patch:
+      tags: [control-roles]
+      operationId: updateControlRole
+      summary: Update control role.
+      parameters:
+        - $ref: "#/components/parameters/CsrfHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ControlRolePatch" }
+      responses:
+        "200":
+          description: Updated role.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ControlRole" }
+        "400": { $ref: "#/components/responses/ValidationFailed" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+    delete:
+      tags: [control-roles]
+      operationId: deleteControlRole
+      summary: Delete control role.
+      parameters:
+        - $ref: "#/components/parameters/CsrfHeader"
+      responses:
+        "204": { description: Deleted. }
+        "400": { $ref: "#/components/responses/ValidationFailed" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /control-roles/{role_id}/default:
+    parameters:
+      - $ref: "#/components/parameters/RoleId"
+    post:
+      tags: [control-roles]
+      operationId: setDefaultControlRole
+      summary: Mark control role as default.
+      parameters:
+        - $ref: "#/components/parameters/CsrfHeader"
+      responses:
+        "200":
+          description: Updated default role.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ControlRole" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /acls:
+    get:
+      tags: [acls]
+      operationId: listACLs
+      summary: List connection ACL rules (admin).
+      responses:
+        "200":
+          description: ACL rules list.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ConnectionACLList" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+    post:
+      tags: [acls]
+      operationId: createACL
+      summary: Create connection ACL rule (admin).
+      parameters:
+        - $ref: "#/components/parameters/CsrfHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ConnectionACLInput" }
+      responses:
+        "201":
+          description: Created rule.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ConnectionACL" }
+        "400": { $ref: "#/components/responses/ValidationFailed" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /acls/{acl_id}:
+    parameters:
+      - $ref: "#/components/parameters/AclId"
+    get:
+      tags: [acls]
+      operationId: getACL
+      summary: Get ACL rule detail.
+      responses:
+        "200":
+          description: Rule detail.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ConnectionACL" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    patch:
+      tags: [acls]
+      operationId: updateACL
+      summary: Update ACL rule.
+      parameters:
+        - $ref: "#/components/parameters/CsrfHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ConnectionACLPatch" }
+      responses:
+        "200":
+          description: Updated rule.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ConnectionACL" }
+        "400": { $ref: "#/components/responses/ValidationFailed" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    delete:
+      tags: [acls]
+      operationId: deleteACL
+      summary: Delete ACL rule.
+      parameters:
+        - $ref: "#/components/parameters/CsrfHeader"
+      responses:
+        "204": { description: Deleted. }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /acls/test:
+    post:
+      tags: [acls]
+      operationId: testACL
+      summary: Test access permissions for a user and target device.
+      parameters:
+        - $ref: "#/components/parameters/CsrfHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ACLTestRequest" }
+      responses:
+        "200":
+          description: Evaluation result.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ACLTestResult" }
+        "400": { $ref: "#/components/responses/ValidationFailed" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
   /address-books:
     get:
       tags: [address-books]
@@ -3456,6 +3661,75 @@ paths:
         "409": { $ref: "#/components/responses/Conflict" }
         "429": { $ref: "#/components/responses/RateLimited" }
         "502": { description: SMTP error (`email_send_failed`). }
+  /settings/ldap:
+    get:
+      tags: [settings]
+      operationId: getLDAPSettings
+      summary: LDAP / Active Directory directory synchronization and authentication configuration.
+      responses:
+        "200":
+          description: Effective configuration.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/LDAPSettings" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+    put:
+      tags: [settings]
+      operationId: updateLDAPSettings
+      summary: Update LDAP / Active Directory configuration.
+      parameters:
+        - $ref: "#/components/parameters/CsrfHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/LDAPSettingsInput" }
+      responses:
+        "200":
+          description: Settings after the update.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/LDAPSettings" }
+        "400": { $ref: "#/components/responses/ValidationFailed" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /settings/ldap/test:
+    post:
+      tags: [settings]
+      operationId: testLDAPSettings
+      summary: Test LDAP connection, bind credentials, user search or user password.
+      parameters:
+        - $ref: "#/components/parameters/CsrfHeader"
+      requestBody:
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/LDAPTestRequest" }
+      responses:
+        "200":
+          description: Test execution result.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/LDAPTestResult" }
+        "400": { $ref: "#/components/responses/ValidationFailed" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /settings/ldap/sync:
+    post:
+      tags: [settings]
+      operationId: syncLDAPDirectory
+      summary: Trigger an immediate background synchronization from LDAP / Active Directory.
+      parameters:
+        - $ref: "#/components/parameters/CsrfHeader"
+      responses:
+        "200":
+          description: Sync result.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/LDAPSyncResult" }
+        "400": { $ref: "#/components/responses/ValidationFailed" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
 
   /events:
     servers:
@@ -3616,6 +3890,16 @@ components:
       schema: { type: integer, format: int64 }
     StrategyId:
       name: strategy_id
+      in: path
+      required: true
+      schema: { type: integer, format: int64 }
+    RoleId:
+      name: role_id
+      in: path
+      required: true
+      schema: { type: integer, format: int64 }
+    AclId:
+      name: acl_id
       in: path
       required: true
       schema: { type: integer, format: int64 }
@@ -3849,6 +4133,108 @@ components:
       required: [to]
       properties:
         to: { type: string }
+    LDAPSettings:
+      type: object
+      required:
+        - enabled
+        - server_url
+        - start_tls
+        - insecure_skip_verify
+        - bind_dn
+        - has_bind_password
+        - base_dn
+        - user_search_base
+        - user_filter
+        - username_attribute
+        - display_name_attribute
+        - email_attribute
+        - group_attribute
+        - group_mappings
+        - auto_register
+        - sync_interval_mins
+        - last_sync_count
+        - updated_at
+      properties:
+        enabled: { type: boolean }
+        server_url: { type: string }
+        start_tls: { type: boolean }
+        insecure_skip_verify: { type: boolean }
+        bind_dn: { type: string }
+        has_bind_password: { type: boolean }
+        base_dn: { type: string }
+        user_search_base: { type: string }
+        user_filter: { type: string }
+        username_attribute: { type: string }
+        display_name_attribute: { type: string }
+        email_attribute: { type: string }
+        group_attribute: { type: string }
+        group_mappings:
+          type: object
+          additionalProperties: { type: integer, format: int64 }
+        default_user_group_id: { type: [integer, "null"], format: int64 }
+        default_user_group_name: { type: string }
+        auto_register: { type: boolean }
+        sync_interval_mins: { type: integer, minimum: 0 }
+        last_sync_at: { type: [string, "null"], format: date-time }
+        last_sync_status: { type: [string, "null"] }
+        last_sync_count: { type: integer }
+        updated_at: { type: string, format: date-time }
+    LDAPSettingsInput:
+      type: object
+      additionalProperties: false
+      properties:
+        enabled: { type: boolean }
+        server_url: { type: string }
+        start_tls: { type: boolean }
+        insecure_skip_verify: { type: boolean }
+        bind_dn: { type: string }
+        bind_password: { type: string, description: "Omit to keep; empty string clears; plaintext sealed with AEAD." }
+        base_dn: { type: string }
+        user_search_base: { type: string }
+        user_filter: { type: string }
+        username_attribute: { type: string }
+        display_name_attribute: { type: string }
+        email_attribute: { type: string }
+        group_attribute: { type: string }
+        group_mappings:
+          type: object
+          additionalProperties: { type: integer, format: int64 }
+        default_user_group_id: { type: [integer, "null"], format: int64 }
+        auto_register: { type: boolean }
+        sync_interval_mins: { type: integer, minimum: 0 }
+    LDAPTestRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        settings: { $ref: "#/components/schemas/LDAPSettingsInput" }
+        bind_password: { type: string }
+        test_username: { type: string }
+        test_password: { type: string }
+    LDAPTestResult:
+      type: object
+      required: [ok, message, connected, bound, user_found, user_bound]
+      properties:
+        ok: { type: boolean }
+        message: { type: string }
+        connected: { type: boolean }
+        bound: { type: boolean }
+        user_found: { type: boolean }
+        user_dn: { type: string }
+        user_bound: { type: boolean }
+        attributes:
+          type: object
+          additionalProperties: { type: string }
+        groups:
+          type: array
+          items: { type: string }
+        mapped_group_id: { type: [integer, "null"], format: int64 }
+    LDAPSyncResult:
+      type: object
+      required: [synced_count, status]
+      properties:
+        synced_count: { type: integer }
+        status: { type: string }
+        error: { type: string }
     ProviderKind:
       type: string
       enum: [github, google, oidc]
@@ -4070,7 +4456,7 @@ components:
       enum: [active, disabled]
     User:
       type: object
-      required: [id, username, display_name, role, status, has_password, totp_enabled, email_verified, email_2fa_enabled, created_at, updated_at]
+      required: [id, username, display_name, role, status, has_password, totp_enabled, email_verified, email_2fa_enabled, is_ldap, created_at, updated_at]
       properties:
         id: { type: integer, format: int64 }
         username: { type: string }
@@ -4086,6 +4472,7 @@ components:
         totp_required: { type: boolean }
         email_verified: { type: boolean, description: The current address was confirmed with an e-mailed code (or by an admin). }
         email_2fa_enabled: { type: boolean }
+        is_ldap: { type: boolean }
         last_login_at: { type: [string, "null"], format: date-time }
         created_at: { type: string, format: date-time }
         updated_at: { type: string, format: date-time }
@@ -5596,5 +5983,153 @@ components:
       required: [items]
       properties:
         items: { type: array, items: { $ref: "#/components/schemas/ClientStrategy" } }
+
+    ControlRole:
+      type: object
+      required: [id, name, is_default, allow_keyboard_mouse, allow_clipboard, allow_file_transfer, allow_audio, allow_tcp_tunneling, allow_terminal, allow_restart, created_at, updated_at]
+      properties:
+        id: { type: integer, format: int64 }
+        name: { type: string, minLength: 1, maxLength: 64 }
+        note: { type: string, maxLength: 4096 }
+        allow_keyboard_mouse: { type: boolean }
+        allow_clipboard: { type: boolean }
+        allow_file_transfer: { type: boolean }
+        allow_audio: { type: boolean }
+        allow_tcp_tunneling: { type: boolean }
+        allow_terminal: { type: boolean }
+        allow_restart: { type: boolean }
+        is_default: { type: boolean }
+        rule_count: { type: integer, minimum: 0 }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+
+    ControlRoleInput:
+      type: object
+      required: [name]
+      properties:
+        name: { type: string, minLength: 1, maxLength: 64 }
+        note: { type: string, maxLength: 4096 }
+        allow_keyboard_mouse: { type: boolean }
+        allow_clipboard: { type: boolean }
+        allow_file_transfer: { type: boolean }
+        allow_audio: { type: boolean }
+        allow_tcp_tunneling: { type: boolean }
+        allow_terminal: { type: boolean }
+        allow_restart: { type: boolean }
+        is_default: { type: boolean }
+
+    ControlRolePatch:
+      type: object
+      additionalProperties: false
+      properties:
+        name: { type: string, minLength: 1, maxLength: 64 }
+        note: { type: string, maxLength: 4096 }
+        allow_keyboard_mouse: { type: boolean }
+        allow_clipboard: { type: boolean }
+        allow_file_transfer: { type: boolean }
+        allow_audio: { type: boolean }
+        allow_tcp_tunneling: { type: boolean }
+        allow_terminal: { type: boolean }
+        allow_restart: { type: boolean }
+        is_default: { type: boolean }
+
+    ControlRoleList:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/ControlRole" }
+
+    ConnectionACL:
+      type: object
+      required: [id, name, action, priority, enabled, created_at, updated_at]
+      properties:
+        id: { type: integer, format: int64 }
+        name: { type: string, minLength: 1, maxLength: 64 }
+        note: { type: string, maxLength: 4096 }
+        user_id: { type: integer, format: int64, nullable: true }
+        user_name: { type: string }
+        user_group_id: { type: integer, format: int64, nullable: true }
+        user_group_name: { type: string }
+        device_id: { type: integer, format: int64, nullable: true }
+        device_name: { type: string }
+        device_group_id: { type: integer, format: int64, nullable: true }
+        device_group_name: { type: string }
+        control_role_id: { type: integer, format: int64, nullable: true }
+        control_role_name: { type: string }
+        action:
+          type: string
+          enum: [allow, deny]
+        priority: { type: integer, minimum: 1, maximum: 1000000 }
+        enabled: { type: boolean }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+
+    ConnectionACLInput:
+      type: object
+      required: [name, action]
+      properties:
+        name: { type: string, minLength: 1, maxLength: 64 }
+        note: { type: string, maxLength: 4096 }
+        user_id: { type: integer, format: int64, nullable: true }
+        user_group_id: { type: integer, format: int64, nullable: true }
+        device_id: { type: integer, format: int64, nullable: true }
+        device_group_id: { type: integer, format: int64, nullable: true }
+        control_role_id: { type: integer, format: int64, nullable: true }
+        action:
+          type: string
+          enum: [allow, deny]
+        priority: { type: integer, minimum: 1, maximum: 1000000 }
+        enabled: { type: boolean }
+
+    ConnectionACLPatch:
+      type: object
+      additionalProperties: false
+      properties:
+        name: { type: string, minLength: 1, maxLength: 64 }
+        note: { type: string, maxLength: 4096 }
+        user_id: { type: integer, format: int64, nullable: true }
+        user_group_id: { type: integer, format: int64, nullable: true }
+        device_id: { type: integer, format: int64, nullable: true }
+        device_group_id: { type: integer, format: int64, nullable: true }
+        control_role_id: { type: integer, format: int64, nullable: true }
+        action:
+          type: string
+          enum: [allow, deny]
+        priority: { type: integer, minimum: 1, maximum: 1000000 }
+        enabled: { type: boolean }
+
+    ConnectionACLList:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/ConnectionACL" }
+
+    ACLTestRequest:
+      type: object
+      required: [user_id, device_id]
+      properties:
+        user_id: { type: integer, format: int64 }
+        device_id: { type: integer, format: int64 }
+
+    ACLTestResult:
+      type: object
+      required: [decision]
+      properties:
+        decision:
+          type: string
+          enum: [allow, deny, owner, no_rules]
+        matched_rule:
+          allOf:
+            - $ref: "#/components/schemas/ConnectionACL"
+          nullable: true
+        effective_role:
+          allOf:
+            - $ref: "#/components/schemas/ControlRole"
+          nullable: true
+
 
 
