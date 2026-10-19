@@ -109,6 +109,28 @@ curl -fsS -X POST -H "Authorization: Bearer $RDPANEL_TOKEN" -H "Content-Type: ap
   -d '{"name":"ops"}' "$RDPANEL/api/v1/admin/user-groups"
 ```
 
+## Declarative Access Policy (HuJSON)
+
+Manage all connection ACL rules, roles, and automated test assertions in a single version-controlled HuJSON file:
+
+- **Get current policy:** `GET /api/v1/admin/acl/policy`
+- **Dry-run validation / test:** `POST /api/v1/admin/acl/policy/test`
+- **Atomic update:** `PUT /api/v1/admin/acl/policy`
+
+```sh
+# Dry-run validate policy with assertions
+curl -fsS -X POST -H "Authorization: Bearer $RDPANEL_TOKEN" -H "Content-Type: application/json" \
+  -d "{\"policy\": $(jq -Rs . < policy.hujson)}" \
+  "$RDPANEL/api/v1/admin/acl/policy/test"
+
+# Apply policy
+curl -fsS -X PUT -H "Authorization: Bearer $RDPANEL_TOKEN" -H "Content-Type: application/json" \
+  -d "{\"policy\": $(jq -Rs . < policy.hujson)}" \
+  "$RDPANEL/api/v1/admin/acl/policy"
+```
+
+Full specification and GitOps workflow guide: [`docs/acl-policy.md`](acl-policy.md).
+
 Errors always have the body `{"error":{"code":"...","message":"..."}}`; the codes are
 listed at the top of `api/openapi.yaml`.
 
@@ -117,3 +139,4 @@ listed at the top of `api/openapi.yaml`.
 `rdpanel_auth_api_token_requests_total{result="success|failure|rate_limited"}` counts
 requests that presented a token ([monitoring.md](monitoring.md)). Tokens never appear in
 logs.
+

@@ -132,6 +132,7 @@ the lejianwen API/login patches + hardening and keepalive fixes).
 | [`docs/configuration.md`](docs/configuration.md) | every `RDPANEL_*` setting with its YAML key and default |
 | [`deploy/helm/rdpanel`](deploy/helm/rdpanel) | Kubernetes (Helm chart) |
 | [`docs/api.md`](docs/api.md) | admin API for scripts: personal API tokens, curl examples; interactive docs (Swagger UI) at `/api/v1/docs` on the admin host |
+| [`docs/acl-policy.md`](docs/acl-policy.md) | declarative Access Policy (Tailscale-style HuJSON), roles, test assertions and GitOps workflow |
 | [`docs/oidc.md`](docs/oidc.md) | single sign-on: Authentik, Keycloak, Pocket ID, GitHub, Google |
 | [`docs/monitoring.md`](docs/monitoring.md) | metrics, Grafana dashboard, alert rules |
 | [`docs/relay-agents.md`](docs/relay-agents.md) | extra relays on other hosts (relay agents) |
