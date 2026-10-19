@@ -37,6 +37,18 @@ export function isIpOrCidr(s: string): boolean {
   return v4 ? n <= 32 : n <= 128;
 }
 
+/** Explicit CIDR prefix (v4/v6) requiring a prefix length. */
+export function isCIDR(s: string): boolean {
+  const [ip, bits, extra] = s.trim().split("/");
+  if (extra !== undefined || !ip || bits === undefined) return false;
+  const v4 = isIPv4(ip);
+  const v6 = !v4 && isIPv6(ip);
+  if (!v4 && !v6) return false;
+  if (!/^\d{1,3}$/.test(bits)) return false;
+  const n = Number(bits);
+  return v4 ? n <= 32 : n <= 128;
+}
+
 /** `host[:port]` without spaces or commas (hbbs relay-servers entry). */
 export function isHostPort(s: string): boolean {
   const v = s.trim();

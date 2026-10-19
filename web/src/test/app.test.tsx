@@ -262,6 +262,22 @@ describe("server → relays", () => {
     await user.click(screen.getByRole("tab", { name: "Compose" }));
     expect(within(panel()).getByText(/RDPANEL_AGENT_ENROLL_TOKEN/)).toHaveTextContent(token);
   });
+
+  it("manages CIDR prefix routing rules", async () => {
+    const user = userEvent.setup();
+    renderApp("/server?tab=relays");
+    expect(await screen.findByText("192.168.1.0/24", undefined, { timeout: 5000 })).toBeInTheDocument();
+    expect(screen.getByText("10.0.0.0/8")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Add rule" }));
+    expect(await screen.findByRole("dialog")).toBeInTheDocument();
+    await user.type(screen.getByLabelText("CIDR prefix"), "172.16.0.0/16");
+    await user.type(screen.getByLabelText("Comment"), "Branch office");
+    await user.click(screen.getByRole("button", { name: "Add" }));
+
+    expect(await screen.findByText("172.16.0.0/16")).toBeInTheDocument();
+    expect(screen.getByText("Branch office")).toBeInTheDocument();
+  });
 });
 
 describe("server → logs", () => {

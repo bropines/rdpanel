@@ -5,7 +5,7 @@ import { formatDuration, formatRustdeskId, formatUptime, relativeTime } from "@/
 import { applyPresence, mergeDevice, patchDevicePage } from "@/lib/live-cache";
 import { safeNext } from "@/lib/redirect";
 import { rangeToQuery } from "@/lib/time-range";
-import { isHostPort, isIpOrCidr, isIPv6, splitLines } from "@/lib/validate";
+import { isCIDR, isHostPort, isIpOrCidr, isIPv6, splitLines } from "@/lib/validate";
 import type { Schemas } from "@/api/client";
 
 describe("safeNext", () => {
@@ -84,6 +84,15 @@ describe("validate", () => {
     }
     expect(isIPv6("1:2:3:4:5:6:7:8")).toBe(true);
     expect(isIPv6("1::2::3")).toBe(false);
+  });
+
+  it("validates CIDR prefixes", () => {
+    for (const ok of ["10.0.0.0/8", "192.168.1.0/24", "2001:db8::/32", "0.0.0.0/0", "::/0"]) {
+      expect(isCIDR(ok), ok).toBe(true);
+    }
+    for (const bad of ["10.0.0.1", "::1", "10.0.0.0/33", "2001:db8::/129", "invalid/24", "10.0.0.0/-1", ""]) {
+      expect(isCIDR(bad), bad).toBe(false);
+    }
   });
 
   it("validates relay host[:port]", () => {
