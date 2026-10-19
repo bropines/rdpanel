@@ -120,4 +120,3 @@ func TestClientOptionsFetchSTUN(t *testing.T) {
 		t.Fatalf("expected items array, got %v", m)
 	}
 }
-

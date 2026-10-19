@@ -179,4 +179,3 @@ func (c *b2bCore) handlePostFetchPublicSTUN(w http.ResponseWriter, r *http.Reque
 		Items:        items,
 	})
 }
-

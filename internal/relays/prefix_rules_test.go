@@ -168,4 +168,3 @@ func TestCountryPrefixRules(t *testing.T) {
 		t.Fatal("expected error for unsupported country XX")
 	}
 }
-
