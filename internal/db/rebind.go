@@ -1,92 +1,126 @@
 package db
 
 import (
-	"strconv"
+	"errors"
+	"fmt"
 	"strings"
 )
 
-// Rebind converts '?' parameter placeholders in query into PostgreSQL '$1', '$2', ... placeholders.
-// It preserves '?' characters inside single-quoted string literals ('...'), block comments (/* ... */),
-// and line comments (-- ...).
-func Rebind(query string) string {
+// ErrMixedPlaceholders is returned for a query that mixes plain ('?') and
+// numbered ('?N') placeholders. SQLite numbers a plain '?' after the largest
+// index seen so far, which has no faithful PostgreSQL equivalent.
+var ErrMixedPlaceholders = errors.New("db: query mixes ? and ?N placeholders")
+
+// Rebind converts SQLite parameter placeholders in query to PostgreSQL ones:
+// plain '?' become sequential '$1', '$2', ... and numbered '?N' become '$N'
+// (so a value bound once can be referenced several times). A query that mixes
+// both styles is rejected with ErrMixedPlaceholders.
+//
+// Single-quoted literals ('...'), double-quoted identifiers ("..."), line
+// comments (-- ...) and block comments (/* ... */) are copied verbatim.
+func Rebind(query string) (string, error) {
+	return rewrite(query, false)
+}
+
+// postgresSQL adapts a query written for SQLite (the reference dialect of the
+// repositories) to PostgreSQL: placeholders are rebound as in Rebind, and LIKE
+// becomes ILIKE because SQLite's LIKE is case-insensitive (ASCII) while
+// PostgreSQL's is not; searches must behave the same on both engines.
+func postgresSQL(query string) (string, error) {
+	return rewrite(query, true)
+}
+
+func rewrite(query string, ilike bool) (string, error) {
 	var b strings.Builder
 	b.Grow(len(query) + 16)
 
-	paramIndex := 1
+	var plain, numbered bool
+	next := 1
 	n := len(query)
-
 	for i := 0; i < n; {
 		c := query[i]
-
-		// Single-quoted string literal: '...'
-		if c == '\'' {
-			b.WriteByte(c)
-			i++
-			for i < n {
-				ch := query[i]
-				b.WriteByte(ch)
-				if ch == '\'' {
-					// Check for escaped quote ''
-					if i+1 < n && query[i+1] == '\'' {
-						i++
-						b.WriteByte(query[i])
-					} else {
-						i++
-						break
+		switch {
+		case c == '\'' || c == '"':
+			// Literal or quoted identifier; a doubled quote is an escaped one.
+			j := i + 1
+			for j < n {
+				if query[j] == c {
+					if j+1 < n && query[j+1] == c {
+						j += 2
+						continue
 					}
-				}
-				i++
-			}
-			continue
-		}
-
-		// Line comment: -- ...
-		if c == '-' && i+1 < n && query[i+1] == '-' {
-			b.WriteByte(c)
-			b.WriteByte(query[i+1])
-			i += 2
-			for i < n {
-				ch := query[i]
-				b.WriteByte(ch)
-				i++
-				if ch == '\n' {
+					j++
 					break
 				}
+				j++
 			}
-			continue
-		}
-
-		// Block comment: /* ... */
-		if c == '/' && i+1 < n && query[i+1] == '*' {
-			b.WriteByte(c)
-			b.WriteByte(query[i+1])
-			i += 2
-			for i < n {
-				ch := query[i]
-				b.WriteByte(ch)
-				if ch == '*' && i+1 < n && query[i+1] == '/' {
-					i++
-					b.WriteByte(query[i])
-					i++
-					break
-				}
-				i++
+			b.WriteString(query[i:j])
+			i = j
+		case c == '-' && i+1 < n && query[i+1] == '-':
+			j := strings.IndexByte(query[i:], '\n')
+			if j < 0 {
+				j = n
+			} else {
+				j += i + 1
 			}
-			continue
-		}
-
-		// Placeholder: ?
-		if c == '?' {
+			b.WriteString(query[i:j])
+			i = j
+		case c == '/' && i+1 < n && query[i+1] == '*':
+			j := strings.Index(query[i+2:], "*/")
+			if j < 0 {
+				j = n
+			} else {
+				j += i + 4
+			}
+			b.WriteString(query[i:j])
+			i = j
+		case c == '?':
+			j := i + 1
+			for j < n && query[j] >= '0' && query[j] <= '9' {
+				j++
+			}
 			b.WriteByte('$')
-			b.WriteString(strconv.Itoa(paramIndex))
-			paramIndex++
+			if j > i+1 {
+				numbered = true
+				b.WriteString(query[i+1 : j])
+			} else {
+				plain = true
+				fmt.Fprintf(&b, "%d", next)
+				next++
+			}
+			if plain && numbered {
+				return "", ErrMixedPlaceholders
+			}
+			i = j
+		case ilike && (c == 'l' || c == 'L') && isKeywordAt(query, i, "like"):
+			b.WriteString("ILIKE")
+			i += 4
+		case isIdentByte(c):
+			// Copy a whole identifier so keywords are only matched as words.
+			j := i + 1
+			for j < n && isIdentByte(query[j]) {
+				j++
+			}
+			b.WriteString(query[i:j])
+			i = j
+		default:
+			b.WriteByte(c)
 			i++
-			continue
 		}
-
-		b.WriteByte(c)
-		i++
 	}
+	return b.String(), nil
+}
 
-	return b.String()
+// isKeywordAt reports whether the identifier starting at i is exactly kw
+// (case-insensitive). i must be at the start of an identifier.
+func isKeywordAt(s string, i int, kw string) bool {
+	end := i + len(kw)
+	if end > len(s) || !strings.EqualFold(s[i:end], kw) {
+		return false
+	}
+	return end == len(s) || !isIdentByte(s[end])
+}
+
+func isIdentByte(c byte) bool {
+	return c == '_' || c == '$' || c >= '0' && c <= '9' || c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= 0x80
 }
