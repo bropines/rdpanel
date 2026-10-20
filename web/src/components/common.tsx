@@ -222,16 +222,25 @@ export function RelativeTime({ iso, className }: { iso: string | null | undefine
   );
 }
 
-export function OnlineDot({ online, className }: { online: boolean | null | undefined; className?: string }) {
+export function OnlineDot({
+  online,
+  notRegistered,
+  className,
+}: {
+  online: boolean | null | undefined;
+  /** Heartbeat to the API is recent, but hbbs has no registration: amber. */
+  notRegistered?: boolean;
+  className?: string;
+}) {
   const { t } = useTranslation();
-  const label = online ? t("devices.online") : t("devices.offline");
+  const label = online ? t("devices.online") : notRegistered ? t("devices.notRegistered") : t("devices.offline");
   return (
     <span className={cn("relative inline-flex h-2.5 w-2.5 shrink-0", className)} title={label} role="img" aria-label={label}>
       {online && <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-500 opacity-40" />}
       <span
         className={cn(
           "relative inline-flex h-2.5 w-2.5 rounded-full",
-          online ? "bg-emerald-500" : "bg-zinc-300 dark:bg-zinc-600",
+          online ? "bg-emerald-500" : notRegistered ? "bg-amber-500" : "bg-zinc-300 dark:bg-zinc-600",
         )}
       />
     </span>

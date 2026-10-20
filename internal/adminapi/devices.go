@@ -18,32 +18,35 @@ import (
 
 // deviceDTO is components.schemas.Device.
 type deviceDTO struct {
-	ID              int64        `json:"id"`
-	RustdeskID      string       `json:"rustdesk_id"`
-	UUID            *string      `json:"uuid"`
-	Hostname        string       `json:"hostname"`
-	OS              string       `json:"os"`
-	CPU             string       `json:"cpu"`
-	Memory          string       `json:"memory"`
-	OSUsername      string       `json:"os_username"`
-	ClientVersion   string       `json:"client_version"`
-	Alias           string       `json:"alias"`
-	Note            string       `json:"note"`
-	OwnerUserID     *int64       `json:"owner_user_id"`
-	DeviceGroupID   *int64       `json:"device_group_id"`
-	StrategyID      *int64       `json:"strategy_id"`
-	Owner           *userRefDTO  `json:"owner"`
-	DeviceGroup     *groupRefDTO `json:"device_group"`
-	Strategy        *groupRefDTO `json:"strategy"`
-	OSFamily        string       `json:"os_family"`
-	Online          bool         `json:"online"`
-	OnlineSince     *time.Time   `json:"online_since"`
-	LastSeenAt      *time.Time   `json:"last_seen_at"`
-	LastSeenIP      *string      `json:"last_seen_ip"`
-	LastHeartbeatAt *time.Time   `json:"last_heartbeat_at"`
-	SysinfoAt       *time.Time   `json:"sysinfo_at"`
-	CreatedAt       time.Time    `json:"created_at"`
-	UpdatedAt       time.Time    `json:"updated_at"`
+	ID            int64        `json:"id"`
+	RustdeskID    string       `json:"rustdesk_id"`
+	UUID          *string      `json:"uuid"`
+	Hostname      string       `json:"hostname"`
+	OS            string       `json:"os"`
+	CPU           string       `json:"cpu"`
+	Memory        string       `json:"memory"`
+	OSUsername    string       `json:"os_username"`
+	ClientVersion string       `json:"client_version"`
+	Alias         string       `json:"alias"`
+	Note          string       `json:"note"`
+	OwnerUserID   *int64       `json:"owner_user_id"`
+	DeviceGroupID *int64       `json:"device_group_id"`
+	StrategyID    *int64       `json:"strategy_id"`
+	Owner         *userRefDTO  `json:"owner"`
+	DeviceGroup   *groupRefDTO `json:"device_group"`
+	Strategy      *groupRefDTO `json:"strategy"`
+	OSFamily      string       `json:"os_family"`
+	Online        bool         `json:"online"`
+	// NotRegistered: hbbs reports the device offline although its client
+	// heartbeat to this API is recent (it cannot be reached through hbbs).
+	NotRegistered   bool       `json:"not_registered"`
+	OnlineSince     *time.Time `json:"online_since"`
+	LastSeenAt      *time.Time `json:"last_seen_at"`
+	LastSeenIP      *string    `json:"last_seen_ip"`
+	LastHeartbeatAt *time.Time `json:"last_heartbeat_at"`
+	SysinfoAt       *time.Time `json:"sysinfo_at"`
+	CreatedAt       time.Time  `json:"created_at"`
+	UpdatedAt       time.Time  `json:"updated_at"`
 }
 
 // deviceDetailDTO is components.schemas.DeviceDetail.
@@ -139,6 +142,8 @@ func (a *resources) newDeviceDTO(d *store.Device, refs map[int64]store.UserRef, 
 		o.Strategy = &groupRefDTO{ID: *d.StrategyID, Name: d.StrategyName}
 	}
 	o.Online, o.OnlineSince = a.presenceOf(d, now)
+	o.NotRegistered = !o.Online && a.d.Presence != nil && d.LastHeartbeatAt != nil &&
+		!d.LastHeartbeatAt.Before(now.Add(-heartbeatOnlineWindow))
 	return o
 }
 

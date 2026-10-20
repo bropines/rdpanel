@@ -218,7 +218,7 @@ export function DeviceDrawer({
           {d ? (
             <>
               <SheetTitle className="flex items-center gap-2">
-                <OnlineDot online={d.online} />
+                <OnlineDot online={d.online} notRegistered={d.not_registered} />
                 <span className="truncate">{deviceName(d)}</span>
               </SheetTitle>
               <SheetDescription className="flex flex-wrap items-center gap-x-3 gap-y-1">
@@ -248,6 +248,12 @@ export function DeviceDrawer({
             </div>
           ) : (
             <>
+              {d.not_registered && (
+                <div className="rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-sm text-amber-800 dark:text-amber-300">
+                  <div className="font-medium">{t("devices.notRegistered")}</div>
+                  <p className="mt-1 text-xs">{t("devices.notRegisteredHint")}</p>
+                </div>
+              )}
               <div className="grid grid-cols-[1fr_auto_auto] gap-1.5">
                 {([undefined, "files", "terminal"] as const).map((mode) => (
                   <Button

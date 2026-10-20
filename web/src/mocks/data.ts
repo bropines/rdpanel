@@ -186,6 +186,8 @@ export const devices: MockDevice[] = Array.from({ length: 50 }, (_, i) => {
     device_group_id: group,
     device_group: group ? { id: group, name: deviceGroups[group - 1]!.name } : null,
     online,
+    // a few offline devices whose client still reaches the API (blocked 21116)
+    not_registered: !online && rand() < 0.08,
     online_since: iso(online ? int(5, 600) * MIN : lastSeenAgo),
     last_seen_at: iso(lastSeenAgo),
     last_seen_ip: `${pick(["185.12", "91.203", "10.0", "192.168", "46.39"])}.${int(0, 255)}.${int(1, 254)}`,

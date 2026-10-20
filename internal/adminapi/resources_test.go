@@ -1121,3 +1121,21 @@ func TestDashboard(t *testing.T) {
 		t.Fatalf("samples: %v", samples)
 	}
 }
+
+func TestDevicesNotRegistered(t *testing.T) {
+	e := newREnv(t, true)
+	now := e.clk.now()
+	recent, stale := now.Add(-10*time.Second), now.Add(-time.Minute)
+	e.device("1", func(d *store.Device) { d.LastHeartbeatAt = &recent }) // heartbeat, hbbs: offline
+	e.device("2", func(d *store.Device) { d.LastHeartbeatAt = &stale })
+	e.device("3", func(d *store.Device) { d.LastHeartbeatAt = &recent })
+	e.presence.set("3", now) // online in hbbs
+	_, m, _ := e.admin.do("GET", "/devices?sort=rustdesk_id", nil)
+	got := map[string]any{}
+	for _, it := range items(m) {
+		got[it["rustdesk_id"].(string)] = it["not_registered"]
+	}
+	if got["1"] != true || got["2"] != false || got["3"] != false {
+		t.Fatalf("not_registered: %v", got)
+	}
+}
