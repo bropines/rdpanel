@@ -73,7 +73,10 @@ webclient:
 **Entered by users** — `RDPANEL_WEBCLIENT_CUSTOM_SERVERS=true` adds "Other
 server…" to the connect form: users type a host (or paste a RustDesk config
 string, the one the RustDesk client's ID/Relay server dialog and RD Panel's
-Server page export) and the key. The CSP then allows WebSocket connections to
+Server page export; its HTTPS API host is used, since the ID and relay
+addresses in it are TCP endpoints for native clients) and the key. Use a
+domain name: browsers cannot open `wss://` to an IP address without a valid
+certificate for it. The CSP then allows WebSocket connections to
 every `wss:` origin, which a cross-site scripting bug could use to send data
 anywhere over WebSocket — leave it off unless you need it.
 
@@ -116,9 +119,10 @@ Also on that server:
 
 - **Key:** copy its `id_ed25519.pub` (the public key RustDesk clients use);
   the web client refuses servers it cannot verify.
-- **Relay:** hbbs must announce a relay that browsers can reach through
-  `/ws/relay` on the same host (its own hbbr). With RD Panel's image this is
-  automatic (`WS_RELAY_SERVERS`); with plain hbbs, use a single local relay.
+- **Relay:** the web client reaches the relay at `/ws/relay` on the same
+  host as `/ws/id` (or the relay URL you configure), so hbbs must hand
+  browsers that host's hbbr. With RD Panel's image this is automatic
+  (`WS_RELAY_SERVERS`); with plain hbbs, use a single local relay.
 - **Login:** with `MUST_LOGIN=Y` on that server, browser sessions without its
   token are refused — leave it off for web access.
 - hbbs/hbbr from upstream RustDesk 1.1.11+ (or this panel's image) serve

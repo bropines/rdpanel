@@ -3,7 +3,7 @@ import { useNavigate, useSearch } from "@tanstack/react-router";
 import { ArrowLeft, Loader2, ShieldAlert } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { decodeBase64, encodeBase64, isWebCodecsAvailable, type ServerConfig } from "rdweb";
+import { decodeBase64, encodeBase64, isWebCodecsAvailable, RDWEB_VERSION, type ServerConfig } from "rdweb";
 import { RemoteDesktop, RDPANEL_STORAGE_KEY, loadRecent, migrateStorage, type RemoteDesktopCredentials } from "rdweb/react";
 
 import { webClientApi, type WebClientConfig, type WebClientCredentials } from "@/api/system";
@@ -310,6 +310,7 @@ function ConnectForm({
           </div>
         )}
         <p className="text-xs text-muted-foreground">{t("webclient.formHint")}</p>
+        <p className="text-right font-mono text-[11px] text-muted-foreground/70">rdweb {RDWEB_VERSION}</p>
       </form>
     </div>
   );

@@ -10,10 +10,13 @@ import { Textarea } from "@/components/ui/misc";
 import { Select, SelectContent, SelectItem, SelectSeparator, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   decodeConfigString,
+  hostFromInput,
   idUrlFromInput,
+  isIpHost,
   isValidServer,
   loadUserServers,
   saveUserServers,
+  serverFromConfig,
   type OtherServer,
 } from "./servers";
 
@@ -160,10 +163,11 @@ function AddServerDialog({ open, onClose, onAdd }: { open: boolean; onClose: () 
       return;
     }
     setConfigError(false);
-    if (c.host) setHost(c.host);
-    if (c.relay) setRelay(c.relay);
+    const sv = serverFromConfig(c);
+    if (sv.host) setHost(sv.host);
+    setRelay(sv.relay);
     if (c.key) setKey(c.key);
-    if (!name && c.host) setName(c.host.replace(/:\d+$/, ""));
+    if (!name && sv.name) setName(sv.name);
   };
 
   return (
@@ -201,6 +205,7 @@ function AddServerDialog({ open, onClose, onAdd }: { open: boolean; onClose: () 
             <Label htmlFor="srv-host">{t("webclient.servers.host")}</Label>
             <Input id="srv-host" value={host} onChange={(e) => setHost(e.target.value)} placeholder="rd.example.com" autoComplete="off" />
             {idUrl && <p className="break-all text-xs text-muted-foreground">{idUrl}</p>}
+            {isIpHost(hostFromInput(host)) && <p className="text-xs text-amber-600 dark:text-amber-400">{t("webclient.servers.ipWarning")}</p>}
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="srv-relay">{t("webclient.servers.relay")}</Label>
