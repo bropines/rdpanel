@@ -122,7 +122,7 @@ func build(d *db.DB, q db.Querier, o options) *Store {
 	s.WebAuthnCredentials = &WebAuthnCredentials{q: q, now: now}
 	s.WebAuthnChallenges = &WebAuthnChallenges{q: q, now: now}
 	s.APITokens = &APITokens{q: q, now: now}
-	s.ClientStrategies = &ClientStrategies{q: q, now: now}
+	s.ClientStrategies = &ClientStrategies{q: q, d: d, now: now}
 	s.ControlRoles = &ControlRoles{q: q, now: now}
 	s.ConnectionACLs = &ConnectionACLs{q: q, now: now}
 	s.LDAPSettings = &LDAPSettingsRepo{q: q, now: now}

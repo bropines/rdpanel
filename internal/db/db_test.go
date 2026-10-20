@@ -150,6 +150,65 @@ func TestRelayDataMigration(t *testing.T) {
 	}
 }
 
+// TestStrategySeedDefaultMigration: 00020 drops the default flag of the
+// untouched seeded "Standard Office" (so an upgrade pushes nothing to devices
+// without a strategy) but keeps a default the admin chose.
+func TestStrategySeedDefaultMigration(t *testing.T) {
+	ctx := context.Background()
+	defaults := func(d *DB) string {
+		t.Helper()
+		var names sql.NullString
+		if err := d.QueryRow(`SELECT group_concat(name, ',') FROM client_strategies WHERE is_default = 1`).Scan(&names); err != nil {
+			t.Fatal(err)
+		}
+		return names.String
+	}
+	for _, tc := range []struct {
+		name   string
+		before string // SQL run at version 19
+		want   string
+	}{
+		{"untouched seed", ``, ""},
+		{"edited seed", `UPDATE client_strategies SET note = 'ours', updated_at = 1760000000000 WHERE name = 'Standard Office'`, "Standard Office"},
+		{"admin default", `UPDATE client_strategies SET is_default = (name = 'Strict Security'), updated_at = 1760000000000 WHERE name = 'Strict Security' OR is_default = 1`, "Strict Security"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			d, err := Open(ctx, filepath.Join(t.TempDir(), "panel.db"), Options{})
+			if err != nil {
+				t.Fatal(err)
+			}
+			t.Cleanup(func() { d.Close() })
+			p, err := goose.NewProvider(goose.DialectSQLite3, d.DB, Migrations())
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, err := p.UpTo(ctx, 19); err != nil {
+				t.Fatal(err)
+			}
+			if got := defaults(d); got != "Standard Office" {
+				t.Fatalf("seeded default: %q", got)
+			}
+			if tc.before != "" {
+				if _, err := d.Exec(tc.before); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if _, err := p.UpTo(ctx, 20); err != nil {
+				t.Fatal(err)
+			}
+			if got := defaults(d); got != tc.want {
+				t.Fatalf("default after 00020: %q, want %q", got, tc.want)
+			}
+			if _, err := p.DownTo(ctx, 19); err != nil {
+				t.Fatal(err)
+			}
+			if got := defaults(d); got == "" {
+				t.Fatal("down left no default")
+			}
+		})
+	}
+}
+
 func TestDBFileIsPrivate(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("POSIX permissions")
@@ -306,8 +365,8 @@ func TestMigrationsPG(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(entries) != 19 {
-		t.Fatalf("expected 19 migrations in migrations_pg, got %d", len(entries))
+	if len(entries) != 20 {
+		t.Fatalf("expected 20 migrations in migrations_pg, got %d", len(entries))
 	}
 
 	sqliteEntries, err := fs.ReadDir(Migrations(), ".")
