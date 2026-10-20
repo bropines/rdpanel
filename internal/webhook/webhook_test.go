@@ -1,14 +1,17 @@
 package webhook
 
 import (
+	"bytes"
 	"context"
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -33,8 +36,14 @@ func TestWebhookDispatch(t *testing.T) {
 		headers = append(headers, r.Header.Clone())
 		mu.Unlock()
 
-		// Verify signature
+		// Verify the signature the way a receiver would: HMAC over
+		// "<timestamp>.<body>".
+		ts := r.Header.Get("X-RDPanel-Timestamp")
+		if ts != "1792152000" {
+			t.Errorf("timestamp header %q", ts)
+		}
 		mac := hmac.New(sha256.New, []byte(secret))
+		mac.Write([]byte(ts + "."))
 		mac.Write(body)
 		wantSig := "sha256=" + hex.EncodeToString(mac.Sum(nil))
 		if got := r.Header.Get("X-Signature-256"); got != wantSig {
@@ -49,6 +58,7 @@ func TestWebhookDispatch(t *testing.T) {
 		URL:    srv.URL,
 		Secret: secret,
 		Bus:    bus,
+		Now:    func() time.Time { return time.Unix(1792152000, 0) },
 	})
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -113,5 +123,32 @@ func TestWebhookDispatch(t *testing.T) {
 	}
 	if received[1].Event != string(events.HBBSHealth) {
 		t.Errorf("second event = %s, want hbbs.health", received[1].Event)
+	}
+}
+
+// TestWebhookLogsOnlySchemeAndHost: webhook URLs carry tokens in the path or
+// query; send errors must not log them (url.Error repeats the full URL).
+func TestWebhookLogsOnlySchemeAndHost(t *testing.T) {
+	var buf bytes.Buffer
+	svc := New(Config{
+		URL: "http://127.0.0.1:1/services/T0/B0/pathtoken123?token=querytoken456",
+		Log: slog.New(slog.NewTextHandler(&buf, nil)),
+	})
+	svc.dispatch(context.Background(), events.Event{Type: events.HBBSHealth, Time: time.Now(), Data: events.Health{Component: "hbbs"}})
+	out := buf.String()
+	if !strings.Contains(out, "webhook: send error") || !strings.Contains(out, "http://127.0.0.1:1") {
+		t.Fatalf("expected a send error naming scheme://host, got %s", out)
+	}
+	for _, leak := range []string{"pathtoken123", "querytoken456", "/services"} {
+		if strings.Contains(out, leak) {
+			t.Fatalf("log leaks %q: %s", leak, out)
+		}
+	}
+}
+
+func TestSign(t *testing.T) {
+	a := Sign("k", 100, []byte("{}"))
+	if a == Sign("k", 101, []byte("{}")) || a == Sign("k", 100, []byte("{} ")) || !strings.HasPrefix(a, "sha256=") {
+		t.Fatalf("signature does not bind timestamp and body: %s", a)
 	}
 }

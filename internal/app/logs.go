@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"io"
 	"log/slog"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -45,7 +46,10 @@ func (a *App) initLogs() {
 	cfg := a.Config
 	secrets := []string{
 		cfg.SecretKey.Reveal(), cfg.Auth.JWTKey.Reveal(), cfg.SMTP.Password.Reveal(),
+		cfg.Webhook.Secret.Reveal(),
 	}
+	// Webhook URLs (Slack, Teams, ...) carry their token in the path or query.
+	secrets = append(secrets, webhookURLSecrets(cfg.Webhook.URL)...)
 	secrets = append(secrets, a.keySecrets...)
 	// The hbbs key pair (the s6 image keeps both halves next to each other).
 	if pk := cfg.HBBS.PublicKeyFile; pk != "" {
@@ -59,6 +63,20 @@ func (a *App) initLogs() {
 	if cfg.Logs.Dir != "" {
 		a.Log.Info("server logs: following s6-log directories", slog.String("dir", cfg.Logs.Dir), slog.Int("lines_per_source", a.Logs.Capacity()))
 	}
+}
+
+// webhookURLSecrets are the forms of a webhook URL that may show up in log
+// lines: the whole URL and its query. The webhook service itself only logs
+// scheme://host.
+func webhookURLSecrets(raw string) []string {
+	if raw == "" {
+		return nil
+	}
+	out := []string{raw}
+	if u, err := url.Parse(raw); err == nil && u.RawQuery != "" {
+		out = append(out, u.RawQuery)
+	}
+	return out
 }
 
 // keyLogSecrets are the encodings of loaded key material the redactor hides.

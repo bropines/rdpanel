@@ -90,8 +90,8 @@ See [deploy.md → Passkeys](deploy.md#passkeys) for how the RP id and origins a
 | `RDPANEL_LOGS_DIR` (`logs.dir`) | — (image: `/run/rdpanel/logs`) | s6-log directories (`<dir>/<source>/current`) the panel tails for hbbs/hbbr/panel lines; empty = only the panel's own lines ([deploy.md → Server logs](deploy.md#server-logs)) |
 | `RDPANEL_UPDATE_CHECK` (`update_check`) | `true` | About page "update available" check: the server asks the GitHub releases API at most every 6 h (failures tolerated); `false` = no outbound request |
 | `RDPANEL_API_DOCS` (`api_docs`) | `auth` | interactive admin API docs at `/api/v1/docs` and the spec at `/api/v1/openapi.yaml` / `.json`: `auth` = signed-in panel users or API tokens (browsers are sent to the login), `public` = readable without login (calls still need auth), `off` = 404 ([api.md](api.md#interactive-docs)) |
-| `RDPANEL_WEBHOOK_URL` (`webhook.url`) | empty | HTTP/HTTPS endpoint for critical alerts (relay degraded/offline, hbbs down); empty = disabled |
-| `RDPANEL_WEBHOOK_SECRET` (`webhook.secret`) | empty | optional HMAC-SHA256 secret for webhook payload signing (`X-Signature-256`) |
+| `RDPANEL_WEBHOOK_URL` (`webhook.url`) | empty | HTTP/HTTPS endpoint for critical alerts (relay degraded/offline, hbbs down); empty = disabled. Logs show only its scheme and host ([webhooks](#webhooks)) |
+| `RDPANEL_WEBHOOK_SECRET` (`webhook.secret`) | empty | optional HMAC-SHA256 secret: requests are signed over timestamp and body (`X-RDPanel-Timestamp`, `X-Signature-256`; [verifying](#webhooks)) |
 
 ### E-mail (SMTP)
 
@@ -106,6 +106,24 @@ not at all). Feature overview: [deploy.md → E-mail](deploy.md#e-mail-verificat
 | `RDPANEL_SMTP_USERNAME`, `RDPANEL_SMTP_PASSWORD` (`smtp.username`, `smtp.password`) | empty | AUTH PLAIN or LOGIN; `RDPANEL_SMTP_PASSWORD_FILE` (`smtp.password_file`) reads the password from a file |
 | `RDPANEL_SMTP_FROM` (`smtp.from`) | — | sender, e.g. `RD Panel <panel@example.com>` (required with a host) |
 | `RDPANEL_SMTP_INSECURE_SKIP_VERIFY` (`smtp.insecure_skip_verify`) | `false` | accept any TLS certificate (self-signed relays only) |
+
+## Webhooks
+
+With `RDPANEL_WEBHOOK_URL` set, critical events (relay degraded/offline, hbbs down) are
+POSTed as JSON `{"event", "timestamp", "data"}`. Every request carries
+`X-RDPanel-Timestamp` (Unix seconds). With `RDPANEL_WEBHOOK_SECRET` set it also carries
+
+```text
+X-Signature-256: sha256=<hex HMAC-SHA256(secret, X-RDPanel-Timestamp + "." + raw body)>
+```
+
+To verify, recompute the HMAC over the timestamp header, a `.` and the raw request body,
+compare it in constant time, and reject requests whose timestamp is more than a few
+minutes old (replays). Receivers written for releases up to 0.10.7, which signed the body
+alone, must be updated.
+
+The URL is treated as a secret (Slack/Teams-style URLs embed their token): panel logs name
+only its scheme and host, and Server → Logs redacts the URL and the secret.
 
 ## Example YAML
 
