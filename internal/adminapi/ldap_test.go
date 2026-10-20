@@ -230,3 +230,22 @@ func TestLDAPLoginCannotTakeOverLocalAccount(t *testing.T) {
 		t.Fatalf("local login: %d %v", code, m)
 	}
 }
+
+// A password verified by the directory must never be stored as a local hash
+// (the "rehash on login" upgrade saw the empty hash of LDAP users as stale).
+func TestLDAPLoginStoresNoLocalPassword(t *testing.T) {
+	e := newB2Env(t, b2opts{})
+	enableTestLDAP(t, e, map[string]string{"corpuser": "corpuser"})
+	for range 2 { // provisioning login, then a login of the existing LDAP user
+		if code, m := e.client().login("corpuser", "directory password"); code != http.StatusOK {
+			t.Fatalf("ldap login: %d %v", code, m)
+		}
+		u, err := e.st.Users.GetByUsername(e.ctx, "corpuser")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !u.IsLDAP || u.HasPassword() || u.PasswordAlgo != "" {
+			t.Fatalf("LDAP password stored locally: is_ldap=%v hash=%q", u.IsLDAP, u.PasswordHash)
+		}
+	}
+}

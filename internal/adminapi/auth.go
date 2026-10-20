@@ -206,7 +206,8 @@ func (c *authCore) handleLogin(w http.ResponseWriter, r *http.Request) {
 		internalError(w)
 		return
 	}
-	var ok bool
+	// localOK: the password matched the stored local hash (not LDAP).
+	var ok, localOK bool
 	reason := "bad_credentials"
 	// The directory is asked only for unknown usernames and LDAP-provisioned
 	// users: a local account (is_ldap = 0) is never authenticated, or linked,
@@ -237,6 +238,7 @@ func (c *authCore) handleLogin(w http.ResponseWriter, r *http.Request) {
 		}
 	default:
 		ok = c.d.Hasher.Verify(user.PasswordHash, req.Password)
+		localOK = ok
 		if !ok {
 			ok = tryLDAP()
 		}
@@ -265,7 +267,9 @@ func (c *authCore) handleLogin(w http.ResponseWriter, r *http.Request) {
 			"password sign-in is disabled; use an identity provider")
 		return
 	}
-	if c.d.Hasher.NeedsRehash(user.PasswordHash) {
+	// Upgrade the local hash only when it verified this password: a password
+	// checked by LDAP must never be stored as a local one.
+	if localOK && user.HasPassword() && c.d.Hasher.NeedsRehash(user.PasswordHash) {
 		if h, algo, err := c.d.Hasher.Hash(req.Password); err == nil {
 			if err := c.d.Store.Users.RehashPassword(ctx, user.ID, h, string(algo)); err != nil {
 				c.d.Log.WarnContext(ctx, "login: rehash", slog.Any("err", err))
