@@ -1759,6 +1759,7 @@
       "configInvalid": "This is not a RustDesk config string.",
       "name": "Name",
       "host": "Server address",
+      "ipWarning": "Browsers need a domain name with a valid certificate; an IP address almost never has one. Use the domain that serves /ws/id (for RD Panel: the panel's address).",
       "relay": "Relay address (optional)",
       "relayPlaceholder": "same as the server",
       "key": "Public key",

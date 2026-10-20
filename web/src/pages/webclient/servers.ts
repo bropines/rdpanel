@@ -89,6 +89,22 @@ export function isValidServer(s: Pick<OtherServer, "idUrl" | "relayUrl" | "key">
   }
 }
 
+/** An IPv4 or IPv6 literal (with or without a port): browsers rarely get a valid certificate for one. */
+export function isIpHost(host: string): boolean {
+  const h = host.trim().replace(/^\[(.*)\](:\d+)?$/, "$1").replace(/^(\d+\.\d+\.\d+\.\d+):\d+$/, "$1");
+  return /^\d{1,3}(\.\d{1,3}){3}$/.test(h) || (h.includes(":") && /^[0-9a-f:.]+$/i.test(h));
+}
+
+/** The host part of what users type ("https://a.example/x", "a.example:21116" -> "a.example"). */
+export function hostFromInput(input: string): string {
+  const url = idUrlFromInput(input);
+  try {
+    return url ? new URL(url).host : "";
+  } catch {
+    return "";
+  }
+}
+
 export interface DecodedConfig {
   host: string;
   relay: string;
@@ -115,4 +131,17 @@ export function decodeConfigString(input: string): DecodedConfig | null {
   } catch {
     return null;
   }
+}
+
+/**
+ * Form values for a decoded config string. Its host and relay are hbbs/hbbr
+ * TCP addresses for native clients (often an IP address); the HTTPS API server
+ * is what a browser can reach, and RD Panel serves /ws/id and /ws/relay there.
+ */
+export function serverFromConfig(c: DecodedConfig): { name: string; host: string; relay: string } {
+  const api = /^https:\/\//i.test(c.api) ? hostFromInput(c.api) : "";
+  if (api && !isIpHost(api)) return { name: api, host: api, relay: "" };
+  const host = hostFromInput(c.host) || api;
+  const relay = hostFromInput(c.relay);
+  return { name: host, host, relay: relay && relay !== host && !isIpHost(relay) ? relay : "" };
 }
