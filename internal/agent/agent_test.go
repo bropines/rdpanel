@@ -223,8 +223,11 @@ func TestAgentHubEndToEnd(t *testing.T) {
 		t.Fatal(err)
 	}
 	a2ctx, a2cancel := context.WithCancel(ctx)
-	defer a2cancel()
-	go func() { _ = a2.Run(a2ctx) }()
+	// Stop the agent and wait for it before t.TempDir's cleanup (which runs
+	// after this, being registered earlier) removes the data dir under it.
+	done2 := make(chan struct{})
+	go func() { _ = a2.Run(a2ctx); close(done2) }()
+	t.Cleanup(func() { a2cancel(); <-done2 })
 	eventually(t, "hbbr from persisted config", func() bool { args, _ := runner2.last(); return args != nil })
 	eventually(t, "healthy", func() bool { return agent.CheckHealth(dir, time.Now(), time.Minute) == nil })
 }
