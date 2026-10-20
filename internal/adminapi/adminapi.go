@@ -115,6 +115,10 @@ type Deps struct {
 	Schema SchemaInfo
 	// Updates looks up the latest release (nil: the update check is disabled).
 	Updates UpdateChecker
+
+	// Clients backs the "Install client" page (nil: client downloads are
+	// disabled; the page then offers only the settings).
+	Clients ClientDownloads
 }
 
 // SchemaInfo reports the database schema version (implemented by *db.DB).

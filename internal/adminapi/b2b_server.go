@@ -18,6 +18,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	"github.com/bropines/rdpanel/internal/clientdl"
 	"github.com/bropines/rdpanel/internal/hbbs/control"
 	"github.com/bropines/rdpanel/internal/hbbs/reconcile"
 	"github.com/bropines/rdpanel/internal/httpx"
@@ -1015,7 +1016,9 @@ func DecodeRustdeskConfig(s string) (host, relay, api, key string, err error) {
 	return cs.Host, cs.Relay, cs.API, cs.Key, nil
 }
 
-func (c *b2bCore) handleGetClientConfig(w http.ResponseWriter, r *http.Request) {
+// clientServerSettings returns the ID server, relay, API URL and public key
+// that RustDesk clients use for this server.
+func (c *b2bCore) clientServerSettings(r *http.Request) clientdl.ServerSettings {
 	var publicKey string
 	if c.d.Config != nil && c.d.Config.HBBS.PublicKeyFile != "" {
 		if raw, err := os.ReadFile(c.d.Config.HBBS.PublicKeyFile); err == nil {
@@ -1063,6 +1066,13 @@ func (c *b2bCore) handleGetClientConfig(w http.ResponseWriter, r *http.Request) 
 	} else {
 		relayServer = idServer
 	}
+
+	return clientdl.ServerSettings{Host: idServer, Relay: relayServer, API: apiServer, Key: publicKey}
+}
+
+func (c *b2bCore) handleGetClientConfig(w http.ResponseWriter, r *http.Request) {
+	cs := c.clientServerSettings(r)
+	idServer, relayServer, apiServer, publicKey := cs.Host, cs.Relay, cs.API, cs.Key
 
 	configStr, _ := EncodeRustdeskConfig(idServer, relayServer, apiServer, publicKey)
 

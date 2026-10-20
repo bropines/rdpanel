@@ -9,6 +9,7 @@ import (
 	"io/fs"
 	"log/slog"
 	"net/http"
+	"path/filepath"
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
@@ -18,6 +19,7 @@ import (
 	"github.com/bropines/rdpanel/internal/auth"
 	"github.com/bropines/rdpanel/internal/buildinfo"
 	"github.com/bropines/rdpanel/internal/clientapi"
+	"github.com/bropines/rdpanel/internal/clientdl"
 	"github.com/bropines/rdpanel/internal/clientopts"
 	"github.com/bropines/rdpanel/internal/config"
 	"github.com/bropines/rdpanel/internal/crypto"
@@ -92,6 +94,9 @@ type App struct {
 	// Updates is the cached GitHub release check (nil when
 	// RDPANEL_UPDATE_CHECK=false).
 	Updates *updatecheck.Checker
+	// Clients looks up RustDesk releases for the "Install client" page (nil
+	// when client downloads are disabled).
+	Clients *clientdl.Service
 	// Telemetry holds the login / client-token / audit counters.
 	Telemetry *metrics.Panel
 
@@ -115,6 +120,10 @@ func New(ctx context.Context, cfg *config.Config, log *slog.Logger, opts ...Opti
 	}
 	if cfg.UpdateCheck {
 		a.Updates = updatecheck.New("rdpanel/" + buildinfo.Version + " (+https://github.com/bropines/rdpanel)")
+	}
+	if cfg.ClientDownloads.Enabled {
+		a.Clients = clientdl.New(filepath.Join(cfg.DataDir, "clients"), cfg.ClientDownloads.Version,
+			"rdpanel/"+buildinfo.Version+" (+https://github.com/bropines/rdpanel)")
 	}
 	var err error
 	if a.DB, err = openDB(ctx, cfg, log); err != nil {

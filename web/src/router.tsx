@@ -91,6 +91,7 @@ const profileRoute = createRoute({ getParentRoute: app, path: "/my/profile", val
 const myDevicesRoute = createRoute({ getParentRoute: app, path: "/my/devices", validateSearch: S, component: lazyRouteComponent(() => import("@/pages/devices/DevicesPage"), "MyDevicesPage") });
 const myBooksRoute = createRoute({ getParentRoute: app, path: "/my/address-books", validateSearch: S, component: lazyRouteComponent(() => import("@/pages/address-books/AddressBooksPage"), "MyAddressBooksPage") });
 const mySessionsRoute = createRoute({ getParentRoute: app, path: "/my/sessions", validateSearch: S, component: lazyRouteComponent(() => import("@/pages/my/SessionsPage"), "MySessionsPage") });
+const installRoute = createRoute({ getParentRoute: app, path: "/my/install", component: lazyRouteComponent(() => import("@/pages/my/InstallClientPage"), "InstallClientPage") });
 const aboutRoute = createRoute({ getParentRoute: app, path: "/about", component: lazyRouteComponent(() => import("@/pages/AboutPage"), "AboutPage") });
 const forbiddenRoute = createRoute({ getParentRoute: app, path: "/forbidden", component: ForbiddenPage });
 
@@ -125,6 +126,7 @@ const routeTree = rootRoute.addChildren([
     myDevicesRoute,
     myBooksRoute,
     mySessionsRoute,
+    installRoute,
     aboutRoute,
     forbiddenRoute,
     adminRoute.addChildren([devicesRoute, usersRoute, groupsRoute, booksRoute, aclRoute, auditRoute, idpRoute, serverRoute, settingsRoute]),

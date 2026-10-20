@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { AlertTriangle, ChevronDown, ChevronUp, Copy, KeyRound, Monitor, Terminal } from "lucide-react";
+import { Link } from "@tanstack/react-router";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
@@ -11,14 +12,12 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Skeleton, Switch } from "@/components/ui/misc";
 
 /**
- * Builds the executable filename for Windows portable client auto-configuration.
- * RustDesk parses `host=` and `key=` from the binary filename.
+ * The Windows installer name that makes the official client use this server:
+ * RustDesk reads its config string from "rustdesk-licensed-<config>.exe"
+ * (works for every key, unlike host=...,key=..., which breaks on "/" in keys).
  */
-export function windowsExeName(host: string, key: string): string {
-  const parts: string[] = [];
-  if (host) parts.push(`host=${host}`);
-  if (key) parts.push(`key=${key}`);
-  return parts.length ? `rustdesk-${parts.join(",")}.exe` : "rustdesk.exe";
+export function windowsExeName(configString: string): string {
+  return configString ? `rustdesk-licensed-${configString}.exe` : "rustdesk.exe";
 }
 
 /**
@@ -44,7 +43,7 @@ export function ClientConfigCard() {
   const activeConfigString = useIp && c.config_string_ip ? c.config_string_ip : c.config_string;
 
   const cmd = cliCommand(activeConfigString);
-  const exeName = windowsExeName(activeIdServer, c.public_key);
+  const exeName = windowsExeName(activeConfigString);
 
   const handleCopyMain = async () => {
     if (await copyText(activeConfigString)) {
@@ -61,7 +60,12 @@ export function ClientConfigCard() {
               <Monitor className="h-4 w-4" />
               {t("server.clientConfig.title")}
             </CardTitle>
-            <CardDescription className="mt-1">{t("server.clientConfig.description")}</CardDescription>
+            <CardDescription className="mt-1">
+              {t("server.clientConfig.description")}{" "}
+              <Link to="/my/install" className="text-primary underline-offset-4 hover:underline">
+                {t("server.clientConfig.installPage")}
+              </Link>
+            </CardDescription>
           </div>
           <div className="flex flex-wrap items-center gap-2">
             {hasIp && (

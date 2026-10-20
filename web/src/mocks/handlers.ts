@@ -695,6 +695,36 @@ export const handlers = [
   }),
   // Web client: point VITE_MOCK_WEBCLIENT_ID_URL / _RELAY_URL / _KEY at a real
   // server to try the client against live devices from the mock build.
+  http.get(`${B}/clients`, () =>
+    HttpResponse.json({
+      enabled: true,
+      version: "1.5.0",
+      release_url: "https://github.com/rustdesk/rustdesk/releases/tag/1.5.0",
+      published_at: "2026-09-30T16:11:03Z",
+      id_server: "desk.example.com",
+      relay_server: "desk.example.com",
+      api_server: "https://desk.example.com",
+      public_key: "MEbIUN8NZFq0Vu80BjNNIGDbQKdXxcg8QTbo69qrH+A=",
+      config_string: "=0nI9Q2bu5yZsFGbi5SaoBnL0VmZ6ISdy5yckVGZiojIp1WYiwiI",
+      windows_file_name: "rustdesk-licensed-=0nI9Q2bu5yZsFGbi5SaoBnL0VmZ6ISdy5yckVGZiojIp1WYiwiI.exe",
+      assets: [
+        ["windows-x64", "rustdesk-1.5.0-x86_64.exe", 25887600],
+        ["windows-arm64", "rustdesk-1.5.0-aarch64.exe", 23857008],
+        ["macos-arm64", "rustdesk-1.5.0-aarch64.dmg", 29874038],
+        ["macos-x64", "rustdesk-1.5.0-x86_64.dmg", 36878402],
+        ["linux-deb-x64", "rustdesk-1.5.0-x86_64.deb", 24940796],
+        ["linux-rpm-x64", "rustdesk-1.5.0-0.x86_64.rpm", 33732946],
+        ["linux-appimage-x64", "rustdesk-1.5.0-x86_64.AppImage", 87992824],
+        ["android-universal", "rustdesk-1.5.0-universal-signed.apk", 77451974],
+      ].map(([id, name, size]) => ({
+        id,
+        name,
+        size,
+        url: `https://github.com/rustdesk/rustdesk/releases/download/1.5.0/${name}`,
+        sha256: "8555777215510d83d2d61c9dc984e4fcc838bd7e79f9d18a42585431f5e8bb47",
+      })),
+    }),
+  ),
   http.get(`${B}/webclient/config`, () =>
     HttpResponse.json({
       enabled: true,
