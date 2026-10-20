@@ -1847,6 +1847,17 @@
       "AltLeft": "Alt",
       "MetaLeft": "Win",
       "ShiftLeft": "Shift"
+    },
+    "errors": {
+      "offline": "The device is offline.",
+      "not-found": "No device with this ID is registered on the server.",
+      "key-mismatch": "The server key does not match; ask an administrator to check the server configuration.",
+      "login-required": "The server requires a signed-in client and rejected the token. Reload the page and try again.",
+      "timeout": "The device did not answer in time. Check that it is online and allows incoming connections.",
+      "network": "Network error: {{detail}}",
+      "handshake": "The device could not be verified, so the connection was refused ({{detail}}).",
+      "unverified-peer": "The server did not vouch for this device's key, so the connection was refused.",
+      "refused": "The connection was refused: {{detail}}"
     }
   }
 }
