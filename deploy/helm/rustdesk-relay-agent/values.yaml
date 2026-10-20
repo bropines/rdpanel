@@ -45,16 +45,30 @@ serviceAccount:
 podAnnotations: {}
 podLabels: {}
 
+# Pod securityContext. The image's entrypoint is s6-overlay's /init, which
+# must start as root: it prepares /run and the data dir (chown to PUID:PGID,
+# default 10001) and then runs `rdpanel agent` and hbbr unprivileged. Running
+# the pod as a non-root user makes /init fail, so runAsUser/runAsNonRoot are
+# not set (same as the rdpanel chart).
 podSecurityContext:
-  fsGroup: 10001
+  seccompProfile:
+    type: RuntimeDefault
 
+# Container securityContext: capabilities reduced to what s6-overlay and the
+# init scripts need (chown/chmod of /data, dropping privileges, signals).
 securityContext:
-  runAsUser: 10001
-  runAsGroup: 10001
   allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: false
   capabilities:
     drop:
       - ALL
+    add:
+      - CHOWN
+      - DAC_OVERRIDE
+      - FOWNER
+      - SETGID
+      - SETUID
+      - KILL
 
 service:
   enabled: true
@@ -79,11 +93,9 @@ resources:
     cpu: 100m
     memory: 128Mi
 
-serviceMonitor:
-  enabled: false
-  interval: 30s
-  scrapeTimeout: 10s
-  labels: {}
+# There is no ServiceMonitor: the agent exposes no metrics endpoint (21117 is
+# hbbr's relay port, not HTTP). Agent relays are monitored through the central
+# panel's /metrics (rdpanel_relay_* series, docs/monitoring.md).
 
 nodeSelector: {}
 tolerations: []
