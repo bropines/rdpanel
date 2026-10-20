@@ -28,6 +28,7 @@ import { toast } from "sonner";
 import {
   Session,
   Viewer,
+  decodeBase64,
   isWebCodecsAvailable,
   type CloseInfo,
   type InputMode,
@@ -37,7 +38,7 @@ import {
   type SessionStats,
 } from "rdweb";
 
-import { webClientApi, type WebClientConfig } from "@/api/system";
+import { webClientApi, type WebClientConfig, type WebClientCredentials } from "@/api/system";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
@@ -139,17 +140,41 @@ export function WebClientPage() {
 
   if (active) {
     return (
-      <RemoteSession
-        key={`${active.id}#${active.attempt}`}
-        peerId={active.id}
-        config={cfg}
+      <SavedCredentials peerId={active.id} key={`creds-${active.id}#${active.attempt}`}>
+        {(creds) => (
+          <RemoteSession
+            key={`${active.id}#${active.attempt}`}
+            peerId={active.id}
+            config={cfg}
+            credentials={creds}
         onLeave={leave}
-        onReconnect={() => setActive((a) => (a ? { ...a, attempt: a.attempt + 1 } : a))}
-      />
+            onReconnect={() => setActive((a) => (a ? { ...a, attempt: a.attempt + 1 } : a))}
+          />
+        )}
+      </SavedCredentials>
     );
   }
 
   return <ConnectForm peerId={peerId} setPeerId={setPeerId} onConnect={(id) => setActive({ id, attempt: 0 })} />;
+}
+
+/** Loads the device's saved login from the user's address books first. */
+function SavedCredentials({ peerId, children }: { peerId: string; children: (c: WebClientCredentials | null) => React.ReactNode }) {
+  const q = useQuery({
+    queryKey: ["webclient", "credentials", peerId],
+    queryFn: () => webClientApi.credentials(peerId),
+    retry: false,
+    staleTime: 0,
+    gcTime: 0,
+  });
+  if (q.isLoading) {
+    return (
+      <div className="flex min-h-dvh items-center justify-center bg-black">
+        <Loader2 className="h-6 w-6 animate-spin text-white/70" />
+      </div>
+    );
+  }
+  return <>{children(q.data ?? null)}</>;
 }
 
 function CenterCard({ children }: { children: React.ReactNode }) {
@@ -221,11 +246,13 @@ type Sticky = (typeof STICKY)[number];
 function RemoteSession({
   peerId,
   config,
+  credentials,
   onLeave,
   onReconnect,
 }: {
   peerId: string;
   config: WebClientConfig;
+  credentials: WebClientCredentials | null;
   onLeave: () => void;
   onReconnect: () => void;
 }) {
@@ -264,6 +291,18 @@ function RemoteSession({
     const el = screenRef.current;
     if (!el) return;
     const p = loadPrefs();
+    // Saved logins, in the desktop client's order: this browser's remembered
+    // hash, the personal address book's hash, then a shared book's password.
+    const localHash = loadRememberedHash(config.public_key, peerId);
+    let abHash: Uint8Array | undefined;
+    if (!localHash && credentials?.hash) {
+      try {
+        abHash = decodeBase64(credentials.hash);
+      } catch {
+        abHash = undefined;
+      }
+    }
+    let abPasswordTried = !credentials?.password;
     let session: Session;
     try {
       session = new Session({
@@ -274,7 +313,7 @@ function RemoteSession({
           key: config.public_key,
           token: config.token ?? undefined,
         },
-        rememberedHash: loadRememberedHash(config.public_key, peerId),
+        rememberedHash: localHash ?? abHash,
         myName: config.display_name,
         myId: config.my_id || undefined,
         settings: p.settings,
@@ -293,8 +332,17 @@ function RemoteSession({
     const offs = [
       session.on("state", ({ state }) => setState(state)),
       session.on("password", ({ wrong }) => {
+        if (!abPasswordTried && credentials?.password) {
+          abPasswordTried = true;
+          if (wrong && localHash) {
+            saveRememberedHash(config.public_key, peerId, null);
+            setHasSaved(false);
+          }
+          void session.login(credentials.password);
+          return;
+        }
         setPwWrong(wrong);
-        if (wrong) {
+        if (wrong && localHash) {
           saveRememberedHash(config.public_key, peerId, null);
           setHasSaved(false);
         }
