@@ -40,6 +40,7 @@ const shutdownTimeout = 15 * time.Second
 //	/api/*           RustDesk client API (stream A)
 //	/agent/v1/*      relay agent hub (enroll, WebSocket session)
 //	/agent/install.sh relay agent installer (static script, no auth)
+//	/s/*             public server share pages (RDPANEL_SHARE_LINKS_ENABLED; 404 when off)
 //	/internal/hbbs/authorize  connection authorization for hbbs (loopback + secret)
 //	/*               embedded SPA
 func (a *App) Handler() http.Handler {
@@ -59,6 +60,7 @@ func (a *App) Handler() http.Handler {
 	r.With(httpx.AllowIPs(cfg.HTTP.MetricsAllowPrefixes())).
 		Handle("/metrics", promhttp.HandlerFor(a.Registry, promhttp.HandlerOpts{}))
 
+	var shareDeps adminapi.Deps // filled in by the /api route below
 	r.Route("/api", func(api chi.Router) {
 		api.NotFound(httpx.NotFound)
 		api.MethodNotAllowed(httpx.MethodNotAllowed)
@@ -89,6 +91,7 @@ func (a *App) Handler() http.Handler {
 			Telemetry: a.Telemetry,
 		})
 		adminDeps.OIDC = oidcSvc
+		shareDeps = adminDeps
 		api.Route("/v1/admin", func(r chi.Router) {
 			r.NotFound(httpx.NotFound)
 			adminapi.Register(r, adminDeps)
@@ -149,6 +152,10 @@ func (a *App) Handler() http.Handler {
 		r.Handle("/ws/id", a.webWSProxy(cfg.HBBS.WSIDAddr()))
 		r.Handle("/ws/relay", a.webWSProxy(cfg.HBBS.WSRelayAddr()))
 	}
+
+	// Public server share pages: /s/<token> (connection settings and the
+	// preconfigured client, no session), see docs/share-links.md.
+	adminapi.RegisterSharePublic(r, shareDeps, a.WebFS)
 
 	r.Handle("/*", a.SPA)
 	return r

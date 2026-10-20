@@ -18,8 +18,9 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
-import { Tabs, TabsContent, TabsList, TabsTrigger, Textarea } from "@/components/ui/misc";
+import { Switch, Tabs, TabsContent, TabsList, TabsTrigger, Textarea } from "@/components/ui/misc";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { useMe } from "@/lib/session";
 import { useTableSearch } from "@/lib/use-table";
 
 type Kind = "user" | "device";
@@ -29,6 +30,7 @@ const groupSchema = z.object({
   name: z.string().trim().min(1, "validation.required").max(128, "validation.tooLong"),
   note: z.string().max(4096, "validation.tooLong"),
   visibility: z.enum(["self", "shared"]),
+  can_share_links: z.boolean(),
 });
 type GroupValues = z.infer<typeof groupSchema>;
 
@@ -36,7 +38,11 @@ function GroupDialog({ kind, group, open, onOpenChange }: { kind: Kind; group: G
   const { t } = useTranslation();
   const qc = useQueryClient();
   const toastError = useToastError();
-  const form = useForm<GroupValues>({ resolver: zodResolver(groupSchema), defaultValues: { name: "", note: "", visibility: "self" } });
+  const shareLinks = useMe().can_share_links === true;
+  const form = useForm<GroupValues>({
+    resolver: zodResolver(groupSchema),
+    defaultValues: { name: "", note: "", visibility: "self", can_share_links: false },
+  });
   const [strategy, setStrategy] = useState<number | null>(null);
   const [strategyLabel, setStrategyLabel] = useState<string | undefined>();
 
@@ -46,6 +52,7 @@ function GroupDialog({ kind, group, open, onOpenChange }: { kind: Kind; group: G
         name: group?.name ?? "",
         note: group?.note ?? "",
         visibility: group && "visibility" in group ? group.visibility : "self",
+        can_share_links: !!group && "can_share_links" in group && group.can_share_links,
       });
       if (group && "strategy_id" in group) {
         setStrategy(group.strategy_id ?? null);
@@ -59,7 +66,7 @@ function GroupDialog({ kind, group, open, onOpenChange }: { kind: Kind; group: G
   const save = useMutation({
     mutationFn: (v: GroupValues): Promise<Group> => {
       if (kind === "user") {
-        const body = { name: v.name, note: v.note, visibility: v.visibility };
+        const body = { name: v.name, note: v.note, visibility: v.visibility, ...(shareLinks ? { can_share_links: v.can_share_links } : {}) };
         return group ? groupsApi.updateUserGroup(group.id, body) : groupsApi.createUserGroup(body);
       }
       const body = { name: v.name, note: v.note, strategy_id: strategy };
@@ -109,6 +116,21 @@ function GroupDialog({ kind, group, open, onOpenChange }: { kind: Kind; group: G
               />
             </Field>
           )}
+          {kind === "user" && shareLinks && (
+            <div className="flex items-start justify-between gap-4 rounded-md border px-3 py-2.5">
+              <div>
+                <label htmlFor="g-share" className="text-sm font-medium">
+                  {t("share.groupRight")}
+                </label>
+                <p className="text-xs text-muted-foreground">{t("share.groupRightHint")}</p>
+              </div>
+              <Controller
+                control={form.control}
+                name="can_share_links"
+                render={({ field }) => <Switch id="g-share" checked={field.value} onCheckedChange={field.onChange} />}
+              />
+            </div>
+          )}
           {kind === "device" && (
             <Field label={t("strategies.title")} htmlFor="g-strategy" hint={t("strategies.groupHint")}>
               <StrategyPicker
@@ -149,6 +171,7 @@ function GroupTable({ kind }: { kind: Kind }) {
   const [editing, setEditing] = useState<Group | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [deleting, setDeleting] = useState<Group | null>(null);
+  const shareLinks = useMe().can_share_links === true;
 
   const list = useQuery({
     queryKey: [...(kind === "user" ? groupKeys.user : groupKeys.device), table.query],
@@ -188,7 +211,12 @@ function GroupTable({ kind }: { kind: Kind }) {
         enableSorting: false,
         meta: { label: t("groups.visibility") } satisfies ColumnMeta,
         cell: ({ row: { original: g } }) =>
-          "visibility" in g ? <Badge variant="outline">{t(`groups.visibilityOption.${g.visibility}`)}</Badge> : null,
+          "visibility" in g ? (
+            <div className="flex flex-wrap gap-1">
+              <Badge variant="outline">{t(`groups.visibilityOption.${g.visibility}`)}</Badge>
+              {shareLinks && g.can_share_links && <Badge variant="secondary">{t("share.groupBadge")}</Badge>}
+            </div>
+          ) : null,
       });
     }
     if (kind === "device") {
@@ -253,7 +281,7 @@ function GroupTable({ kind }: { kind: Kind }) {
       },
     );
     return cols;
-  }, [kind, t]);
+  }, [kind, t, shareLinks]);
 
   return (
     <div>

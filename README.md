@@ -45,6 +45,9 @@ A Go backend + React UI for [RustDesk](https://rustdesk.com), and a drop-in repl
     control roles that restrict sessions on RustDesk 1.4.5+ devices
     ([how](docs/acl-policy.md#3-enforcement));
   - client MDM strategies with heartbeat push (security presets, group and device overrides);
+  - "Install client" with the official clients preconfigured for this server, and opt-in
+    public share links (`/s/<token>`) that give anyone the same without an account
+    ([share links](docs/share-links.md));
   - audit logs, identity providers, hbbs/hbbr control;
   - English and Russian, light and dark themes, mobile layout.
 - **Sign-in & Directory:**
@@ -136,6 +139,7 @@ the lejianwen API/login patches + hardening and keepalive fixes).
 | [`deploy/helm/rdpanel`](deploy/helm/rdpanel) | Kubernetes (Helm chart) |
 | [`docs/api.md`](docs/api.md) | admin API for scripts: personal API tokens, curl examples; interactive docs (Swagger UI) at `/api/v1/docs` on the admin host |
 | [`docs/web-client.md`](docs/web-client.md) | browser remote desktop client: proxy requirements, who can use it, security model |
+| [`docs/install-client.md`](docs/install-client.md), [`docs/share-links.md`](docs/share-links.md) | preconfigured client downloads; public share links for people without an account |
 | [`docs/acl-policy.md`](docs/acl-policy.md) | declarative Access Policy (Tailscale-style HuJSON), roles, test assertions and GitOps workflow |
 | [`docs/oidc.md`](docs/oidc.md) | single sign-on: Authentik, Keycloak, Pocket ID, GitHub, Google |
 | [`docs/monitoring.md`](docs/monitoring.md) | metrics, Grafana dashboard, alert rules |
@@ -196,6 +200,7 @@ Without `make web` the binary still builds and serves a placeholder page instead
 | `/api/*` | RustDesk client API |
 | `/api/v1/admin/*` | panel JSON API (contract: [`api/openapi.yaml`](api/openapi.yaml)) |
 | `/api/v1/events` | Server-Sent Events (presence, audit) |
+| `/s/*` | public share link pages (`RDPANEL_SHARE_LINKS_ENABLED`, [share-links.md](docs/share-links.md)) |
 | `/healthz` | liveness + DB ping |
 | `/metrics` | Prometheus metrics (restricted by `RDPANEL_METRICS_ALLOW`) |
 | `/*` | embedded single-page app |

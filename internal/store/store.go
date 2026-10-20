@@ -63,6 +63,8 @@ type Store struct {
 	LDAPSettings *LDAPSettingsRepo
 	// TerminalShells remembers web client terminal sessions kept on devices.
 	TerminalShells *TerminalShells
+	// ServerShareLinks are the public "connect to this server" links (/s/...).
+	ServerShareLinks *ServerShareLinks
 }
 
 // Option configures a Store.
@@ -129,6 +131,7 @@ func build(d *db.DB, q db.Querier, o options) *Store {
 	s.ControlRoles = &ControlRoles{q: q, d: d, now: now}
 	s.ConnectionACLs = &ConnectionACLs{q: q, now: now}
 	s.LDAPSettings = &LDAPSettingsRepo{q: q, now: now}
+	s.ServerShareLinks = &ServerShareLinks{q: q, now: now}
 	return s
 }
 

@@ -85,6 +85,7 @@ func registerB2b(r chi.Router, d Deps, sessLoad func(http.Handler) http.Handler)
 	c.registerAbout(r)
 	c.registerWebClient(r)
 	c.registerClients(r)
+	c.registerShareLinks(r)
 }
 
 // recordAudit appends an admin_audit row for the request's user. details must

@@ -2,14 +2,16 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { fileURLToPath, URL } from "node:url";
 import react from "@vitejs/plugin-react";
-import { defineConfig, type Plugin } from "vite";
+import { defineConfig, type Connect, type Plugin } from "vite";
 
 const outDir = fileURLToPath(new URL("./dist", import.meta.url));
 const mockOutDir = fileURLToPath(new URL("./dist-mock", import.meta.url));
 // Second entry: the Swagger UI page served by the backend at /api/v1/docs.
+// Third: the public share page served by the backend at /s/<token>.
 const pages = {
   main: fileURLToPath(new URL("./index.html", import.meta.url)),
   "api-docs": fileURLToPath(new URL("./api-docs.html", import.meta.url)),
+  share: fileURLToPath(new URL("./share.html", import.meta.url)),
 };
 const workerSrc = fileURLToPath(new URL("./node_modules/msw/lib/mockServiceWorker.js", import.meta.url));
 
@@ -21,6 +23,25 @@ function keepGitkeep(): Plugin {
     apply: "build",
     closeBundle() {
       writeFileSync(`${outDir}/.gitkeep`, "");
+    },
+  };
+}
+
+// Dev and preview servers: /s/<token> is the public share page (the backend
+// serves it in production); its data (/s/<token>/info) comes from MSW or the
+// proxied backend.
+function sharePage(): Plugin {
+  const rewrite: Connect.NextHandleFunction = (req, _res, next) => {
+    if (req.method === "GET" && /^\/s\/[A-Za-z0-9_-]+\/?(\?.*)?$/.test(req.url ?? "")) req.url = "/share.html";
+    next();
+  };
+  return {
+    name: "rdpanel-share-page",
+    configureServer(server) {
+      server.middlewares.use(rewrite);
+    },
+    configurePreviewServer(server) {
+      server.middlewares.use(rewrite);
     },
   };
 }
@@ -46,7 +67,7 @@ export default defineConfig(({ mode }) => {
   // `--mode mock` (npm run dev:mock / build:mock) or VITE_MOCK=1 enables the MSW mock API.
   const mock = mode === "mock" || process.env.VITE_MOCK === "1";
   return {
-    plugins: [react(), ...(mock ? [mockServiceWorker()] : [keepGitkeep()])],
+    plugins: [react(), sharePage(), ...(mock ? [mockServiceWorker()] : [keepGitkeep()])],
     define: mock ? { "import.meta.env.VITE_MOCK": JSON.stringify("1") } : {},
     resolve: {
       alias: { "@": fileURLToPath(new URL("./src", import.meta.url)) },
@@ -73,7 +94,11 @@ export default defineConfig(({ mode }) => {
             if (/[\\/]node_modules[\\/]rdweb[\\/]dist[\\/]react[\\/]fonts[\\/]/.test(id)) return undefined;
             if (/[\\/]node_modules[\\/](react|react-dom|scheduler)[\\/]/.test(id)) return "react";
             if (id.includes("@tanstack")) return "tanstack";
+            // Radix with its own dependencies: "ui" must not import "vendor" (rdweb in
+            // "vendor" imports Radix, and a vendor <-> ui cycle breaks depending on
+            // which entry loads first).
             if (id.includes("@radix-ui") || id.includes("lucide-react")) return "ui";
+            if (/[\\/]node_modules[\\/](@floating-ui|aria-hidden|react-remove-scroll|react-remove-scroll-bar|react-style-singleton|use-callback-ref|use-sidecar|get-nonce|detect-node-es|tslib)[\\/]/.test(id)) return "ui";
             if (id.includes("i18next")) return "i18n";
             if (/[\\/]node_modules[\\/](zod|react-hook-form|@hookform)[\\/]/.test(id)) return "forms";
             if (/[\\/]node_modules[\\/](marked|dompurify)[\\/]/.test(id)) return "markdown";
@@ -91,6 +116,7 @@ export default defineConfig(({ mode }) => {
         : {
             "/api": "http://127.0.0.1:21114",
             "/healthz": "http://127.0.0.1:21114",
+            "^/s/[^/]+/(info|windows/.*)$": "http://127.0.0.1:21114",
           },
     },
     test: {

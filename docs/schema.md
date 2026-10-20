@@ -21,6 +21,7 @@ automatically on start (`rdpanel serve`, `rdpanel user ...`).
 | `00018_acl.sql` | control_roles, connection_acls (granular permissions and access matrix) |
 | `00019_ldap.sql` | ldap_settings, users.is_ldap, users.ldap_dn (Active Directory / LDAP authentication and sync) |
 | `00020_strategy_no_seeded_default.sql` | data only: the untouched seeded "Standard Office" strategy is no longer the default (no strategy is pushed until an admin assigns one) |
+| `00022_server_share_links.sql` | server_share_links, user_groups.can_share_links ([share-links.md](share-links.md)) |
 
 Later streams add new numbered files; never edit an applied migration.
 
@@ -78,6 +79,7 @@ User groups (legacy `groups`).
 | name | unique, case-insensitive |
 | visibility | `self` (members see only their own devices; legacy type 1) / `shared` (members see each other's devices and users in the client; legacy type 2) |
 | note | admin note |
+| can_share_links | `0/1`: members may create public server share links (00022) |
 | created_at, updated_at | |
 
 ### `users`
@@ -248,6 +250,15 @@ Join table (`WITHOUT ROWID`), both CASCADE. A trigger rejects linking a tag to a
 ### `share_links`
 Web-client share links: `token_sha256` (unique), `device_rustdesk_id`, `password_mode`
 (`once`/`fixed`), `password_enc`, `expires_at`, `used_at`, owner `user_id` (CASCADE).
+
+### `server_share_links`
+Public links to this server's settings and preconfigured client (`/s/<token>`,
+[share-links.md](share-links.md)): owner `user_id` (CASCADE), `label`, `token_sha256`
+(unique, lookups), `token_enc` (the token, AEAD with AD `server_share_link.token:<id>`, so
+the owner can copy the link again), `expires_at` (NULL = permanent), `max_downloads`
+(NULL = unlimited), `views`, `downloads`, `last_used_at`, `created_at`, `revoked_at`.
+A link works while it is not revoked, expired or used up and its owner is active and an
+admin or in a user group with `can_share_links`.
 
 ## Audit
 
