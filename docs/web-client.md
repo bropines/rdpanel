@@ -136,6 +136,18 @@ desktops the grip moves it along the top edge. Pick the buttons you want on it
 in **⋯ → Customize toolbar**; everything else stays in the ⋯ menu. The choice,
 the pin and the position are remembered in the browser.
 
+## Modes
+
+Next to **Connect**, the connect form and the device drawer offer:
+
+- **Files only**: the file manager without the remote screen (a file transfer
+  connection, like the desktop client's "Transfer files"). `/connect?id=<id>&mode=files`.
+- **Terminal**: a remote shell (PowerShell/cmd on Windows, the user's shell
+  elsewhere) for devices on RustDesk 1.4.1+. `/connect?id=<id>&mode=terminal`.
+
+Control roles apply to both: "File transfer" and "Terminal" must be allowed
+for the user's role, otherwise hbbs refuses the connection.
+
 ## Files
 
 **Files** (toolbar or ⋯ menu) opens a separate file-transfer connection with

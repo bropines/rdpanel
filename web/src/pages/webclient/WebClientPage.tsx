@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate, useSearch } from "@tanstack/react-router";
-import { ArrowLeft, Loader2, ShieldAlert } from "lucide-react";
+import { ArrowLeft, FolderOpen, Loader2, ShieldAlert, SquareTerminal } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { decodeBase64, encodeBase64, isWebCodecsAvailable, RDWEB_VERSION, type ServerConfig } from "rdweb";
@@ -13,7 +13,8 @@ import { Label } from "@/components/ui/label";
 import { ServerPicker } from "./ServerPicker";
 import { loadSelectedServer, relayUrlOf, saveSelectedServer, type OtherServer } from "./servers";
 
-type Search = { id?: string };
+type Search = { id?: string; mode?: Mode };
+type Mode = "files" | "terminal";
 
 function wsUrl(configured: string, path: string): string {
   if (configured) return configured;
@@ -36,7 +37,7 @@ export function WebClientPage() {
   const navigate = useNavigate();
   const config = useQuery({ queryKey: ["webclient", "config"], queryFn: webClientApi.config, staleTime: 60_000 });
   const [peerId, setPeerId] = useState(() => (search.id ?? "").replace(/\s+/g, ""));
-  const [active, setActive] = useState<{ id: string; attempt: number; server: OtherServer | null } | null>(null);
+  const [active, setActive] = useState<{ id: string; attempt: number; server: OtherServer | null; mode?: Mode } | null>(null);
   const [serverId, setServerId] = useState(loadSelectedServer);
 
   useEffect(() => {
@@ -49,15 +50,15 @@ export function WebClientPage() {
   useEffect(() => {
     if (autoStarted.current || !config.data?.enabled || !search.id) return;
     autoStarted.current = true;
-    setActive({ id: search.id.replace(/\s+/g, ""), attempt: 0, server: null });
-  }, [config.data, search.id]);
+    setActive({ id: search.id.replace(/\s+/g, ""), attempt: 0, server: null, mode: search.mode });
+  }, [config.data, search.id, search.mode]);
 
   const leave = useCallback(() => {
     setActive(null);
     void navigate({ to: "/connect", search: peerId ? { id: peerId } : {}, replace: true });
   }, [navigate, peerId]);
 
-  if (!isWebCodecsAvailable()) {
+  if (!isWebCodecsAvailable() && !search.mode) {
     return (
       <CenterCard>
         <ShieldAlert className="mx-auto h-10 w-10 text-destructive" />
@@ -110,6 +111,7 @@ export function WebClientPage() {
             peerId={active.id}
             config={cfg}
             other={active.server}
+            mode={active.mode}
             credentials={creds}
             onLeave={leave}
             onReconnect={() => setActive((a) => (a ? { ...a, attempt: a.attempt + 1 } : a))}
@@ -130,7 +132,7 @@ export function WebClientPage() {
         setServerId(id);
         saveSelectedServer(id);
       }}
-      onConnect={(id, server) => setActive({ id, attempt: 0, server })}
+      onConnect={(id, server, mode) => setActive({ id, attempt: 0, server, mode })}
     />
   );
 }
@@ -144,6 +146,7 @@ function Session({
   peerId,
   config,
   other,
+  mode,
   credentials,
   onLeave,
   onReconnect,
@@ -151,6 +154,7 @@ function Session({
   peerId: string;
   config: WebClientConfig;
   other: OtherServer | null;
+  mode?: Mode;
   credentials: WebClientCredentials | null;
   onLeave: () => void;
   onReconnect: () => void;
@@ -185,6 +189,7 @@ function Session({
       peerId={peerId}
       server={server}
       lang={i18n.language.startsWith("ru") ? "ru" : "en"}
+      mode={mode}
       storageKey={RDPANEL_STORAGE_KEY}
       messages={{ toolbar: { back: t("webclient.toolbar.back") }, rememberAccountFailed: t("webclient.rememberAccountFailed") }}
       rememberLabel={own ? t("webclient.rememberPassword") : undefined}
@@ -251,7 +256,7 @@ function ConnectForm({
   allowCustom: boolean;
   serverId: string;
   setServerId: (id: string) => void;
-  onConnect: (id: string, server: OtherServer | null) => void;
+  onConnect: (id: string, server: OtherServer | null, mode?: Mode) => void;
 }) {
   const { t } = useTranslation();
   const navigate = useNavigate();
@@ -297,6 +302,23 @@ function ConnectForm({
         <Button type="submit" className="w-full" disabled={!peerId.trim()}>
           {t("webclient.connect")}
         </Button>
+        <div className="grid grid-cols-2 gap-2">
+          {(["files", "terminal"] as const).map((m) => (
+            <Button
+              key={m}
+              type="button"
+              variant="outline"
+              disabled={!peerId.trim()}
+              onClick={() => {
+                const id = peerId.replace(/\s+/g, "");
+                if (id) onConnect(id, server, m);
+              }}
+            >
+              {m === "files" ? <FolderOpen className="h-4 w-4" /> : <SquareTerminal className="h-4 w-4" />}
+              {t(`webclient.mode.${m}`)}
+            </Button>
+          ))}
+        </div>
         {recent.length > 0 && (
           <div className="space-y-1">
             <div className="text-xs text-muted-foreground">{t("webclient.recent")}</div>
