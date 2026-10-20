@@ -13,6 +13,25 @@ on:
   push:
     branches: [main]
     tags: ['v*']
+    # Not part of the image. Only main pushes are filtered: GitHub does not
+    # evaluate path filters for tags, so releases always build.
+    paths-ignore:
+      - '**/*.md'
+      - docs/**
+      - deploy/helm/**
+      - deploy/monitoring/**
+      - deploy/agent/**
+      - deploy/scripts/**
+      - deploy/compose.example.yml
+      - deploy/rdpanel.env.example
+      - scripts/**
+      - web/e2e/**
+      - '**/*_test.go'
+      - '**/testdata/**'
+      - .github/workflows/ci.yml
+      - .github/workflows/helm.yml
+      - .gitguardian.yaml
+      - LICENSE
   workflow_dispatch:
     inputs:
       server_ref:
