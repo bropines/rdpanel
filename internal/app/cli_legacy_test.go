@@ -80,3 +80,15 @@ func TestCLIMigrateLegacy(t *testing.T) {
 		t.Fatalf("second import: %d %s", code, errOut)
 	}
 }
+
+// TestCLIMigrateLegacyRefusesPostgres: the importer is SQLite-only and must
+// fail before touching a PostgreSQL target (the DSN is never dialled here).
+func TestCLIMigrateLegacyRefusesPostgres(t *testing.T) {
+	env, _ := testEnv(t, map[string]string{"RDPANEL_DATABASE_URL": "postgres://u:p@127.0.0.1:1/x"})
+	var out, errb bytes.Buffer
+	code := Main(context.Background(), []string{"migrate-legacy", "--from", newLegacyFile(t)}, env,
+		Stdio{In: strings.NewReader(""), Out: &out, Err: &errb})
+	if code != 1 || !strings.Contains(errb.String(), "PostgreSQL is not supported") {
+		t.Fatalf("exit %d\n%s\n%s", code, out.String(), errb.String())
+	}
+}

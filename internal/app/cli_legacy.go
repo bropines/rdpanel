@@ -38,6 +38,10 @@ func cmdMigrateLegacy(ctx context.Context, args []string, env config.LookupFunc,
 	if err != nil {
 		return err
 	}
+	if cfg.DBType == "postgres" {
+		// Checked before connecting: nothing is migrated or written.
+		return legacy.ErrUnsupportedTarget
+	}
 	log := NewLogger(cfg.Log, stdio.Err)
 	d, err := openDB(ctx, cfg, log)
 	if err != nil {
