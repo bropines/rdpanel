@@ -236,6 +236,15 @@ type HBBSConfig struct {
 	WSIDServer string `yaml:"ws_id_server"`
 	// WSRelayServer is an explicit override for hbbr WebSocket address (default: RelayServer port + 2).
 	WSRelayServer string `yaml:"ws_relay_server"`
+	// Authz serves POST /internal/hbbs/authorize, where hbbs (AUTHZ_URL)
+	// asks the panel whether a connection may start and which control
+	// permissions it gets (connection rules and control roles). Loopback
+	// callers presenting the secret in AuthzSecretFile only. Default: true.
+	Authz bool `yaml:"authz"`
+	// AuthzSecretFile holds the bearer secret hbbs presents to the
+	// authorization endpoint; generated (32 random bytes, hex, mode 0600)
+	// when missing. Default: <DataDir>/hbbs-authz.key.
+	AuthzSecretFile string `yaml:"authz_secret_file"`
 }
 
 // WSIDAddr returns the hbbs WebSocket address (WSIDServer if set, else IDServer port + 2).
@@ -319,6 +328,7 @@ func Defaults() *Config {
 			RelayServer:       "127.0.0.1:21117",
 			Enabled:           true,
 			WebProxy:          true,
+			Authz:             true,
 			PollInterval:      5 * time.Second,
 			ReconcileInterval: 15 * time.Second,
 		},
@@ -458,6 +468,8 @@ func (c *Config) envVars() []envVar {
 		{"RDPANEL_HBBS_POLL_INTERVAL", dur(&c.HBBS.PollInterval)},
 		{"RDPANEL_HBBS_RECONCILE_INTERVAL", dur(&c.HBBS.ReconcileInterval)},
 		{"RDPANEL_HBBS_LIST_DIR", str(&c.HBBS.ListDir)},
+		{"RDPANEL_HBBS_AUTHZ", boolean(&c.HBBS.Authz)},
+		{"RDPANEL_HBBS_AUTHZ_SECRET_FILE", str(&c.HBBS.AuthzSecretFile)},
 		{"RDPANEL_LOG_LEVEL", str(&c.Log.Level)},
 		{"RDPANEL_LOG_FORMAT", str(&c.Log.Format)},
 		{"RDPANEL_LOGS_BUFFER", integer(&c.Logs.Buffer)},
@@ -548,6 +560,9 @@ func (c *Config) fillDerived() {
 	}
 	if c.HBBS.PublicKeyFile == "" {
 		c.HBBS.PublicKeyFile = filepath.Join(c.DataDir, "id_ed25519.pub")
+	}
+	if c.HBBS.AuthzSecretFile == "" {
+		c.HBBS.AuthzSecretFile = filepath.Join(c.DataDir, "hbbs-authz.key")
 	}
 	if c.Auth.JWTLifetime == 0 {
 		c.Auth.JWTLifetime = c.Auth.TokenLifetime

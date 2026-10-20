@@ -3,6 +3,7 @@ package crypto
 import (
 	"bytes"
 	"encoding/base64"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -51,6 +52,83 @@ func LoadOrCreateTextKey(path string, n int) ([]byte, KeySource, error) {
 		}
 		return k, nil
 	})
+}
+
+// MinSecretLen is the shortest secret LoadOrCreateHexSecret accepts from an
+// existing file.
+const MinSecretLen = 16
+
+// LoadOrCreateHexSecret reads a shared-secret file (e.g. the hbbs
+// authorization secret), creating it with n random bytes as lowercase hex
+// when missing. The new file is written to a temporary name, synced and then
+// linked into place, so a concurrent reader (another process) never sees a
+// partial secret and an existing file is never replaced. The secret is the
+// file content without surrounding white space; it must be at least
+// MinSecretLen characters long.
+func LoadOrCreateHexSecret(path string, n int) (string, KeySource, error) {
+	raw, err := os.ReadFile(path)
+	if err == nil {
+		s := strings.TrimSpace(string(raw))
+		if len(s) < MinSecretLen {
+			return "", "", fmt.Errorf("crypto: secret file %s: must hold at least %d characters", path, MinSecretLen)
+		}
+		return s, KeyFromFile, nil
+	}
+	if !errors.Is(err, fs.ErrNotExist) {
+		return "", "", fmt.Errorf("crypto: read secret file: %w", err)
+	}
+	random, err := RandomBytes(n)
+	if err != nil {
+		return "", "", err
+	}
+	secret := hex.EncodeToString(random)
+	created, err := writeNewFile(path, []byte(secret+"\n"), 0o600)
+	if err != nil {
+		return "", "", err
+	}
+	if !created { // another process won the race: use its secret
+		return LoadOrCreateHexSecret(path, n)
+	}
+	return secret, KeyGeneratedFile, nil
+}
+
+// writeNewFile atomically creates path with content and mode unless it
+// exists (created=false then). The directory is created with mode 0700.
+func writeNewFile(path string, content []byte, mode fs.FileMode) (created bool, err error) {
+	dir := filepath.Dir(path)
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return false, fmt.Errorf("crypto: create key dir: %w", err)
+	}
+	f, err := os.CreateTemp(dir, "."+filepath.Base(path)+".tmp-*")
+	if err != nil {
+		return false, fmt.Errorf("crypto: create key file: %w", err)
+	}
+	tmp := f.Name()
+	defer func() { _ = os.Remove(tmp) }()
+	if err := f.Chmod(mode); err != nil {
+		_ = f.Close()
+		return false, fmt.Errorf("crypto: chmod key file: %w", err)
+	}
+	if _, err := f.Write(content); err != nil {
+		_ = f.Close()
+		return false, fmt.Errorf("crypto: write key file: %w", err)
+	}
+	if err := f.Sync(); err != nil {
+		_ = f.Close()
+		return false, fmt.Errorf("crypto: sync key file: %w", err)
+	}
+	if err := f.Close(); err != nil {
+		return false, fmt.Errorf("crypto: close key file: %w", err)
+	}
+	// link(2) fails with EEXIST instead of replacing a file another process
+	// created meanwhile.
+	if err := os.Link(tmp, path); err != nil {
+		if errors.Is(err, fs.ErrExist) {
+			return false, nil
+		}
+		return false, fmt.Errorf("crypto: install key file: %w", err)
+	}
+	return true, nil
 }
 
 // DecodeKey decodes a base64 (std or url, padded or not) 32-byte key.

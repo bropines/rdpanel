@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"net/url"
+	"strings"
 	"sync"
 	"time"
 
@@ -17,6 +18,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 
 	"github.com/bropines/rdpanel/internal/adminapi"
+	"github.com/bropines/rdpanel/internal/authz"
 	"github.com/bropines/rdpanel/internal/clientapi"
 	"github.com/bropines/rdpanel/internal/events"
 	"github.com/bropines/rdpanel/internal/httpx"
@@ -37,6 +39,7 @@ const shutdownTimeout = 15 * time.Second
 //	/api/*           RustDesk client API (stream A)
 //	/agent/v1/*      relay agent hub (enroll, WebSocket session)
 //	/agent/install.sh relay agent installer (static script, no auth)
+//	/internal/hbbs/authorize  connection authorization for hbbs (loopback + secret)
 //	/*               embedded SPA
 func (a *App) Handler() http.Handler {
 	cfg := a.Config
@@ -124,6 +127,17 @@ func (a *App) Handler() http.Handler {
 		r.Route("/agent/v1", a.Relays.Register)
 		r.Method(http.MethodGet, relays.InstallScriptPath, http.HandlerFunc(a.Relays.HandleInstallScript))
 		r.Method(http.MethodHead, relays.InstallScriptPath, http.HandlerFunc(a.Relays.HandleInstallScript))
+	}
+
+	// hbbs connection authorization (RDPANEL_HBBS_AUTHZ): only loopback
+	// callers with the shared secret get an answer; everything else under
+	// /internal is the same JSON 404.
+	if a.hbbsAuthz != nil {
+		r.Route("/internal", func(ir chi.Router) {
+			ir.NotFound(httpx.NotFound)
+			ir.MethodNotAllowed(httpx.NotFound)
+			ir.Handle(strings.TrimPrefix(authz.Path, "/internal"), a.hbbsAuthz)
+		})
 	}
 
 	// Web client WebSocket reverse proxy (/ws/id and /ws/relay) to local hbbs/hbbr.

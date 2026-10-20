@@ -228,6 +228,41 @@ func TestAPIDocs(t *testing.T) {
 	}
 }
 
+func TestHBBSAuthzSettings(t *testing.T) {
+	cfg, err := Load(env(map[string]string{"RDPANEL_DATA_DIR": "/srv/panel"}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !cfg.HBBS.Authz || cfg.HBBS.AuthzSecretFile != filepath.Join("/srv/panel", "hbbs-authz.key") {
+		t.Fatalf("defaults: authz=%v file=%q", cfg.HBBS.Authz, cfg.HBBS.AuthzSecretFile)
+	}
+	cfg, err = Load(env(map[string]string{
+		"RDPANEL_HBBS_AUTHZ":             "false",
+		"RDPANEL_HBBS_AUTHZ_SECRET_FILE": " /run/secrets/hbbs-authz ",
+	}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.HBBS.Authz || cfg.HBBS.AuthzSecretFile != "/run/secrets/hbbs-authz" {
+		t.Fatalf("env: authz=%v file=%q", cfg.HBBS.Authz, cfg.HBBS.AuthzSecretFile)
+	}
+	if _, err := Load(env(map[string]string{"RDPANEL_HBBS_AUTHZ": "sometimes"})); err == nil {
+		t.Fatal("invalid boolean accepted")
+	}
+
+	path := filepath.Join(t.TempDir(), "rdpanel.yaml")
+	if err := os.WriteFile(path, []byte("hbbs:\n  authz: false\n  authz_secret_file: /etc/rdpanel/authz.key\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err = Load(env(map[string]string{"RDPANEL_CONFIG": path}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.HBBS.Authz || cfg.HBBS.AuthzSecretFile != "/etc/rdpanel/authz.key" {
+		t.Fatalf("yaml: authz=%v file=%q", cfg.HBBS.Authz, cfg.HBBS.AuthzSecretFile)
+	}
+}
+
 func TestHBBSWorkerSettings(t *testing.T) {
 	cfg, err := Load(env(nil))
 	if err != nil {
