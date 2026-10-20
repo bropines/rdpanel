@@ -1935,6 +1935,23 @@
       }
     },
     "rememberHint": "Works in any browser and in RustDesk apps signed in to this account.",
-    "rememberAccountFailed": "Could not update the password saved in your account"
+    "rememberAccountFailed": "Could not update the password saved in your account",
+    "servers": {
+      "label": "Server",
+      "own": "This panel ({{host}})",
+      "add": "Other server…",
+      "remove": "Remove this server",
+      "otherHint": "Sessions to other servers do not use this panel's sign-in, access rules or saved account passwords.",
+      "addTitle": "Add a server",
+      "addDesc": "Any RustDesk-compatible server that exposes hbbs and hbbr over WebSocket with TLS.",
+      "configString": "RustDesk config string (optional)",
+      "configInvalid": "This is not a RustDesk config string.",
+      "name": "Name",
+      "host": "Server address",
+      "relay": "Relay address (optional)",
+      "relayPlaceholder": "same as the server",
+      "key": "Public key",
+      "requirements": "The server needs wss://<host>/ws/id → hbbs (21118) and wss://<host>/ws/relay → hbbr (21119) behind a TLS reverse proxy. The key is its id_ed25519.pub."
+    }
   }
 }
