@@ -374,4 +374,3 @@ func TestDialectAndWrap(t *testing.T) {
 		t.Fatalf("got %v", dPg.Dialect())
 	}
 }
-

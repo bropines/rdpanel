@@ -344,4 +344,3 @@ func TestDBConfig(t *testing.T) {
 		}
 	})
 }
-
