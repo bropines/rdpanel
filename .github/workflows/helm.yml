@@ -11,12 +11,18 @@ on:
     paths:
       - deploy/helm/**
       - .github/workflows/helm.yml
+  # Publishes the charts of an existing release tag again (e.g. after a failed run).
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag to publish, e.g. v0.12.2
+        required: true
 
 permissions:
   contents: read
 
 concurrency:
-  group: helm-${{ github.ref }}
+  group: helm-${{ github.ref }}-${{ inputs.tag }}
   cancel-in-progress: true
 
 env:
@@ -87,24 +93,33 @@ jobs:
   # Tag vX.Y.Z -> oci://ghcr.io/bropines/charts/{rdpanel,rdpanel-relay-agent}:X.Y.Z
   publish:
     name: publish chart
-    if: github.ref_type == 'tag'
+    if: github.ref_type == 'tag' || github.event_name == 'workflow_dispatch'
     needs: lint
     runs-on: ubuntu-latest
     permissions:
       contents: read
       packages: write
+    env:
+      TAG: ${{ inputs.tag || github.ref_name }}
     steps:
+      - name: check tag
+        run: |
+          [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "not a release tag: $TAG"; exit 1; }
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TAG }}
       - uses: azure/setup-helm@v4
         with:
           version: ${{ env.HELM_VERSION }}
       - name: package
         run: |
-          v="${GITHUB_REF_NAME#v}"
+          v="${TAG#v}"
           helm package "$CHART" -d /tmp/charts --version "$v" --app-version "$v"
           helm package deploy/helm/rdpanel-relay-agent -d /tmp/charts --version "$v" --app-version "$v"
+      # Exact file names: rdpanel-*.tgz would also match rdpanel-relay-agent-*.tgz.
       - name: push
         run: |
+          v="${TAG#v}"
           echo "${{ secrets.GITHUB_TOKEN }}" | helm registry login ghcr.io -u "${{ github.actor }}" --password-stdin
-          helm push /tmp/charts/rdpanel-*.tgz oci://ghcr.io/bropines/charts
-          helm push /tmp/charts/rdpanel-relay-agent-*.tgz oci://ghcr.io/bropines/charts
+          helm push "/tmp/charts/rdpanel-$v.tgz" oci://ghcr.io/bropines/charts
+          helm push "/tmp/charts/rdpanel-relay-agent-$v.tgz" oci://ghcr.io/bropines/charts
