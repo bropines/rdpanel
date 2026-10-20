@@ -352,8 +352,10 @@ function RemoteSession({
       ),
     ];
     let disposed = false;
-    session.connect().catch((e: Error) => {
-      if (!disposed) setError(e.message);
+    session.connect().catch((e: Error & { code?: string }) => {
+      if (disposed) return;
+      const known = ["offline", "not-found", "key-mismatch", "login-required", "timeout", "network", "handshake", "unverified-peer", "refused"];
+      setError(e.code && known.includes(e.code) ? t(`webclient.errors.${e.code}`, { detail: e.message }) : e.message);
     });
     return () => {
       disposed = true;
