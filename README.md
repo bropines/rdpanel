@@ -53,7 +53,7 @@ A Go backend + React UI for [RustDesk](https://rustdesk.com), and a drop-in repl
     only on a VPN/tailnet).
 - **Server control & Routing:**
   - relay servers, GeoIP and CIDR prefix routing, dynamic STUN fetch;
-  - inter-panel federation mesh with automatic peer relay synchronization;
+  - opt-in, token-authenticated panel federation to see peer panels' relays;
   - always-use-relay, must-login, IP blocker, block/blacklists, bandwidth;
   - opt-in keepalive for TCP/WebSocket clients;
   - a reconciler stores the desired state and re-applies it after hbbs/hbbr restarts.

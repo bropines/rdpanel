@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"database/sql"
+	"regexp"
 	"strings"
 	"time"
 
@@ -55,6 +56,13 @@ type User struct {
 	CreatedAt         time.Time
 	UpdatedAt         time.Time
 }
+
+var usernameRe = regexp.MustCompile(`^[A-Za-z0-9._@-]{1,128}$`)
+
+// ValidUsername reports whether name is acceptable as a new username: 1-128
+// characters, letters, digits, '.', '_', '@' or '-'. Accounts created by the
+// panel (admin API, LDAP) are held to it.
+func ValidUsername(name string) bool { return usernameRe.MatchString(name) }
 
 // IsAdmin reports whether the user has the admin role.
 func (u *User) IsAdmin() bool { return u.Role == RoleAdmin }

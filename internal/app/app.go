@@ -33,6 +33,7 @@ import (
 	"github.com/bropines/rdpanel/internal/updatecheck"
 	"github.com/bropines/rdpanel/internal/web"
 	"github.com/bropines/rdpanel/internal/webhook"
+	"github.com/bropines/rdpanel/internal/websessions"
 	webdist "github.com/bropines/rdpanel/web"
 )
 
@@ -65,11 +66,14 @@ type App struct {
 	// Relays manages relays (local, static, agents), the computed hbbs relay
 	// list and the agent hub at /agent/v1/*.
 	Relays *relays.Service
-	// Federation manages peer panels and federated relays.
+	// Federation manages peer panels and federated relays (nil unless
+	// RDPANEL_FEDERATION_ENABLED: no public endpoints, no sync loop).
 	Federation *federation.Service
 	// Kicks queues admin "disconnect" requests delivered by client heartbeats;
 	// shared by the client API (Take) and the admin API (Kick).
 	Kicks *clientapi.MemKickQueue
+	// WebSessions maps web client session ids to panel users (ACL checks).
+	WebSessions *websessions.Registry
 	// ClientOptions are pushed to clients in heartbeat strategies; shared by
 	// the client API (StrategyFor) and the admin API (/server/client-options).
 	ClientOptions *clientopts.Service
@@ -119,6 +123,7 @@ func New(ctx context.Context, cfg *config.Config, log *slog.Logger, opts ...Opti
 	a.Store = store.New(a.DB, store.WithSecrets(a.AEAD))
 	a.Limiter = auth.NewBackoff(auth.DefaultBackoffConfig, nil)
 	a.Kicks = clientapi.NewMemKickQueue(0, nil)
+	a.WebSessions = websessions.New(nil)
 	a.ClientOptions = clientopts.New(a.Store, a.AEAD, nil)
 	a.TOTP = adminapi.NewTOTPService(a.Store, a.AEAD)
 	a.Mail = mailauth.New(mailauth.Options{Store: a.Store, AEAD: a.AEAD, Config: cfg, Log: log.With("component", "mail")})
@@ -219,15 +224,28 @@ func keyFileAttr(src crypto.KeySource, path string) string {
 	return path
 }
 
+// initFederation builds the federation service when it is enabled; its sync
+// loop runs as a worker (startWorkers) and its public endpoints are mounted
+// by Handler.
 func (a *App) initFederation() {
-	st := &federation.Store{DB: a.DB}
+	cfg := a.Config.Federation
+	if !cfg.Enabled {
+		return
+	}
 	a.Federation = federation.NewService(federation.Config{
-		Store:   st,
-		Relays:  a.Relays,
-		Version: buildinfo.Get().Version,
-		Log:     a.Log.With("component", "federation"),
+		Store:        &federation.Store{DB: a.DB, AEAD: a.AEAD},
+		Relays:       a.Relays,
+		Version:      buildinfo.Get().Version,
+		Log:          a.Log.With("component", "federation"),
+		InboundToken: cfg.Token.Reveal(),
+		AllowPrivate: func(ctx context.Context) bool {
+			if a.Relays == nil {
+				return false
+			}
+			o, err := a.Relays.GetOptions(ctx)
+			return err == nil && o.AllowPrivateHosts
+		},
 	})
-	a.Federation.Start(context.Background())
 }
 
 // Close releases resources.

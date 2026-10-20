@@ -1,9 +1,64 @@
 package relays
 
 import (
+	"context"
+	"errors"
+	"io"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 )
+
+// TestGeoIPRefreshKeepsDatasetOnError: a failed download or an invalid file
+// leaves the loaded dataset in place; download errors are typed.
+func TestGeoIPRefreshKeepsDatasetOnError(t *testing.T) {
+	engine := NewGeoIPEngine("")
+	if _, err := engine.ParseAndLoad(strings.NewReader("192.0.2.0/24,US\n"), "first.csv"); err != nil {
+		t.Fatal(err)
+	}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/ok.csv":
+			_, _ = io.WriteString(w, "203.0.113.0/24,JP\n198.51.100.0/24,NL\n")
+		case "/empty.csv":
+			_, _ = io.WriteString(w, "# nothing\n")
+		default:
+			http.Error(w, "nope", http.StatusInternalServerError)
+		}
+	}))
+	defer srv.Close()
+	ctx := context.Background()
+
+	st, err := engine.RefreshFromURL(ctx, srv.URL+"/broken")
+	if !errors.Is(err, ErrGeoIPDownload) || st.Source != "first.csv" || st.PrefixCount != 1 {
+		t.Fatalf("HTTP 500: status %+v, err %v", st, err)
+	}
+	if _, err := engine.RefreshFromURL(ctx, "http://127.0.0.1:1/unreachable"); !errors.Is(err, ErrGeoIPDownload) {
+		t.Fatalf("dial error: %v", err)
+	}
+	st, err = engine.RefreshFromURL(ctx, srv.URL+"/empty.csv")
+	if err == nil || errors.Is(err, ErrGeoIPDownload) || st.Source != "first.csv" {
+		t.Fatalf("empty file: status %+v, err %v", st, err)
+	}
+	if res := engine.Lookup("192.0.2.1"); !res.Found || res.CountryCode != "US" {
+		t.Fatalf("dataset lost after failed refreshes: %+v", res)
+	}
+	if st, err = engine.RefreshFromURL(ctx, srv.URL+"/ok.csv"); err != nil || st.PrefixCount != 2 {
+		t.Fatalf("ok: %+v %v", st, err)
+	}
+}
+
+func TestGeoIPCapReader(t *testing.T) {
+	r := &capReader{r: strings.NewReader("0123456789"), n: 4}
+	if _, err := io.ReadAll(r); !errors.Is(err, errGeoIPTooLarge) {
+		t.Fatalf("oversized body: err %v", err)
+	}
+	r = &capReader{r: strings.NewReader("0123"), n: 4}
+	if b, err := io.ReadAll(r); err != nil || string(b) != "0123" {
+		t.Fatalf("body at the cap: %q %v", b, err)
+	}
+}
 
 func TestGeoIPEngineBuiltin(t *testing.T) {
 	engine := NewGeoIPEngine("")

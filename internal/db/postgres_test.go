@@ -116,6 +116,17 @@ func TestPostgresSchemaMatchesSQLite(t *testing.T) {
 	if !reflect.DeepEqual(gotIdx, wantIdx) {
 		t.Errorf("indexes:\n pg     %v\n sqlite %v", gotIdx, wantIdx)
 	}
+	// Rows seeded and adjusted by data migrations (00017 strategies and
+	// their 00020 default fix, 00018 roles, 00019 LDAP) come out the same.
+	for _, q := range []string{
+		`SELECT name || '/' || is_default || '/' || config_options FROM client_strategies`,
+		`SELECT name || '/' || is_default || '/' || allow_keyboard_mouse || allow_file_transfer || allow_terminal FROM control_roles`,
+		`SELECT id || '/' || enabled || '/' || user_filter || '/' || auto_register FROM ldap_settings`,
+	} {
+		if got, want := strs(t, pg, q), strs(t, lite, q); !reflect.DeepEqual(got, want) {
+			t.Errorf("seed data %q:\n pg     %v\n sqlite %v", q, got, want)
+		}
+	}
 }
 
 func boolStr(b bool) string {
@@ -201,7 +212,7 @@ func TestPostgresConstraintsAndDialect(t *testing.T) {
 	ctx := context.Background()
 	d := dbtest.Open(t)
 	q := d.Wrap(d.DB)
-	if db.DialectOf(q) != db.DialectPostgres || db.InTx(q) {
+	if db.DialectOf(q) != db.DialectPostgres || db.IsTx(q) {
 		t.Fatal("dialect/tx detection")
 	}
 	var uid int64
@@ -307,7 +318,7 @@ func TestPostgresConstraintsAndDialect(t *testing.T) {
 
 	// Transactions are detected through the wrapper.
 	if err := d.WithTx(ctx, func(tx *sql.Tx) error {
-		if !db.InTx(d.Wrap(tx)) {
+		if !db.IsTx(d.Wrap(tx)) {
 			t.Error("InTx false inside WithTx")
 		}
 		return nil

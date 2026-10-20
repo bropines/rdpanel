@@ -7,14 +7,19 @@
 // The value is one JSON document in the settings table; the ICE server list is
 // AEAD-sealed because TURN URLs carry credentials. Nothing is pushed until an
 // admin saves the options once; from then on the panel owns these keys on the
-// clients ("" removes a key, which restores the client default).
+// clients ("" removes a key, which restores the client default). Client
+// strategies assigned to a device, its group or marked default are merged in
+// by StrategyFor.
 package clientopts
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/binary"
 	"errors"
 	"fmt"
 	"net/url"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -47,7 +52,8 @@ type Options struct {
 	ICEServers string
 	// WebRTCCongestion sets allow-webrtc-congestion-control; nil removes it.
 	WebRTCCongestion *bool
-	// ModifiedAt (unix ms) is the strategy version clients echo back.
+	// ModifiedAt (unix ms) is when the options were last saved (the heartbeat
+	// version is a hash of the pushed options, see Version).
 	ModifiedAt int64
 	UpdatedAt  time.Time
 }
@@ -145,52 +151,79 @@ func (s *Service) Set(ctx context.Context, iceServers string, congestion *bool, 
 	return copyOpts(o), nil
 }
 
-// StrategyFor implements clientapi.StrategyProvider: resolves the effective MDM
-// strategy for d (device -> group -> default) and merges global client options
-// (such as ICE servers).
+// StrategyFor implements clientapi.StrategyProvider: the effective MDM
+// strategy of d (device -> group -> default) merged with the global client
+// options (such as ICE servers).
+//
+// Without a strategy only the admin-saved client options are pushed (nothing
+// at all until they are saved), as before strategies existed. Under a
+// strategy the panel owns every key any strategy can set: keys the effective
+// strategy does not set are sent as "" so a switch from another strategy does
+// not leave its options behind.
+//
+// The version (ModifiedAt) is a hash of the pushed map: the client stores
+// whatever differs from what it sent (docs/research/client-api.md §7.4), so any
+// change of the effective options, and only that, reaches the device.
 func (s *Service) StrategyFor(ctx context.Context, d *store.Device) (*clientapi.Strategy, error) {
+	o, err := s.Get(ctx)
+	if err != nil {
+		return nil, err
+	}
 	var strat *store.ClientStrategy
 	if s.st != nil && s.st.ClientStrategies != nil {
-		var err error
-		strat, err = s.st.ClientStrategies.ResolveForDevice(ctx, d)
-		if err != nil {
+		if strat, err = s.st.ClientStrategies.ResolveForDevice(ctx, d); err != nil {
 			return nil, err
 		}
 	}
-
-	o, err := s.Get(ctx)
-	if err != nil && strat == nil {
-		return nil, err
-	}
-
 	if strat == nil && o == nil {
 		return nil, nil
 	}
 
 	cfg := make(map[string]string)
-	var modAt int64
-
 	if strat != nil {
-		for k, v := range strat.ConfigOptions {
+		keys, err := s.st.ClientStrategies.ManagedKeys(ctx)
+		if err != nil {
+			return nil, err
+		}
+		for k := range keys {
+			cfg[k] = ""
+		}
+	}
+	if o != nil {
+		for k, v := range ConfigOptions(o) { // "" when cleared: removed on clients
 			cfg[k] = v
 		}
-		modAt = strat.UpdatedAt.UnixMilli()
 	}
-
-	if o != nil {
-		for k, v := range ConfigOptions(o) {
-			if strat == nil {
-				cfg[k] = v
-			} else if _, ok := cfg[k]; !ok && v != "" {
-				cfg[k] = v
-			}
-		}
-		if o.ModifiedAt > modAt {
-			modAt = o.ModifiedAt
+	if strat != nil {
+		for k, v := range strat.ConfigOptions { // the strategy wins over global options
+			cfg[k] = v
 		}
 	}
+	return &clientapi.Strategy{ModifiedAt: Version(cfg), ConfigOptions: cfg}, nil
+}
 
-	return &clientapi.Strategy{ModifiedAt: modAt, ConfigOptions: cfg}, nil
+// Version is the strategy version of a config_options map: the first 52 bits
+// of a SHA-256 over the sorted key/value pairs. 52 bits stay exact in JSON
+// tooling that reads numbers as doubles; it is never 0, which clients send
+// when they applied nothing yet.
+func Version(cfg map[string]string) int64 {
+	keys := make([]string, 0, len(cfg))
+	for k := range cfg {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	h := sha256.New()
+	for _, k := range keys {
+		h.Write([]byte(k))
+		h.Write([]byte{0})
+		h.Write([]byte(cfg[k]))
+		h.Write([]byte{0})
+	}
+	v := int64(binary.BigEndian.Uint64(h.Sum(nil)[:8]) >> 12)
+	if v == 0 {
+		v = 1
+	}
+	return v
 }
 
 // ConfigOptions is the config_options map pushed to clients. Every managed key

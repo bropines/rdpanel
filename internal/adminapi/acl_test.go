@@ -182,6 +182,11 @@ func TestControlRolesAndACLAdminAPI(t *testing.T) {
 		t.Fatalf("expected role id %d, got %v", roleID, effRole["id"])
 	}
 
+	// A role still used by a rule cannot be deleted (the rule would fall back
+	// to the default role silently).
+	code, m, _ = admin.do("DELETE", "/control-roles/"+idStr(roleID), nil)
+	wantErr(t, "delete role in use", code, http.StatusConflict, m, "role_in_use")
+
 	// Delete ACL rule
 	code, _, _ = admin.do("DELETE", "/acls/"+idStr(aclID), nil)
 	if code != http.StatusNoContent {

@@ -13,6 +13,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -208,6 +209,53 @@ func TestJanitorPass(t *testing.T) {
 	}
 	if n := count(`SELECT count(*) FROM audit_nonces`); n != 1 {
 		t.Errorf("nonces left = %d", n)
+	}
+}
+
+// TestFederationOptIn: without RDPANEL_FEDERATION_ENABLED the public
+// federation endpoints do not exist; with it they require the token, and the
+// sync loop is a worker that stops on shutdown.
+func TestFederationOptIn(t *testing.T) {
+	off := newTestApp(t, map[string]string{"RDPANEL_HBBS_ENABLED": "false"})
+	if off.Federation != nil {
+		t.Fatal("federation built while disabled")
+	}
+	for _, p := range []string{"/api/v1/federation/health", "/api/v1/federation/relays"} {
+		if rec := do(t, off.Handler(), http.MethodGet, p, "", nil); rec.Code != http.StatusNotFound {
+			t.Fatalf("disabled %s: %d %s", p, rec.Code, rec.Body.String())
+		}
+	}
+	rec := do(t, off.Handler(), http.MethodGet, "/api/v1/admin/federation/peers", "", nil)
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("admin API without session: %d", rec.Code)
+	}
+
+	const tok = "fed-token-0123456789abcdef"
+	on := newTestApp(t, map[string]string{"RDPANEL_HBBS_ENABLED": "false",
+		"RDPANEL_FEDERATION_ENABLED": "true", "RDPANEL_FEDERATION_TOKEN": tok})
+	if on.Federation == nil {
+		t.Fatal("federation not built while enabled")
+	}
+	h := on.Handler()
+	for _, p := range []string{"/api/v1/federation/health", "/api/v1/federation/relays"} {
+		if rec := do(t, h, http.MethodGet, p, "192.0.2.10:4000", nil); rec.Code != http.StatusUnauthorized {
+			t.Fatalf("%s without token: %d", p, rec.Code)
+		}
+		if rec := do(t, h, http.MethodGet, p, "192.0.2.11:4000", map[string]string{"Authorization": "Bearer " + tok}); rec.Code != http.StatusOK {
+			t.Fatalf("%s with token: %d %s", p, rec.Code, rec.Body.String())
+		}
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	var wg sync.WaitGroup
+	on.startWorkers(ctx, &wg)
+	cancel()
+	done := make(chan struct{})
+	go func() { wg.Wait(); close(done) }()
+	select {
+	case <-done:
+	case <-time.After(10 * time.Second):
+		t.Fatal("workers (federation sync included) did not stop")
 	}
 }
 

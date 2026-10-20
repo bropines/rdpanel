@@ -130,26 +130,10 @@ func (h *handler) peers(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	pg := parsePage(r)
-	devs, total, err := h.st.Devices.List(ctx, store.ListDevicesParams{Scope: scope.devices(), Limit: pg.limit,
-		Offset: pg.offset})
+	devs, total, err := h.accessiblePeers(ctx, sessionFrom(ctx).user, scope, pg)
 	if err != nil {
 		h.listFail(ctx, w, err)
 		return
-	}
-	user := sessionFrom(ctx).user
-	if !user.IsAdmin() {
-		filtered, err := h.st.ConnectionACLs.FilterAccessibleDevices(ctx, user.ID, devs)
-		if err != nil {
-			h.listFail(ctx, w, err)
-			return
-		}
-		if len(filtered) < len(devs) {
-			total -= (len(devs) - len(filtered))
-			if total < len(filtered) {
-				total = len(filtered)
-			}
-		}
-		devs = filtered
 	}
 	out := make([]peerPayload, 0, len(devs))
 	for _, d := range devs {
@@ -161,6 +145,44 @@ func (h *handler) peers(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 	writeJSON(w, http.StatusOK, newList(total, out))
+}
+
+// accessiblePeers returns one page of the devices in scope that the
+// connection rules let u reach, and their total. Admins and installs without
+// enabled rules page in the database; otherwise the rules (loaded once) filter
+// the whole scope and the page is cut from the result, so total and pages
+// stay consistent.
+func (h *handler) accessiblePeers(ctx context.Context, u *store.User, scope accessScope, pg page) ([]*store.Device, int, error) {
+	list := store.ListDevicesParams{Scope: scope.devices(), Limit: pg.limit, Offset: pg.offset}
+	if u.IsAdmin() {
+		return h.st.Devices.List(ctx, list)
+	}
+	has, err := h.st.ConnectionACLs.HasEnabledRules(ctx)
+	if err != nil {
+		return nil, 0, err
+	}
+	if !has {
+		return h.st.Devices.List(ctx, list)
+	}
+	acl, err := h.st.ConnectionACLs.ForUser(ctx, u.ID)
+	if err != nil {
+		return nil, 0, err
+	}
+	var all []*store.Device
+	const chunk = 1000
+	for offset := 0; ; offset += chunk {
+		devs, total, err := h.st.Devices.List(ctx, store.ListDevicesParams{Scope: scope.devices(), Limit: chunk, Offset: offset})
+		if err != nil {
+			return nil, 0, err
+		}
+		all = append(all, devs...)
+		if len(devs) < chunk || offset+chunk >= total {
+			break
+		}
+	}
+	allowed := acl.Filter(all)
+	total := len(allowed)
+	return allowed[min(pg.offset, total):min(pg.offset+pg.limit, total)], total, nil
 }
 
 type deviceGroupPayload struct {

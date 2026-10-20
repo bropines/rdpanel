@@ -92,20 +92,21 @@ func TestSetGetAndStrategy(t *testing.T) {
 		t.Fatalf("reload: %+v %v", got, err)
 	}
 	strat, err := s2.StrategyFor(ctx, nil)
-	if err != nil || strat.ModifiedAt != o.ModifiedAt ||
+	if err != nil || strat.ModifiedAt != Version(strat.ConfigOptions) ||
 		strat.ConfigOptions[OptionICEServers] != o.ICEServers || strat.ConfigOptions[OptionWebRTCCongestion] != "Y" {
 		t.Fatalf("strategy: %+v %v", strat, err)
 	}
 
-	// Clearing still pushes the keys, empty, so clients drop them; a save in
-	// the same millisecond is still a new version.
+	// Clearing still pushes the keys, empty, so clients drop them, under a
+	// new version (also within the same millisecond).
 	o2, err := s.Set(ctx, "", nil, nil)
 	if err != nil || o2.ModifiedAt <= o.ModifiedAt {
 		t.Fatalf("clear: %+v %v", o2, err)
 	}
-	strat, _ = s.StrategyFor(ctx, nil)
-	if len(strat.ConfigOptions) != 2 || strat.ConfigOptions[OptionICEServers] != "" || strat.ConfigOptions[OptionWebRTCCongestion] != "" {
-		t.Fatalf("cleared strategy: %+v", strat.ConfigOptions)
+	cleared, _ := s.StrategyFor(ctx, nil)
+	if len(cleared.ConfigOptions) != 2 || cleared.ConfigOptions[OptionICEServers] != "" ||
+		cleared.ConfigOptions[OptionWebRTCCongestion] != "" || cleared.ModifiedAt == strat.ModifiedAt {
+		t.Fatalf("cleared strategy: %+v", cleared)
 	}
 	off := false
 	if o3, _ := s.Set(ctx, "", &off, nil); ConfigOptions(o3)[OptionWebRTCCongestion] != "N" {
@@ -137,40 +138,136 @@ func TestStrategyForDeviceMDMMerge(t *testing.T) {
 	s, st, _, _ := newService(t)
 	ctx := context.Background()
 
-	// 1. Create a device (falls back to default strategy "Standard Office")
+	// 1. A device without a strategy, on a fresh install (no default strategy,
+	// no saved client options): nothing is pushed.
 	d := &store.Device{RustdeskID: "dev-mdm-1"}
 	if err := st.Devices.Create(ctx, d); err != nil {
 		t.Fatal(err)
 	}
-
-	strat, err := s.StrategyFor(ctx, d)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if strat == nil {
-		t.Fatal("expected non-nil strategy for device")
-	}
-	if strat.ConfigOptions["approve-mode"] != "both" {
-		t.Fatalf("expected approve-mode both, got %q", strat.ConfigOptions["approve-mode"])
+	if strat, err := s.StrategyFor(ctx, d); err != nil || strat != nil {
+		t.Fatalf("no strategy, no options: %+v %v", strat, err)
 	}
 
-	// 2. Set global ICE servers and ensure they merge
+	// 2. Saved global options alone: only they are pushed.
 	on := true
 	if _, err := s.Set(ctx, "stun:stun.l.google.com:19302", &on, nil); err != nil {
 		t.Fatal(err)
 	}
+	global, err := s.StrategyFor(ctx, d)
+	if err != nil || len(global.ConfigOptions) != 2 || global.ConfigOptions[OptionICEServers] != "stun:stun.l.google.com:19302" {
+		t.Fatalf("global options only: %+v %v", global, err)
+	}
 
+	// 3. Under a strategy the global options are merged in.
+	office, err := st.ClientStrategies.GetByName(ctx, "Standard Office")
+	if err != nil {
+		t.Fatal(err)
+	}
+	d.StrategyID = &office.ID
 	merged, err := s.StrategyFor(ctx, d)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if merged.ConfigOptions["approve-mode"] != "both" {
-		t.Fatalf("expected approve-mode both, got %q", merged.ConfigOptions["approve-mode"])
+	if merged.ConfigOptions["approve-mode"] != "both" || merged.ConfigOptions[OptionICEServers] != "stun:stun.l.google.com:19302" ||
+		merged.ConfigOptions[OptionWebRTCCongestion] != "Y" || merged.ModifiedAt == global.ModifiedAt {
+		t.Fatalf("merged: %+v", merged)
 	}
-	if merged.ConfigOptions[OptionICEServers] != "stun:stun.l.google.com:19302" {
-		t.Fatalf("expected merged ICE server, got %q", merged.ConfigOptions[OptionICEServers])
+}
+
+func TestVersion(t *testing.T) {
+	a := map[string]string{"approve-mode": "both", "ice-servers": ""}
+	b := map[string]string{"ice-servers": "", "approve-mode": "both"}
+	if Version(a) != Version(b) {
+		t.Fatal("version depends on map order")
 	}
-	if merged.ConfigOptions[OptionWebRTCCongestion] != "Y" {
-		t.Fatalf("expected merged congestion control Y, got %q", merged.ConfigOptions[OptionWebRTCCongestion])
+	for _, other := range []map[string]string{
+		{"approve-mode": "both"}, // a key dropped
+		{"approve-mode": "both", "ice-servers": "stun:a.example.com"}, // a value changed
+		{"approve-mode": "both", "ice-servers": "", "whitelist": ""},  // a key cleared
+		{"approve-modeboth": "", "ice-servers": ""},                   // no key/value confusion
+	} {
+		if Version(other) == Version(a) {
+			t.Errorf("same version for %v and %v", other, a)
+		}
+	}
+	for _, m := range []map[string]string{a, {}, {"x": "y"}} {
+		if v := Version(m); v <= 0 || v >= 1<<52 {
+			t.Errorf("version %d out of (0, 2^52)", v)
+		}
+	}
+}
+
+// The seeded strategies share updated_at, so a timestamp version did not
+// change when a device switched between them; and keys only the previous
+// strategy set were never removed.
+func TestStrategySwitchClearsKeysAndChangesVersion(t *testing.T) {
+	s, st, _, _ := newService(t)
+	ctx := context.Background()
+	strict, err := st.ClientStrategies.GetByName(ctx, "Strict Security")
+	if err != nil {
+		t.Fatal(err)
+	}
+	server, err := st.ClientStrategies.GetByName(ctx, "Unattended Server")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strict.UpdatedAt.Equal(server.UpdatedAt) {
+		t.Fatal("test assumes seeds with equal updated_at")
+	}
+	kiosk := &store.ClientStrategy{Name: "Kiosk", ConfigOptions: map[string]string{"whitelist": "10.0.0.0/8"}}
+	if err := st.ClientStrategies.Create(ctx, kiosk); err != nil {
+		t.Fatal(err)
+	}
+
+	d := &store.Device{RustdeskID: "dev-switch", StrategyID: &kiosk.ID}
+	if err := st.Devices.Create(ctx, d); err != nil {
+		t.Fatal(err)
+	}
+	first, err := s.StrategyFor(ctx, d)
+	if err != nil || first.ConfigOptions["whitelist"] != "10.0.0.0/8" || first.ConfigOptions["approve-mode"] != "" {
+		t.Fatalf("kiosk: %+v %v", first, err)
+	}
+	if _, ok := first.ConfigOptions[OptionICEServers]; ok {
+		t.Fatalf("unsaved global options pushed: %+v", first.ConfigOptions)
+	}
+
+	d.StrategyID = &strict.ID
+	a, err := s.StrategyFor(ctx, d)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if v, ok := a.ConfigOptions["whitelist"]; !ok || v != "" {
+		t.Fatalf("key of the previous strategy not cleared: %+v", a.ConfigOptions)
+	}
+	d.StrategyID = &server.ID
+	b, err := s.StrategyFor(ctx, d)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if a.ModifiedAt == b.ModifiedAt || a.ModifiedAt == first.ModifiedAt || b.ConfigOptions["approve-mode"] != "password" {
+		t.Fatalf("switch: strict %d server %d kiosk %d", a.ModifiedAt, b.ModifiedAt, first.ModifiedAt)
+	}
+	// Same effective options, same version: no re-push.
+	if again, _ := s.StrategyFor(ctx, d); again.ModifiedAt != b.ModifiedAt || again.ModifiedAt <= 0 {
+		t.Fatalf("unstable version: %d vs %d", again.ModifiedAt, b.ModifiedAt)
+	}
+
+	// Clearing the global options under a strategy removes them on clients.
+	on := true
+	if _, err := s.Set(ctx, "stun:stun.example.com", &on, nil); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.Set(ctx, "", nil, nil); err != nil {
+		t.Fatal(err)
+	}
+	c, err := s.StrategyFor(ctx, d)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if v, ok := c.ConfigOptions[OptionICEServers]; !ok || v != "" {
+		t.Fatalf("cleared ICE servers not pushed: %+v", c.ConfigOptions)
+	}
+	if v, ok := c.ConfigOptions[OptionWebRTCCongestion]; !ok || v != "" {
+		t.Fatalf("cleared congestion control not pushed: %+v", c.ConfigOptions)
 	}
 }

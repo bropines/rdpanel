@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
+import { ApiError } from "@/api/client";
 import { federationApi, federationKeys, type CreateFederationPeerInput, type FederationPeer } from "@/api/federation";
 import { ConfirmDialog, EmptyState, ErrorState, Field, Mono, RelativeTime, useErrorMessage } from "@/components";
 import { Badge } from "@/components/ui/badge";
@@ -14,6 +15,11 @@ import { Input } from "@/components/ui/input";
 import { Skeleton, Switch } from "@/components/ui/misc";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { cn } from "@/lib/utils";
+
+/** Minimum length of a peer's RDPANEL_FEDERATION_TOKEN (server-side check too). */
+const MIN_TOKEN_LEN = 16;
+
+const isFederationDisabled = (err: unknown) => err instanceof ApiError && err.code === "federation_disabled";
 
 function PeerStatusBadge({ status, error }: { status: FederationPeer["status"]; error?: string | null }) {
   const { t } = useTranslation();
@@ -80,7 +86,7 @@ function AddPeerDialog({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name.trim() || !apiUrl.trim() || !authToken.trim()) return;
+    if (!name.trim() || !apiUrl.trim() || authToken.trim().length < MIN_TOKEN_LEN) return;
     create.mutate({
       name: name.trim(),
       api_url: apiUrl.trim(),
@@ -120,12 +126,15 @@ function AddPeerDialog({
               />
             </Field>
 
-            <Field label={t("federation.peers.authToken")}>
+            <Field label={t("federation.peers.authToken")} htmlFor="fed-token" hint={t("federation.addDialog.tokenHint")}>
               <Input
+                id="fed-token"
                 value={authToken}
                 onChange={(e) => setAuthToken(e.target.value)}
                 placeholder={t("federation.addDialog.tokenPlaceholder")}
                 type="password"
+                autoComplete="off"
+                minLength={MIN_TOKEN_LEN}
                 disabled={create.isPending}
                 required
               />
@@ -144,7 +153,7 @@ function AddPeerDialog({
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
               {t("common.cancel")}
             </Button>
-            <Button type="submit" disabled={create.isPending || !name || !apiUrl || !authToken}>
+            <Button type="submit" disabled={create.isPending || !name || !apiUrl || authToken.trim().length < MIN_TOKEN_LEN}>
               {create.isPending && <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />}
               {t("federation.addDialog.submit")}
             </Button>
@@ -163,14 +172,21 @@ export function FederationTab() {
   const [addingPeer, setAddingPeer] = useState(false);
   const [deletingPeer, setDeletingPeer] = useState<FederationPeer | null>(null);
 
+  // "Federation is off" is a 503 that retrying cannot change.
+  const retry = (count: number, err: unknown) =>
+    !isFederationDisabled(err) && !(err instanceof ApiError && err.status < 500) && count < 2;
+
   const peersQuery = useQuery({
     queryKey: federationKeys.peers,
     queryFn: federationApi.listPeers,
+    retry,
   });
 
   const relaysQuery = useQuery({
     queryKey: federationKeys.relays,
     queryFn: federationApi.listRelays,
+    retry,
+    enabled: !isFederationDisabled(peersQuery.error),
   });
 
   const syncPeer = useMutation({
@@ -200,6 +216,16 @@ export function FederationTab() {
 
   const peers = peersQuery.data ?? [];
   const federatedRelays = relaysQuery.data ?? [];
+
+  if (isFederationDisabled(peersQuery.error)) {
+    return (
+      <Card>
+        <CardContent className="pt-6">
+          <EmptyState icon={Globe2} title={t("federation.disabled.title")} description={t("federation.disabled.description")} />
+        </CardContent>
+      </Card>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -259,6 +285,11 @@ export function FederationTab() {
                         </TableCell>
                         <TableCell>
                           <PeerStatusBadge status={p.status} error={p.last_error} />
+                          {p.status === "unreachable" && p.last_error && (
+                            <div className="mt-0.5 max-w-[16rem] truncate text-xs text-muted-foreground" title={p.last_error}>
+                              {p.last_error}
+                            </div>
+                          )}
                         </TableCell>
                         <TableCell>
                           <Badge variant={p.sync_relays ? "secondary" : "outline"}>

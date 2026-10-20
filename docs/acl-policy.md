@@ -78,17 +78,17 @@ preserved.
   "tests": [
     {
       "src": "user:contractor_john",
-      "dst": "device:prod-db-01",
+      "dst": "device:123456789", // RustDesk ID of prod-db-01
       "expect": "deny"
     },
     {
       "src": "user:alex",
-      "dst": "device:prod-db-01",
+      "dst": "device:123456789",
       "expect": "allow"
     },
     {
       "src": "user:support_maria",
-      "dst": "device:ws-finance-05",
+      "dst": "device:987654321", // RustDesk ID of ws-finance-05
       "expect": "allow",
       "role": "support-tier1"
     }
@@ -117,6 +117,16 @@ A map of named roles defining what actions an operator can perform inside an est
 
 If an `allow` rule does not specify a `role`, the system default control role is used.
 
+> [!NOTE]
+> Control roles are informational for now: they are stored, exported and evaluated
+> (the ACL test shows the effective role), but their capabilities are not yet enforced
+> on RustDesk sessions. The `allow` / `deny` decision of the rules is applied.
+
+A rule may name a role that exists in the panel but is not listed in `roles`; applying
+the policy keeps such a role. Roles missing from the document are deleted only when no
+rule references them, and a role referenced by a rule cannot be deleted from the panel
+either (`409 role_in_use`).
+
 ### 2.2 `acls` (Access Rules)
 
 An array of access rules. Rules are evaluated in ascending order of `priority` (lower numbers evaluate first). The first rule that matches both the subject (`src`) and target device (`dst`) determines the decision (`allow` or `deny`).
@@ -138,7 +148,7 @@ An array of access rules. Rules are evaluated in ascending order of `priority` (
 | `*` | Matches any user or device | `*` |
 | `user:<username>` | Matches an individual user account | `user:alex` |
 | `group:<group_name>` | Matches any member of a user group | `group:devops` |
-| `device:<id_or_hostname>` | Matches a device by RustDesk ID or hostname | `device:123456789`, `device:prod-srv-01` |
+| `device:<rustdesk_id>` | Matches a device by its RustDesk ID (hostnames and aliases are not resolved) | `device:123456789` |
 | `device_group:<group_name>` | Matches any device in a device group | `device_group:servers` |
 
 > [!NOTE]
@@ -150,22 +160,22 @@ A suite of built-in tests that simulate connection scenarios and verify expected
 
 Every time a policy is tested or saved, the backend evaluates all test assertions against the current inventory:
 - `src`: Subject selector (`user:username`).
-- `dst`: Target selector (`device:id` or `device:hostname`).
+- `dst`: Target selector (`device:<rustdesk_id>`).
 - `expect`: `"allow"` or `"deny"`.
 - `role`: (Optional) Expected effective role name if connection is allowed.
 
-If **any** test assertion fails, the policy update is **rejected atomically** with an HTTP 422 error, protecting against lockouts and permission regressions.
+If **any** test assertion fails, the policy update is **rejected atomically** with HTTP 400 (`validation_failed`), protecting against lockouts and permission regressions.
 
 ---
 
 ## 3. REST API Reference
 
-All policy endpoints live under `/api/v1/admin/acl/policy` and require an authenticated admin session or personal API token with full access.
+All policy endpoints live under `/api/v1/admin/acls/policy` and require an authenticated admin session or personal API token with full access.
 
 ### 3.1 Get Current Policy
 
 ```http
-GET /api/v1/admin/acl/policy
+GET /api/v1/admin/acls/policy
 ```
 
 **Response (200 OK):**
@@ -175,12 +185,15 @@ GET /api/v1/admin/acl/policy
 }
 ```
 
+The export names every target the way the policy is read back (devices by RustDesk ID),
+so applying an exported policy reproduces the same rules.
+
 ### 3.2 Dry-Run Validation & Test Simulation
 
 Validates HuJSON syntax, ensures all referenced entities exist in the database, and executes all test assertions without saving changes.
 
 ```http
-POST /api/v1/admin/acl/policy/test
+POST /api/v1/admin/acls/policy/test
 Content-Type: application/json
 
 {
@@ -212,7 +225,7 @@ Content-Type: application/json
 Parses, validates, executes all tests, and atomically replaces active connection ACLs and custom control roles in SQLite.
 
 ```http
-PUT /api/v1/admin/acl/policy
+PUT /api/v1/admin/acls/policy
 Content-Type: application/json
 
 {
@@ -259,7 +272,7 @@ jobs:
           PAYLOAD=$(jq -Rs '{policy: .}' policies/policy.hujson)
 
           echo "Running pre-flight policy validation..."
-          TEST_RES=$(curl -fsS -X POST "$RDPANEL_URL/api/v1/admin/acl/policy/test" \
+          TEST_RES=$(curl -fsS -X POST "$RDPANEL_URL/api/v1/admin/acls/policy/test" \
             -H "Authorization: Bearer $RDPANEL_TOKEN" \
             -H "Content-Type: application/json" \
             -d "$PAYLOAD")
@@ -271,7 +284,7 @@ jobs:
           fi
 
           echo "Applying policy..."
-          curl -fsS -X PUT "$RDPANEL_URL/api/v1/admin/acl/policy" \
+          curl -fsS -X PUT "$RDPANEL_URL/api/v1/admin/acls/policy" \
             -H "Authorization: Bearer $RDPANEL_TOKEN" \
             -H "Content-Type: application/json" \
             -d "$PAYLOAD"

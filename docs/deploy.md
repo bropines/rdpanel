@@ -17,7 +17,8 @@ single host. Kubernetes: see the [Helm chart](../deploy/helm/rdpanel/README.md);
 - [Data layout and backups](#data-layout-and-backups)
 - Optional features: [passkeys](#passkeys), [e-mail](#e-mail-verification-codes-and-password-reset),
   [WebSocket and TCP-mode clients](#websocket-and-tcp-mode-clients),
-  [About page and update check](#about-page-and-update-check), [server logs](#server-logs)
+  [About page and update check](#about-page-and-update-check), [server logs](#server-logs),
+  [panel federation](#panel-federation)
 - [Image tags and upgrades](#image-tags-and-upgrades) —
   [from the lejianwen s6 image](#upgrading-from-the-lejianwen-s6-image-lejianwenrustdesk-server-s6--rustdesk-api)
 - [Container internals](#container-internals)
@@ -279,6 +280,7 @@ Summary:
 | `ALWAYS_USE_RELAY` | hbbs | `N` | `Y` disables P2P |
 | `MUST_LOGIN` | hbbs | `N` | `Y` requires a panel login token for connections |
 | `TCP_KEEPALIVE` | hbbs | `N` | `Y` keeps TCP/WebSocket-mode clients online (see [WebSocket and TCP-mode clients](#websocket-and-tcp-mode-clients)) |
+| `WS_RELAY_SERVERS` | hbbs | first `RELAY` entry | relays offered to browser (WebSocket) clients such as the [web client](web-client.md); they must be reachable as `wss://<host>/ws/relay`, so by default only the local hbbr behind the panel. Set empty to use the normal rotation |
 | `WEBRTC` | hbbs | `N` | `Y` forwards WebRTC signaling for RustDesk 1.5+ clients (see [WebRTC](webrtc.md)) |
 | `RUSTDESK_API_JWT_KEY` | panel, hbbs | generated `jwt.key` | HS256 key of client tokens (raw string) |
 | `KEY_PRIV`, `KEY_PUB` | key-secret | — | initial key pair (also docker secrets `key_priv`/`key_pub`) |
@@ -305,7 +307,9 @@ Summary:
 | `RDPANEL_LOGS_BUFFER`, `RDPANEL_LOGS_DIR` | panel, log pipelines | `2000`, `/run/rdpanel/logs` | Server → Logs: lines kept per source (`0` = off) and the s6-log capture dir (see [Server logs](#server-logs)) |
 | `RDPANEL_UPDATE_CHECK` | panel | `true` | About page release check against the GitHub API (see [below](#about-page-and-update-check)); `false` = no outbound request |
 | `RDPANEL_API_DOCS` | panel | `auth` | Swagger UI at `/api/v1/docs` + spec: `auth`, `public` or `off` (see [api.md](api.md#interactive-docs)); being under `/api/v1/`, a public vhost that 404s `/api/v1/*` keeps it internal |
-| `RDPANEL_WEBHOOK_URL`, `_SECRET` | panel | off | alerts for critical events (relay degraded/offline, hbbs down) sent via HTTP POST with optional HMAC-SHA256 signature |
+| `RDPANEL_WEBCLIENT_ENABLED`, `_ADMIN_ONLY`, `_ID_URL`, `_RELAY_URL` | panel | on, off, same origin `/ws/id`, `/ws/relay` | browser web client (see [web-client.md](web-client.md)); the reverse proxy must forward `/ws/id` → 21118 and `/ws/relay` → 21119 with WebSocket upgrade |
+| `RDPANEL_FEDERATION_ENABLED`, `RDPANEL_FEDERATION_TOKEN` | panel | off, — | opt-in panel federation; the token (≥ 16 characters) is what peers present to this panel (see [Panel federation](#panel-federation)) |
+| `RDPANEL_WEBHOOK_URL`, `_SECRET` | panel | off | alerts for critical events (relay degraded/offline, hbbs down) sent via HTTP POST with optional HMAC-SHA256 signature over timestamp and body ([configuration.md → Webhooks](configuration.md#webhooks)) |
 | `RDPANEL_SMTP_HOST`, `_PORT`, `_ENCRYPTION`, `_USERNAME`, `_PASSWORD`, `_PASSWORD_FILE`, `_FROM`, `_INSECURE_SKIP_VERIFY` | panel | off | outgoing e-mail (see [E-mail](#e-mail-verification-codes-and-password-reset)); otherwise configurable in Settings → E-mail |
 | `HEALTHCHECK_PORTS` | healthcheck | `21115 21116 21117 21118 21119` | ports that must listen |
 
@@ -562,6 +566,28 @@ text download.
   `limit`/`before`), `…/logs/stream` (SSE) and `…/logs/download`, see
   [api/openapi.yaml](../api/openapi.yaml). Metric: `rdpanel_logs_dropped_total{source}`
   counts lines a too-slow live viewer skipped.
+
+## Panel federation
+
+Federation lets panels see each other's relays. It is **off by default**: without
+`RDPANEL_FEDERATION_ENABLED=true` the panel serves no `/api/v1/federation/*` endpoint and
+syncs no peer (Server → Federation explains how to turn it on).
+
+- Each panel that is read by peers sets `RDPANEL_FEDERATION_TOKEN` (at least 16 random
+  characters, e.g. `openssl rand -hex 32`). `GET /api/v1/federation/health` and
+  `/relays` require `Authorization: Bearer <that token>`; failed attempts back off per
+  client IP like logins. The endpoints live on the public client-API host next to
+  `/api/*`; a reverse proxy may also restrict them to the peers' addresses.
+- To read a peer, add it in **Server → Federation** with its URL and *its*
+  `RDPANEL_FEDERATION_TOKEN`. The token is stored AEAD-encrypted and sent on every sync
+  (every minute, plus "Sync now"); it is never shown again.
+- A peer URL that points at a private, loopback or link-local address is refused (at
+  registration and when connecting) unless **Server → Relays → Options → Allow private
+  relay hosts** is on.
+- A failed sync (peer unreachable, token rejected, invalid or inconsistent answer) marks
+  the peer *Sync failed* with a short reason and hides its relays.
+- Imported relays are listed for **visibility only**: they are not added to this panel's
+  hbbs relay rotation.
 
 ## Image tags and upgrades
 

@@ -200,15 +200,11 @@ const txLockTimeout = "30s"
 // (see postgresQuery). SQLite needs no adaptation, so Wrap only
 // uses it for PostgreSQL.
 type dialectQuerier struct {
-	q    Querier
-	inTx bool
+	q Querier
 }
 
 // Dialect implements the interface DialectOf looks for.
 func (dialectQuerier) Dialect() Dialect { return DialectPostgres }
-
-// InTx implements the interface InTx looks for.
-func (dq dialectQuerier) InTx() bool { return dq.inTx }
 
 func (dq dialectQuerier) ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error) {
 	query, args, err := postgresQuery(query, args)
@@ -328,6 +324,19 @@ func (d *DB) PrepareContext(ctx context.Context, query string) (*sql.Stmt, error
 	return d.DB.PrepareContext(ctx, query)
 }
 
+// IsTx reports whether q is a transaction, also when Wrap adapted it for the
+// dialect (a PostgreSQL transaction is a dialectQuerier around the *sql.Tx),
+// so callers can join it instead of opening a second one.
+func IsTx(q Querier) bool {
+	switch v := q.(type) {
+	case *sql.Tx:
+		return true
+	case dialectQuerier:
+		return IsTx(v.q)
+	}
+	return false
+}
+
 // Wrap returns q (the DB or a transaction from WithTx/BeginTx) as a Querier
 // that adapts queries to the database dialect. On SQLite it returns q as-is.
 func (d *DB) Wrap(q Querier) Querier {
@@ -342,8 +351,7 @@ func (d *DB) Wrap(q Querier) Querier {
 			return d
 		}
 	}
-	_, inTx := q.(*sql.Tx)
-	return dialectQuerier{q: q, inTx: inTx}
+	return dialectQuerier{q: q}
 }
 
 // DialectOf reports the dialect a Querier obtained from DB or DB.Wrap runs
@@ -356,25 +364,13 @@ func DialectOf(q Querier) Dialect {
 	return DialectSQLite
 }
 
-// InTx reports whether q is bound to a transaction (a *sql.Tx, possibly
-// wrapped by DB.Wrap), so callers can join it instead of nesting.
-func InTx(q Querier) bool {
-	switch v := q.(type) {
-	case *sql.Tx:
-		return true
-	case interface{ InTx() bool }:
-		return v.InTx()
-	}
-	return false
-}
-
 // Savepoint runs fn so that a failing statement in it (typically a unique
 // violation the caller recovers from) leaves the enclosing transaction
 // usable: PostgreSQL aborts the whole transaction on any error, SQLite does
 // not. On PostgreSQL inside a transaction fn runs under a SAVEPOINT that is
 // rolled back when fn fails; otherwise fn is simply called.
 func Savepoint(ctx context.Context, q Querier, fn func() error) error {
-	if DialectOf(q) != DialectPostgres || !InTx(q) {
+	if DialectOf(q) != DialectPostgres || !IsTx(q) {
 		return fn()
 	}
 	if _, err := q.ExecContext(ctx, `SAVEPOINT rdpanel_sp`); err != nil {

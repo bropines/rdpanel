@@ -63,14 +63,46 @@ type Config struct {
 	// "public" (readable without login) or "off" (404).
 	APIDocs string `yaml:"api_docs"`
 
-	Auth     AuthConfig     `yaml:"auth"`
-	WebAuthn WebAuthnConfig `yaml:"webauthn"`
-	HTTP     HTTPConfig     `yaml:"http"`
-	HBBS     HBBSConfig     `yaml:"hbbs"`
-	Log      LogConfig      `yaml:"log"`
-	Logs     LogsConfig     `yaml:"logs"`
-	SMTP     SMTPConfig     `yaml:"smtp"`
-	Webhook  WebhookConfig  `yaml:"webhook"`
+	Auth       AuthConfig       `yaml:"auth"`
+	WebAuthn   WebAuthnConfig   `yaml:"webauthn"`
+	HTTP       HTTPConfig       `yaml:"http"`
+	HBBS       HBBSConfig       `yaml:"hbbs"`
+	Log        LogConfig        `yaml:"log"`
+	Logs       LogsConfig       `yaml:"logs"`
+	SMTP       SMTPConfig       `yaml:"smtp"`
+	Webhook    WebhookConfig    `yaml:"webhook"`
+	Federation FederationConfig `yaml:"federation"`
+	// WebClient configures the browser remote desktop client (/connect).
+	WebClient WebClientConfig `yaml:"webclient"`
+}
+
+// WebClientConfig configures the browser remote desktop client.
+type WebClientConfig struct {
+	// Enabled offers the web client to signed-in users. Default: true.
+	Enabled bool `yaml:"enabled"`
+	// AdminOnly limits the web client to panel admins.
+	AdminOnly bool `yaml:"admin_only"`
+	// IDURL / RelayURL are the WebSocket URLs of hbbs (21118) and hbbr
+	// (21119) as seen by browsers. Empty: same origin as the panel,
+	// /ws/id and /ws/relay.
+	IDURL    string `yaml:"id_url"`
+	RelayURL string `yaml:"relay_url"`
+}
+
+// MinFederationTokenLen is the shortest accepted federation token.
+const MinFederationTokenLen = 16
+
+// FederationConfig controls panel federation (Server -> Federation). Off by
+// default: when off, /api/v1/federation/* is not served and no peer is synced.
+type FederationConfig struct {
+	// Enabled serves /api/v1/federation/{health,relays} to peer panels and
+	// runs the peer sync loop.
+	Enabled bool `yaml:"enabled"`
+	// Token is the bearer token peer panels must present to this panel's
+	// federation endpoints (at least MinFederationTokenLen characters;
+	// required when Enabled). Peers store it as their "auth token" for this
+	// panel.
+	Token Secret `yaml:"token"`
 }
 
 // WebhookConfig specifies an optional webhook endpoint for critical alerts.
@@ -271,6 +303,7 @@ func Defaults() *Config {
 		DataDir:     "/data",
 		UpdateCheck: true,
 		APIDocs:     APIDocsAuth,
+		WebClient:   WebClientConfig{Enabled: true},
 		Auth: AuthConfig{
 			TokenLifetime:   4380 * time.Hour,
 			SessionIdle:     12 * time.Hour,
@@ -441,6 +474,12 @@ func (c *Config) envVars() []envVar {
 		{"RDPANEL_SMTP_INSECURE_SKIP_VERIFY", boolean(&c.SMTP.InsecureSkipVerify)},
 		{"RDPANEL_WEBHOOK_URL", str(&c.Webhook.URL)},
 		{"RDPANEL_WEBHOOK_SECRET", sec(&c.Webhook.Secret)},
+		{"RDPANEL_WEBCLIENT_ENABLED", boolean(&c.WebClient.Enabled)},
+		{"RDPANEL_WEBCLIENT_ADMIN_ONLY", boolean(&c.WebClient.AdminOnly)},
+		{"RDPANEL_WEBCLIENT_ID_URL", str(&c.WebClient.IDURL)},
+		{"RDPANEL_WEBCLIENT_RELAY_URL", str(&c.WebClient.RelayURL)},
+		{"RDPANEL_FEDERATION_ENABLED", boolean(&c.Federation.Enabled)},
+		{"RDPANEL_FEDERATION_TOKEN", sec(&c.Federation.Token)},
 	}
 }
 
@@ -663,6 +702,12 @@ func (c *Config) Validate() error {
 		u, err := url.ParseRequestURI(c.Webhook.URL)
 		if err != nil || (u.Scheme != "http" && u.Scheme != "https") {
 			add("webhook.url %q: must be an http or https URL", c.Webhook.URL)
+		}
+	}
+	if c.Federation.Enabled {
+		if tok := c.Federation.Token.Reveal(); strings.TrimSpace(tok) != tok || len(tok) < MinFederationTokenLen {
+			add("federation.token (RDPANEL_FEDERATION_TOKEN) must be at least %d characters without surrounding spaces when federation is enabled",
+				MinFederationTokenLen)
 		}
 	}
 	if len(errs) > 0 {

@@ -41,9 +41,17 @@ type PublicSTUNResult struct {
 	Items        []ProbeResult `json:"items"`
 }
 
+// probeFetched probes one candidate of a downloaded (or curated) list. The
+// list is third-party data, so the SSRF guard always applies, whatever the
+// relays "allow private hosts" option says (tests replace this hook).
+var probeFetched = func(ctx context.Context, target string) ProbeResult {
+	return ProbeOne(ctx, target, false)
+}
+
 // FetchPublicSTUN downloads a list of public STUN servers, tests reachability concurrently,
-// and returns the fastest working servers sorted by latency.
-func FetchPublicSTUN(ctx context.Context, sourceURL string, limit int, allowPrivate bool) (*PublicSTUNResult, error) {
+// and returns the fastest working servers sorted by latency. Candidates that
+// resolve to private, loopback or link-local addresses are never probed.
+func FetchPublicSTUN(ctx context.Context, sourceURL string, limit int) (*PublicSTUNResult, error) {
 	if limit <= 0 {
 		limit = 6
 	}
@@ -78,7 +86,7 @@ func FetchPublicSTUN(ctx context.Context, sourceURL string, limit int, allowPriv
 		wg.Add(1)
 		go func(idx int, target string) {
 			defer wg.Done()
-			results[idx] = ProbeOne(ctx, target, allowPrivate)
+			results[idx] = probeFetched(ctx, target)
 		}(i, s)
 	}
 	wg.Wait()

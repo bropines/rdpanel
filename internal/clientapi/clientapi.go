@@ -141,6 +141,9 @@ type Deps struct {
 	// Kicks delivers admin "disconnect" requests through heartbeats (default:
 	// a private MemKickQueue; share one with the admin API).
 	Kicks KickQueue
+	// WebSessions resolves web client session ids ("web-…") to panel users
+	// for connection rules (nil: web clients count as unknown controllers).
+	WebSessions WebSessionResolver
 	// Strategies supplies heartbeat strategies (optional).
 	Strategies StrategyProvider
 	// DeviceRate limits unauthenticated device calls per IP (zero value:
@@ -148,6 +151,11 @@ type Deps struct {
 	DeviceRate RateConfig
 	// Now is the clock (default time.Now).
 	Now func() time.Time
+}
+
+// WebSessionResolver maps a web client session id to its panel user.
+type WebSessionResolver interface {
+	User(id string) (int64, bool)
 }
 
 type handler struct {

@@ -2,7 +2,9 @@ package adminapi
 
 import (
 	"encoding/json"
+	"io"
 	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 
@@ -108,15 +110,20 @@ func TestClientOptionsFetchSTUN(t *testing.T) {
 	})
 	wantErr(t, "invalid scheme", code, 400, m, "validation_failed")
 
-	// Valid POST with empty body (uses default list and fallback)
+	// Hermetic list source (no internet). Its candidates point at loopback and
+	// private addresses: they are refused by the SSRF guard, never probed.
+	src := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = io.WriteString(w, "# list\n127.0.0.1:3478\n10.0.0.1\n[::1]:3478\n")
+	}))
+	t.Cleanup(src.Close)
 	code, m, _ = admin.do(http.MethodPost, "/server/client-options/fetch-stun", map[string]any{
-		"limit": 3,
+		"source_url": src.URL, "limit": 3,
 	})
 	want(t, "admin fetch-stun", code, 200, m)
-	if _, ok := m["source"].(string); !ok {
-		t.Fatalf("expected source string, got %v", m)
+	if m["source"] != src.URL || m["fetched_count"] != float64(3) || m["working_count"] != float64(0) {
+		t.Fatalf("fetch-stun: %v", m)
 	}
-	if _, ok := m["items"].([]any); !ok {
-		t.Fatalf("expected items array, got %v", m)
+	if items, ok := m["items"].([]any); !ok || len(items) != 0 {
+		t.Fatalf("expected no working items, got %v", m)
 	}
 }

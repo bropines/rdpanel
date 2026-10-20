@@ -1,7 +1,9 @@
 package aclpolicy
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"sort"
@@ -28,6 +30,9 @@ type CompiledPolicy struct {
 }
 
 // Export serializes the database's current roles and ACLs into a clean, human-readable HuJSON string with comments.
+// Every selector names its target the way compile resolves it (devices by
+// RustDesk id); a rule whose target cannot be named fails the export rather
+// than being written as "*", which would widen it on re-import.
 func (s *Service) Export(ctx context.Context) (string, error) {
 	roles, err := s.store.ControlRoles.List(ctx)
 	if err != nil {
@@ -50,9 +55,9 @@ func (s *Service) Export(ctx context.Context) (string, error) {
 	sb.WriteString("  \"roles\": {\n")
 	for i, r := range roles {
 		isLastRole := i == len(roles)-1
-		sb.WriteString(fmt.Sprintf("    %q: {\n", r.Name))
+		sb.WriteString(fmt.Sprintf("    %s: {\n", jsonString(r.Name)))
 		if r.Note != "" {
-			sb.WriteString(fmt.Sprintf("      \"note\": %q,\n", r.Note))
+			sb.WriteString(fmt.Sprintf("      \"note\": %s,\n", jsonString(r.Note)))
 		}
 		sb.WriteString(fmt.Sprintf("      \"allow_keyboard_mouse\": %t,\n", r.AllowKeyboardMouse))
 		sb.WriteString(fmt.Sprintf("      \"allow_clipboard\": %t,\n", r.AllowClipboard))
@@ -74,38 +79,24 @@ func (s *Service) Export(ctx context.Context) (string, error) {
 	sb.WriteString("  // Connection Access Rules evaluated by priority order.\n")
 	sb.WriteString("  \"acls\": [\n")
 	for i, a := range acls {
+		src, dst, err := exportSelectors(a)
+		if err != nil {
+			return "", err
+		}
 		isLastRule := i == len(acls)-1
 		sb.WriteString("    {\n")
-		sb.WriteString(fmt.Sprintf("      \"name\": %q,\n", a.Name))
-		sb.WriteString(fmt.Sprintf("      \"action\": %q,\n", a.Action))
+		sb.WriteString(fmt.Sprintf("      \"name\": %s,\n", jsonString(a.Name)))
+		sb.WriteString(fmt.Sprintf("      \"action\": %s,\n", jsonString(string(a.Action))))
 		if a.Note != "" {
-			sb.WriteString(fmt.Sprintf("      \"note\": %q,\n", a.Note))
+			sb.WriteString(fmt.Sprintf("      \"note\": %s,\n", jsonString(a.Note)))
 		}
-
-		// src
-		var srcStr string
-		if a.UserID != nil && a.UserName != "" {
-			srcStr = fmt.Sprintf("[\"user:%s\"]", a.UserName)
-		} else if a.UserGroupID != nil && a.UserGroupName != "" {
-			srcStr = fmt.Sprintf("[\"group:%s\"]", a.UserGroupName)
-		} else {
-			srcStr = "[\"*\"]"
-		}
-		sb.WriteString(fmt.Sprintf("      \"src\": %s,\n", srcStr))
-
-		// dst
-		var dstStr string
-		if a.DeviceID != nil && a.DeviceName != "" {
-			dstStr = fmt.Sprintf("[\"device:%s\"]", a.DeviceName)
-		} else if a.DeviceGroupID != nil && a.DeviceGroupName != "" {
-			dstStr = fmt.Sprintf("[\"device_group:%s\"]", a.DeviceGroupName)
-		} else {
-			dstStr = "[\"*\"]"
-		}
-		sb.WriteString(fmt.Sprintf("      \"dst\": %s,\n", dstStr))
-
-		if a.ControlRoleName != "" {
-			sb.WriteString(fmt.Sprintf("      \"role\": %q,\n", a.ControlRoleName))
+		sb.WriteString(fmt.Sprintf("      \"src\": [%s],\n", jsonString(src)))
+		sb.WriteString(fmt.Sprintf("      \"dst\": [%s],\n", jsonString(dst)))
+		if a.ControlRoleID != nil {
+			if a.ControlRoleName == "" {
+				return "", fmt.Errorf("rule %q: control role %d not found", a.Name, *a.ControlRoleID)
+			}
+			sb.WriteString(fmt.Sprintf("      \"role\": %s,\n", jsonString(a.ControlRoleName)))
 		}
 		sb.WriteString(fmt.Sprintf("      \"priority\": %d,\n", a.Priority))
 		sb.WriteString(fmt.Sprintf("      \"enabled\": %t\n", a.Enabled))
@@ -124,6 +115,49 @@ func (s *Service) Export(ctx context.Context) (string, error) {
 	sb.WriteString("}\n")
 
 	return sb.String(), nil
+}
+
+// exportSelectors returns the src and dst selectors of a stored rule, the
+// way compile resolves them back.
+func exportSelectors(a *store.ConnectionACL) (src, dst string, err error) {
+	switch {
+	case a.UserID != nil:
+		if a.UserName == "" {
+			return "", "", fmt.Errorf("rule %q: user %d not found", a.Name, *a.UserID)
+		}
+		src = "user:" + a.UserName
+	case a.UserGroupID != nil:
+		if a.UserGroupName == "" {
+			return "", "", fmt.Errorf("rule %q: user group %d not found", a.Name, *a.UserGroupID)
+		}
+		src = "group:" + a.UserGroupName
+	default:
+		src = "*"
+	}
+	switch {
+	case a.DeviceID != nil:
+		if a.DeviceRustdeskID == "" {
+			return "", "", fmt.Errorf("rule %q: device %d not found", a.Name, *a.DeviceID)
+		}
+		dst = "device:" + a.DeviceRustdeskID
+	case a.DeviceGroupID != nil:
+		if a.DeviceGroupName == "" {
+			return "", "", fmt.Errorf("rule %q: device group %d not found", a.Name, *a.DeviceGroupID)
+		}
+		dst = "device_group:" + a.DeviceGroupName
+	default:
+		dst = "*"
+	}
+	return src, dst, nil
+}
+
+// jsonString quotes v as a JSON string (fmt's %q is Go syntax, not JSON).
+func jsonString(v string) string {
+	var b bytes.Buffer
+	enc := json.NewEncoder(&b)
+	enc.SetEscapeHTML(false)
+	_ = enc.Encode(v)
+	return strings.TrimSuffix(b.String(), "\n")
 }
 
 // ValidateAndTest parses HuJSON, resolves names, checks syntax, and executes the in-document tests.
@@ -190,12 +224,15 @@ func (s *Service) Apply(ctx context.Context, raw []byte) (*ValidationResult, err
 			return fmt.Errorf("list existing roles: %w", err)
 		}
 		existingByName := make(map[string]*store.ControlRole, len(existingRoles))
+		// Rules may name roles that exist but are not in the document (compile
+		// accepts them); those roles are kept below.
+		roleNameToID := make(map[string]int64, len(existingRoles)+len(compiled.Roles))
 		for _, er := range existingRoles {
 			existingByName[strings.ToLower(er.Name)] = er
+			roleNameToID[strings.ToLower(er.Name)] = er.ID
 		}
 
 		// 3. Upsert / synchronize roles from document
-		roleNameToID := make(map[string]int64, len(compiled.Roles))
 		docRoleNames := make(map[string]bool, len(compiled.Roles))
 
 		for _, cr := range compiled.Roles {
@@ -224,23 +261,30 @@ func (s *Service) Apply(ctx context.Context, raw []byte) (*ValidationResult, err
 			}
 		}
 
-		// Delete unreferenced roles that are no longer in the document (and not default)
-		for _, er := range existingRoles {
-			if !docRoleNames[strings.ToLower(er.Name)] && !er.IsDefault {
-				_ = tx.ControlRoles.Delete(ctx, er.ID)
-			}
-		}
-
-		// 4. Insert new ACL rules
+		// 4. Insert new ACL rules. A named role must resolve: never fall back
+		// to the default role silently.
 		for _, a := range compiled.ACLs {
-			// Resolve role ID from newly created/updated roles if it was named
 			if a.ControlRoleName != "" {
-				if id, ok := roleNameToID[strings.ToLower(a.ControlRoleName)]; ok {
-					a.ControlRoleID = &id
+				id, ok := roleNameToID[strings.ToLower(a.ControlRoleName)]
+				if !ok {
+					return fmt.Errorf("rule %q: unknown role %q", a.Name, a.ControlRoleName)
 				}
+				a.ControlRoleID = &id
 			}
 			if err := tx.ConnectionACLs.Create(ctx, a); err != nil {
 				return fmt.Errorf("create acl rule %q: %w", a.Name, err)
+			}
+		}
+
+		// 5. Delete roles no longer in the document, unless they are the
+		// default or still referenced by a rule.
+		for _, er := range existingRoles {
+			if docRoleNames[strings.ToLower(er.Name)] {
+				continue
+			}
+			err := tx.ControlRoles.Delete(ctx, er.ID)
+			if err != nil && !errors.Is(err, store.ErrRoleInUse) && !errors.Is(err, store.ErrInvalid) {
+				return fmt.Errorf("delete role %q: %w", er.Name, err)
 			}
 		}
 
@@ -439,8 +483,9 @@ func (s *Service) compile(ctx context.Context, doc *Document) (*CompiledPolicy, 
 		_ = idx
 	}
 
-	// Sort ACL rules by priority ASC
-	sort.Slice(compiledACLs, func(i, j int) bool {
+	// Sort ACL rules by priority ASC, keeping the document order on ties
+	// (the first matching rule decides).
+	sort.SliceStable(compiledACLs, func(i, j int) bool {
 		return compiledACLs[i].Priority < compiledACLs[j].Priority
 	})
 
@@ -460,13 +505,21 @@ func (s *Service) runTests(ctx context.Context, pol *CompiledPolicy, tests []Tes
 	var results []TestResult
 	var testErrors []string
 
-	// Build in-memory lookup for simulation
+	// Build in-memory lookup for simulation: the document's roles, and the
+	// existing roles rules may still name (Apply keeps those).
 	roleByName := make(map[string]*store.ControlRole)
 	var defaultRole *store.ControlRole
 	for _, r := range pol.Roles {
 		roleByName[strings.ToLower(r.Name)] = r
 		if r.IsDefault {
 			defaultRole = r
+		}
+	}
+	if dbRoles, err := s.store.ControlRoles.List(ctx); err == nil {
+		for _, r := range dbRoles {
+			if _, ok := roleByName[strings.ToLower(r.Name)]; !ok {
+				roleByName[strings.ToLower(r.Name)] = r
+			}
 		}
 	}
 	if defaultRole == nil {
@@ -508,8 +561,15 @@ func (s *Service) runTests(ctx context.Context, pol *CompiledPolicy, tests []Tes
 			continue
 		}
 
-		// Evaluate in-memory
-		actualDecision, actualRole := evaluateInMemory(user, dev, pol.ACLs, roleByName, defaultRole)
+		// Evaluate in-memory, with the same decision as connections.
+		uacl, err := s.store.ConnectionACLs.ForUser(ctx, user.ID)
+		if err != nil {
+			errMsg := fmt.Sprintf("test #%d: %v", idx+1, err)
+			results = append(results, TestResult{Test: tc, Passed: false, Error: errMsg})
+			testErrors = append(testErrors, errMsg)
+			continue
+		}
+		actualDecision, actualRole := evaluateInMemory(uacl.Subject(dev), pol.ACLs, roleByName, defaultRole)
 
 		expectedAction := strings.ToLower(strings.TrimSpace(tc.Expect))
 		passed := true
@@ -546,80 +606,27 @@ func (s *Service) runTests(ctx context.Context, pol *CompiledPolicy, tests []Tes
 	return results, testErrors
 }
 
+// evaluateInMemory decides subj under the compiled rules and returns the
+// decision and the effective role name.
 func evaluateInMemory(
-	u *store.User,
-	d *store.Device,
+	subj store.ACLSubject,
 	acls []*store.ConnectionACL,
 	rolesByName map[string]*store.ControlRole,
 	defaultRole *store.ControlRole,
 ) (string, string) {
-	isOwner := d.OwnerUserID != nil && *d.OwnerUserID == u.ID
-
-	// Filter active
-	var active []*store.ConnectionACL
-	for _, a := range acls {
-		if a.Enabled {
-			active = append(active, a)
+	dec, rule := store.DecideACL(acls, subj)
+	if dec == store.ACLDecisionDeny {
+		return string(dec), ""
+	}
+	if rule != nil && rule.ControlRoleName != "" {
+		if r, ok := rolesByName[strings.ToLower(rule.ControlRoleName)]; ok {
+			return string(dec), r.Name
 		}
 	}
-
-	getRoleName := func(name string) string {
-		if name != "" {
-			if r, ok := rolesByName[strings.ToLower(name)]; ok {
-				return r.Name
-			}
-		}
-		if defaultRole != nil {
-			return defaultRole.Name
-		}
-		return ""
+	if defaultRole != nil {
+		return string(dec), defaultRole.Name
 	}
-
-	if len(active) == 0 {
-		if isOwner {
-			return "owner", getRoleName("")
-		}
-		return "no_rules", getRoleName("")
-	}
-
-	for _, a := range active {
-		// User match
-		userMatch := false
-		if a.UserID == nil && a.UserGroupID == nil {
-			userMatch = true
-		} else if a.UserID != nil && *a.UserID == u.ID {
-			userMatch = true
-		} else if a.UserGroupID != nil && u.UserGroupID != nil && *a.UserGroupID == *u.UserGroupID {
-			userMatch = true
-		}
-		if !userMatch {
-			continue
-		}
-
-		// Device match
-		deviceMatch := false
-		if a.DeviceID == nil && a.DeviceGroupID == nil {
-			deviceMatch = true
-		} else if a.DeviceID != nil && *a.DeviceID == d.ID {
-			deviceMatch = true
-		} else if a.DeviceGroupID != nil && d.DeviceGroupID != nil && *a.DeviceGroupID == *d.DeviceGroupID {
-			deviceMatch = true
-		}
-		if !deviceMatch {
-			continue
-		}
-
-		// Match found!
-		if a.Action == "deny" {
-			return "deny", ""
-		}
-		return "allow", getRoleName(a.ControlRoleName)
-	}
-
-	if isOwner {
-		return "owner", getRoleName("")
-	}
-	return "deny", ""
+	return string(dec), ""
 }
 
 func parseSelector(s string) (selectorType string, value string) {

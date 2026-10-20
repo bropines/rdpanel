@@ -178,6 +178,30 @@ func TestEnvNames(t *testing.T) {
 	}
 }
 
+func TestFederationConfig(t *testing.T) {
+	cfg, err := Load(env(nil))
+	if err != nil || cfg.Federation.Enabled {
+		t.Fatalf("federation must default to off: %+v %v", cfg.Federation, err)
+	}
+	for _, bad := range []map[string]string{
+		{"RDPANEL_FEDERATION_ENABLED": "true"},
+		{"RDPANEL_FEDERATION_ENABLED": "true", "RDPANEL_FEDERATION_TOKEN": "short"},
+		{"RDPANEL_FEDERATION_ENABLED": "true", "RDPANEL_FEDERATION_TOKEN": " padded-token-0123456789 "},
+	} {
+		if _, err := Load(env(bad)); err == nil || !strings.Contains(err.Error(), "federation.token") {
+			t.Errorf("%v: want a federation.token error, got %v", bad, err)
+		}
+	}
+	const tok = "fed-token-0123456789abcdef"
+	cfg, err = Load(env(map[string]string{"RDPANEL_FEDERATION_ENABLED": "true", "RDPANEL_FEDERATION_TOKEN": tok}))
+	if err != nil || !cfg.Federation.Enabled || cfg.Federation.Token.Reveal() != tok {
+		t.Fatalf("enabled: %+v %v", cfg.Federation, err)
+	}
+	if out, _ := cfg.Redacted(); strings.Contains(string(out), tok) {
+		t.Fatalf("federation token printed:\n%s", out)
+	}
+}
+
 func TestUpdateCheck(t *testing.T) {
 	cfg, err := Load(env(nil))
 	if err != nil {

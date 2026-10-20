@@ -224,3 +224,85 @@ func TestHubSupersedeAndRevoke(t *testing.T) {
 		t.Errorf("actor %q", actor)
 	}
 }
+
+// TestHubLiveStatsExpire: an agent's last status stops counting as load (auto
+// weights) and traffic (sampling) once it disconnects or goes silent.
+func TestHubLiveStatsExpire(t *testing.T) {
+	f := newHub(t)
+	ctx := context.Background()
+	trafficBytes := func() int64 {
+		samples, err := f.svc.Traffic(ctx, f.id, f.clk.now().Add(-24*time.Hour))
+		if err != nil {
+			t.Fatal(err)
+		}
+		var n int64
+		for _, s := range samples {
+			n += s.Bytes
+		}
+		return n
+	}
+	waitFor := func(what string, cond func() bool) {
+		t.Helper()
+		for deadline := time.Now().Add(5 * time.Second); !cond(); {
+			if time.Now().After(deadline) {
+				t.Fatalf("timed out waiting for %s", what)
+			}
+			time.Sleep(5 * time.Millisecond)
+		}
+	}
+	report := func(ws *websocket.Conn) {
+		t.Helper()
+		st := agentproto.Status{Usage: agentproto.UsageSummary{RelaysActive: 7}, Host: agentproto.HostStatus{RxBps: 8e6, TxBps: 8e6}}
+		env, _ := agentproto.NewEnvelope(agentproto.TypeStatus, "", st)
+		if err := wsjson.Write(ctx, ws, env); err != nil {
+			t.Fatal(err)
+		}
+		waitFor("status", func() bool { return f.svc.getActiveSessionsMap()[f.id] == 7 })
+	}
+	connect := func() *websocket.Conn {
+		t.Helper()
+		ws, ch := f.dial(t)
+		if typ, _ := answer(t, ws, agentproto.Sign(f.key, ch.Nonce, f.id, f.clk.now())); typ != agentproto.TypeWelcome {
+			t.Fatalf("auth: %q", typ)
+		}
+		return ws
+	}
+
+	ws := connect()
+	report(ws)
+	f.svc.Pass(ctx, false) // first sample only initialises the traffic state
+	f.clk.add(10 * time.Second)
+	f.svc.Pass(ctx, false)
+	live := trafficBytes()
+	if live == 0 {
+		t.Fatal("no traffic recorded from a live agent")
+	}
+
+	// Disconnect: the last status is dropped at once.
+	ws.Close(websocket.StatusNormalClosure, "")
+	waitFor("disconnect", func() bool { return !f.svc.Connected(f.id) })
+	if n, ok := f.svc.getActiveSessionsMap()[f.id]; ok && n != 0 {
+		t.Fatalf("disconnected agent still counts %d sessions", n)
+	}
+	for range 3 {
+		f.clk.add(10 * time.Second)
+		f.svc.Pass(ctx, false)
+	}
+	if got := trafficBytes(); got != live {
+		t.Fatalf("traffic grew from %d to %d after the agent disconnected", live, got)
+	}
+
+	// Connected but silent past liveStatsMaxAge: stale, ignored as well.
+	ws = connect()
+	report(ws)
+	f.svc.Pass(ctx, false)
+	f.clk.add(liveStatsMaxAge + time.Second)
+	if n := f.svc.getActiveSessionsMap()[f.id]; n != 0 {
+		t.Fatalf("stale status still counts %d sessions", n)
+	}
+	before := trafficBytes()
+	f.svc.Pass(ctx, false)
+	if got := trafficBytes(); got != before {
+		t.Fatalf("traffic grew from %d to %d on a stale status", before, got)
+	}
+}
