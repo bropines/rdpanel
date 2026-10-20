@@ -1,9 +1,23 @@
 name: ci
 
 on:
+  # Prose and other workflows only. The Helm chart stays: a Go test compares
+  # its dashboards and alerts with deploy/monitoring.
   push:
     branches: [main]
+    paths-ignore:
+      - '**/*.md'
+      - .github/workflows/helm.yml
+      - .github/workflows/image.yml
+      - .gitguardian.yaml
+      - LICENSE
   pull_request:
+    paths-ignore:
+      - '**/*.md'
+      - .github/workflows/helm.yml
+      - .github/workflows/image.yml
+      - .gitguardian.yaml
+      - LICENSE
 
 permissions:
   contents: read
