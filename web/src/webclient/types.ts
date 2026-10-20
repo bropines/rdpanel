@@ -56,6 +56,7 @@ export type WebClientEvent =
   | { type: 'cursor'; dataUrl?: string; hotx: number; hoty: number }
   | { type: 'clipboard'; text: string }
   | { type: 'need_password' }
+  | { type: 'auth_error'; message: string }
   | { type: 'error'; message: string };
 
 export type WebClientEventListener = (event: WebClientEvent) => void;

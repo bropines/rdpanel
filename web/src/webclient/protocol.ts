@@ -265,7 +265,9 @@ export function encodePublicKeyMessage(asymmetricVal: Uint8Array, symmetricVal: 
 export function encodeLoginRequest(username: string, passwordHash: Uint8Array, myId: string, myName: string): Uint8Array {
   const wReq = new ProtoWriter();
   wReq.writeString(1, username);
-  wReq.writeBytes(2, passwordHash);
+  if (passwordHash && passwordHash.length > 0) {
+    wReq.writeBytes(2, passwordHash);
+  }
   wReq.writeString(4, myId);
   wReq.writeString(5, myName);
   wReq.writeString(11, '1.4.0');

@@ -5,9 +5,12 @@ import {
   Cast,
   Clipboard,
   Computer,
+  Copy,
   Eye,
   EyeOff,
+  Key,
   KeyRound,
+  Loader2,
   Maximize2,
   Minimize2,
   PowerOff,
@@ -56,6 +59,26 @@ function saveStoredSettings(settings: CustomServerSettings) {
   }
 }
 
+function getSavedPassword(id: string): string {
+  try {
+    return localStorage.getItem(`rdpanel_pwd_${id}`) || '';
+  } catch {
+    return '';
+  }
+}
+
+function setSavedPassword(id: string, pwd: string) {
+  try {
+    if (pwd) {
+      localStorage.setItem(`rdpanel_pwd_${id}`, pwd);
+    } else {
+      localStorage.removeItem(`rdpanel_pwd_${id}`);
+    }
+  } catch {
+    // ignore
+  }
+}
+
 export function WebClientPage() {
   const { t } = useTranslation();
   const search = useSearch({ strict: false }) as { id?: string | number; pwd?: string };
@@ -77,12 +100,16 @@ export function WebClientPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [passwordDialogOpen, setPasswordDialogOpen] = useState(false);
   const [promptPassword, setPromptPassword] = useState('');
+  const [rememberPassword, setRememberPassword] = useState(true);
+  const [authErrorMessage, setAuthErrorMessage] = useState('');
+  const [savedPwdState, setSavedPwdState] = useState(() => getSavedPassword(initialPeerId));
 
   const [serverSettings, setServerSettings] = useState<CustomServerSettings>(loadStoredSettings);
   const [settingsDialogOpen, setSettingsDialogOpen] = useState(false);
   const [editIdServer, setEditIdServer] = useState('');
   const [editRelayServer, setEditRelayServer] = useState('');
   const [editServerKey, setEditServerKey] = useState('');
+  const [quickConfigInput, setQuickConfigInput] = useState('');
 
   const [state, setState] = useState<SessionState>('idle');
   const [stateDetail, setStateDetail] = useState<string>('');
@@ -146,11 +173,14 @@ export function WebClientPage() {
     }
 
     const { wsIdUrl, wsRelayUrl, relayServer, serverKeyB64 } = getWsUrls();
+    const savedPwd = getSavedPassword(targetId);
+    setSavedPwdState(savedPwd);
+    const effectivePwd = pwd || password || savedPwd || undefined;
 
     const session = new WebClientSession(
       {
         peerId: targetId,
-        password: pwd || password,
+        password: effectivePwd,
         wsIdUrl,
         wsRelayUrl,
         relayServer,
@@ -167,6 +197,10 @@ export function WebClientPage() {
       switch (event.type) {
         case 'state':
           setState(event.state);
+          if (event.state === 'streaming') {
+            setPasswordDialogOpen(false);
+            setAuthErrorMessage('');
+          }
           if (event.detail) setStateDetail(event.detail);
           break;
         case 'stats':
@@ -177,6 +211,10 @@ export function WebClientPage() {
           break;
         case 'need_password':
           setPasswordDialogOpen(true);
+          break;
+        case 'auth_error':
+          setAuthErrorMessage(event.message);
+          toast.error(event.message);
           break;
         case 'clipboard':
           toast.info(t('webclient.clipboardReceived', 'Clipboard updated'));
@@ -194,6 +232,7 @@ export function WebClientPage() {
     const rawId = String(search.id ?? getUrlParam('id') ?? '').trim();
     if (rawId) {
       setPeerId((current) => (current !== rawId ? rawId : current));
+      setSavedPwdState(getSavedPassword(rawId));
     }
   }, [search.id]);
 
@@ -217,10 +256,88 @@ export function WebClientPage() {
   // Handle password submission
   const handlePasswordSubmit = () => {
     if (sessionRef.current && promptPassword) {
+      if (rememberPassword) {
+        setSavedPassword(peerId, promptPassword);
+        setSavedPwdState(promptPassword);
+      } else {
+        setSavedPassword(peerId, '');
+        setSavedPwdState('');
+      }
       sessionRef.current.submitPassword(promptPassword);
       setPassword(promptPassword);
       setPasswordDialogOpen(false);
       setPromptPassword('');
+      setAuthErrorMessage('');
+    }
+  };
+
+  const handleApplyQuickConfig = () => {
+    if (!quickConfigInput.trim()) return;
+    let raw = quickConfigInput.trim();
+    if (raw.startsWith('rustdesk://')) {
+      raw = raw.slice('rustdesk://'.length);
+    }
+    if (raw.includes('config=')) {
+      const match = /[?&]config=([^&]+)/.exec(raw);
+      if (match && match[1]) raw = decodeURIComponent(match[1]);
+    }
+
+    let parsed: Record<string, unknown> | null = null;
+    try {
+      const decoded = atob(raw);
+      parsed = JSON.parse(decoded);
+    } catch {
+      try {
+        parsed = JSON.parse(raw);
+      } catch {
+        try {
+          const params = new URLSearchParams(raw);
+          const obj: Record<string, string> = {};
+          params.forEach((v, k) => { obj[k] = v; });
+          if (Object.keys(obj).length > 0) parsed = obj;
+        } catch {
+          // ignore
+        }
+      }
+    }
+
+    if (parsed && typeof parsed === 'object') {
+      const host = (parsed.host || parsed.id_server || parsed.idServer || parsed.rendezvous || '') as string;
+      const relay = (parsed.relay || parsed.relay_server || parsed.relayServer || '') as string;
+      const key = (parsed.key || parsed.public_key || parsed.serverKey || '') as string;
+
+      if (host || relay || key) {
+        if (host) setEditIdServer(host);
+        if (relay) setEditRelayServer(relay);
+        if (key) setEditServerKey(key);
+        setQuickConfigInput('');
+        toast.success(t('webclient.configImported', 'Configuration applied from quick config'));
+        return;
+      }
+    }
+
+    toast.error(t('webclient.invalidQuickConfig', 'Could not parse configuration string'));
+  };
+
+  const handleExportConfig = () => {
+    const effectiveHost = editIdServer || serverSettings.idServer || (typeof window !== 'undefined' ? window.location.host : '');
+    const effectiveRelay = editRelayServer || serverSettings.relayServer || serverConfigQuery.data?.relay_server || '';
+    const effectiveKey = editServerKey || serverSettings.serverKey || serverConfigQuery.data?.public_key || '';
+
+    const cfgObj = {
+      host: effectiveHost,
+      relay: effectiveRelay,
+      key: effectiveKey,
+    };
+    const b64 = btoa(JSON.stringify(cfgObj));
+    if (navigator.clipboard?.writeText) {
+      void navigator.clipboard.writeText(b64).then(() => {
+        toast.success(t('webclient.configExported', 'Configuration copied to clipboard'));
+      }).catch(() => {
+        toast.info(b64);
+      });
+    } else {
+      toast.info(b64);
     }
   };
 
@@ -321,6 +438,23 @@ export function WebClientPage() {
               ? `${stats?.fps ?? 0} FPS • ${resolution.width}x${resolution.height}`
               : t(`webclient.state.${state}`, state)}
           </Badge>
+
+          {peerId && savedPwdState && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-6 px-2 text-[11px] text-neutral-300 hover:text-white hover:bg-neutral-800 border border-neutral-700/60"
+              onClick={() => {
+                setSavedPassword(peerId, '');
+                setSavedPwdState('');
+                toast.success(t('webclient.passwordCleared', 'Saved password removed'));
+              }}
+              title={t('webclient.clearSavedPassword', 'Forget saved password for this device')}
+            >
+              <Key className="h-3 w-3 text-primary mr-1" />
+              <span className="hidden sm:inline">{t('webclient.passwordSaved', 'Password saved')}</span>
+            </Button>
+          )}
 
           {stats && state === 'streaming' && (
             <span className="text-xs text-neutral-400 hidden md:inline">
@@ -573,7 +707,10 @@ export function WebClientPage() {
             const btn = e.button === 0 ? 'left' : e.button === 2 ? 'right' : 'middle';
             sessionRef.current?.sendMouseUp(btn, e.clientX, e.clientY);
           }}
-          onWheel={(e) => sessionRef.current?.sendMouseWheel(e.deltaY, e.clientX, e.clientY)}
+          onWheel={(e) => {
+            e.preventDefault();
+            sessionRef.current?.sendMouseWheel(e.deltaX, e.deltaY, e.deltaMode);
+          }}
           onContextMenu={(e) => e.preventDefault()}
         />
       </main>
@@ -590,19 +727,47 @@ export function WebClientPage() {
               {t('webclient.passwordDesc', 'The remote machine requires authentication to start the remote session.')}
             </DialogDescription>
           </DialogHeader>
-          <div className="py-2">
-            <Input
-              type="password"
-              value={promptPassword}
-              onChange={(e) => setPromptPassword(e.target.value)}
-              placeholder={t('common.password', 'Password')}
-              className="bg-neutral-950 border-neutral-800 text-white"
-              autoFocus
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') handlePasswordSubmit();
-              }}
-            />
+
+          <div className="space-y-3 py-2">
+            <div className="flex items-center gap-2.5 p-3 rounded-md bg-neutral-950 border border-neutral-800 text-xs text-neutral-300">
+              <Loader2 className="h-4 w-4 text-primary animate-spin shrink-0" />
+              <span>{t('webclient.waitingForApproval', 'Waiting for confirmation on remote device, or enter password below:')}</span>
+            </div>
+
+            <div className="space-y-1.5">
+              <Input
+                type="password"
+                value={promptPassword}
+                onChange={(e) => {
+                  setPromptPassword(e.target.value);
+                  if (authErrorMessage) setAuthErrorMessage('');
+                }}
+                placeholder={t('webclient.passwordPlaceholder', 'Remote device password')}
+                className="bg-neutral-950 border-neutral-800 text-white font-mono text-sm"
+                autoFocus
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') handlePasswordSubmit();
+                }}
+              />
+              {authErrorMessage && (
+                <p className="text-xs text-destructive">{authErrorMessage}</p>
+              )}
+            </div>
+
+            <div className="flex items-center space-x-2 pt-1">
+              <input
+                type="checkbox"
+                id="remember-pwd"
+                checked={rememberPassword}
+                onChange={(e) => setRememberPassword(e.target.checked)}
+                className="h-4 w-4 rounded border-neutral-700 bg-neutral-950 text-primary accent-primary cursor-pointer"
+              />
+              <label htmlFor="remember-pwd" className="text-xs text-neutral-300 cursor-pointer select-none">
+                {t('webclient.rememberPassword', 'Remember password for this device')}
+              </label>
+            </div>
           </div>
+
           <DialogFooter>
             <Button
               variant="outline"
@@ -671,6 +836,48 @@ export function WebClientPage() {
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-2">
+            {/* Quick Base64 / URL Config Import */}
+            <div className="p-3 rounded-md bg-neutral-950 border border-neutral-800 space-y-2">
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-medium text-neutral-300">
+                  {t('webclient.quickConfigTitle', 'Quick Config (Base64 / URL)')}
+                </label>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="h-6 px-1.5 text-[11px] text-primary hover:text-primary/80"
+                  onClick={handleExportConfig}
+                >
+                  <Copy className="h-3 w-3 mr-1" />
+                  {t('webclient.exportConfig', 'Export Base64')}
+                </Button>
+              </div>
+              <div className="flex gap-2">
+                <Input
+                  value={quickConfigInput}
+                  onChange={(e) => setQuickConfigInput(e.target.value)}
+                  placeholder="eyJob3N0IjoiLi4uIiwia2V5IjoiLi4uIn0="
+                  className="bg-neutral-900 border-neutral-800 text-white font-mono text-xs h-8"
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      handleApplyQuickConfig();
+                    }
+                  }}
+                />
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="secondary"
+                  className="h-8 px-3 text-xs"
+                  onClick={handleApplyQuickConfig}
+                >
+                  {t('webclient.applyQuickConfig', 'Apply')}
+                </Button>
+              </div>
+            </div>
+
             <div>
               <label className="text-xs text-neutral-400 mb-1 block">
                 {t('webclient.idServer', 'ID / Rendezvous Server')}

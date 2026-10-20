@@ -45,6 +45,11 @@ export class WebClientSession {
   private authChallenge = '';
   private pendingPasswordResolve: ((pwd: string) => void) | null = null;
 
+  // Scroll smoothing accumulators
+  private wheelAccumulatorY = 0;
+  private wheelAccumulatorX = 0;
+  private lastWheelTime = 0;
+
   // Remote screen dimensions
   private remoteWidth = 1920;
   private remoteHeight = 1080;
@@ -335,8 +340,19 @@ export class WebClientSession {
 
         switch (msg.type) {
           case 'login_response':
+            if (this.pendingPasswordResolve) {
+              const resolve = this.pendingPasswordResolve;
+              this.pendingPasswordResolve = null;
+              resolve('');
+            }
             if (msg.error) {
-              this.handleError(`Authentication failed: ${msg.error}`);
+              const errLower = msg.error.toLowerCase();
+              if (errLower.includes('wrong') || errLower.includes('password') || errLower.includes('bad password')) {
+                this.emit({ type: 'auth_error', message: msg.error });
+                this.emit({ type: 'need_password' });
+              } else {
+                this.handleError(`Authentication failed: ${msg.error}`);
+              }
             } else {
               this.emit({ type: 'state', state: 'streaming' });
             }
@@ -398,12 +414,30 @@ export class WebClientSession {
 
     let password = this.config.password;
     if (!password) {
+      // Send an empty LoginRequest so remote host triggers incoming connection request (try_start_cm).
+      // This displays the "Accept / Dismiss" dialog to the remote operator immediately!
+      const emptyReq = encodeLoginRequest(
+        this.config.peerId,
+        new Uint8Array(0),
+        this.config.myId || 'web',
+        this.config.myName || 'RD Panel Web',
+      );
+      this.sendEncrypted(emptyReq);
+
       this.emit({ type: 'need_password' });
       password = await new Promise<string>((res) => {
         this.pendingPasswordResolve = res;
       });
+      if (!password) {
+        // Resolved with empty string (e.g. accepted on remote peer or session closed)
+        return;
+      }
     }
 
+    await this.sendLoginWithPassword(password);
+  }
+
+  private async sendLoginWithPassword(password: string): Promise<void> {
     const passHash = await loginPasswordHash(password, this.authSalt, this.authChallenge);
     const loginReq = encodeLoginRequest(
       this.config.peerId,
@@ -420,6 +454,8 @@ export class WebClientSession {
       const resolve = this.pendingPasswordResolve;
       this.pendingPasswordResolve = null;
       resolve(password);
+    } else {
+      void this.sendLoginWithPassword(password);
     }
   }
 
@@ -499,13 +535,56 @@ export class WebClientSession {
     this.sendEncrypted(msg);
   }
 
-  sendMouseWheel(deltaY: number, _clientX: number, _clientY: number): void {
+  sendMouseWheel(deltaX: number, deltaY: number, deltaMode = 0): void {
     if (this.state !== 'streaming') return;
-    // RustDesk: mask = MOUSE_TYPE_WHEEL (3), x = 0, y = wheelDelta (positive/negative scroll delta)
-    const wheelDelta = deltaY > 0 ? -120 : 120;
-    const mask = 3;
-    const msg = encodeMouseEvent(mask, 0, wheelDelta);
-    this.sendEncrypted(msg);
+
+    const now = performance.now();
+    if (now - this.lastWheelTime > 250) {
+      this.wheelAccumulatorY = 0;
+      this.wheelAccumulatorX = 0;
+    }
+    this.lastWheelTime = now;
+
+    let stepsY = 0;
+    let stepsX = 0;
+
+    if (deltaMode === 1) {
+      // DOM_DELTA_LINE: discrete mouse wheel lines (e.g. Firefox or Windows mouse wheel)
+      // Positive deltaY (scroll down) -> negative stepsY (down)
+      stepsY = deltaY > 0 ? -1 : deltaY < 0 ? 1 : 0;
+      stepsX = deltaX > 0 ? -1 : deltaX < 0 ? 1 : 0;
+    } else if (deltaMode === 2) {
+      // DOM_DELTA_PAGE
+      stepsY = deltaY > 0 ? -3 : deltaY < 0 ? 3 : 0;
+      stepsX = deltaX > 0 ? -3 : deltaX < 0 ? 3 : 0;
+    } else {
+      // DOM_DELTA_PIXEL: trackpad, smooth wheel, touch gesture
+      this.wheelAccumulatorY += deltaY;
+      this.wheelAccumulatorX += deltaX;
+
+      const PIXELS_PER_STEP = 45;
+
+      if (Math.abs(this.wheelAccumulatorY) >= PIXELS_PER_STEP) {
+        const count = Math.trunc(this.wheelAccumulatorY / PIXELS_PER_STEP);
+        // Clamp to prevent huge jumps from fast gestures
+        stepsY = -Math.min(5, Math.max(-5, count));
+        this.wheelAccumulatorY -= count * PIXELS_PER_STEP;
+      }
+
+      if (Math.abs(this.wheelAccumulatorX) >= PIXELS_PER_STEP) {
+        const count = Math.trunc(this.wheelAccumulatorX / PIXELS_PER_STEP);
+        stepsX = -Math.min(5, Math.max(-5, count));
+        this.wheelAccumulatorX -= count * PIXELS_PER_STEP;
+      }
+    }
+
+    if (stepsY !== 0 || stepsX !== 0) {
+      // RustDesk protocol: mask = MOUSE_TYPE_WHEEL (3), x = stepsX, y = stepsY
+      // Host side (input_service.rs) on Windows multiplies x and y by WHEEL_DELTA (120)
+      const mask = 3;
+      const msg = encodeMouseEvent(mask, stepsX, stepsY);
+      this.sendEncrypted(msg);
+    }
   }
 
   sendCtrlAltDel(): void {
@@ -556,6 +635,11 @@ export class WebClientSession {
   }
 
   disconnect(): void {
+    if (this.pendingPasswordResolve) {
+      const resolve = this.pendingPasswordResolve;
+      this.pendingPasswordResolve = null;
+      resolve('');
+    }
     if (this.wsId) {
       try {
         this.wsId.close();
