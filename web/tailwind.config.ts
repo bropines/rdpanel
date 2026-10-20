@@ -3,7 +3,8 @@ import animate from "tailwindcss-animate";
 
 export default {
   darkMode: ["class"],
-  content: ["./index.html", "./src/**/*.{ts,tsx}"],
+  // rdweb/react ships Tailwind classes (shadcn theme): include them in the build.
+  content: ["./index.html", "./src/**/*.{ts,tsx}", "./node_modules/rdweb/dist/react/**/*.js"],
   theme: {
     container: { center: true, padding: "1rem", screens: { "2xl": "1400px" } },
     extend: {
