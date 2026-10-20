@@ -113,20 +113,20 @@ curl -fsS -X POST -H "Authorization: Bearer $RDPANEL_TOKEN" -H "Content-Type: ap
 
 Manage all connection ACL rules, roles, and automated test assertions in a single version-controlled HuJSON file:
 
-- **Get current policy:** `GET /api/v1/admin/acl/policy`
-- **Dry-run validation / test:** `POST /api/v1/admin/acl/policy/test`
-- **Atomic update:** `PUT /api/v1/admin/acl/policy`
+- **Get current policy:** `GET /api/v1/admin/acls/policy`
+- **Dry-run validation / test:** `POST /api/v1/admin/acls/policy/test`
+- **Atomic update:** `PUT /api/v1/admin/acls/policy`
 
 ```sh
 # Dry-run validate policy with assertions
 curl -fsS -X POST -H "Authorization: Bearer $RDPANEL_TOKEN" -H "Content-Type: application/json" \
   -d "{\"policy\": $(jq -Rs . < policy.hujson)}" \
-  "$RDPANEL/api/v1/admin/acl/policy/test"
+  "$RDPANEL/api/v1/admin/acls/policy/test"
 
 # Apply policy
 curl -fsS -X PUT -H "Authorization: Bearer $RDPANEL_TOKEN" -H "Content-Type: application/json" \
   -d "{\"policy\": $(jq -Rs . < policy.hujson)}" \
-  "$RDPANEL/api/v1/admin/acl/policy"
+  "$RDPANEL/api/v1/admin/acls/policy"
 ```
 
 Full specification and GitOps workflow guide: [`docs/acl-policy.md`](acl-policy.md).

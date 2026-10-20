@@ -21,6 +21,14 @@ var (
 	ErrUserNotFound       = errors.New("ldap user not found")
 	ErrAmbiguousUser      = errors.New("multiple ldap users match the query")
 	ErrAutoRegisterOff    = errors.New("ldap auto registration is disabled")
+	// ErrLocalAccount means the directory entry maps to a local (non-LDAP)
+	// account. Such accounts are never linked to or authenticated through LDAP,
+	// otherwise a directory entry named e.g. "admin" would take over the local
+	// admin.
+	ErrLocalAccount = errors.New("ldap entry collides with a local account")
+	// ErrInvalidUsername means the directory username does not satisfy the
+	// panel's username rules (store.ValidUsername), so no account is created.
+	ErrInvalidUsername = errors.New("ldap username is not a valid panel username")
 )
 
 // TestRequest configures a test connection and/or lookup attempt.
@@ -115,6 +123,15 @@ func (s *Service) decryptBindPassword(cfg *store.LDAPSettings) (string, error) {
 	return s.aead.OpenString(cfg.BindPasswordEnc, crypto.LDAPBindPasswordAD())
 }
 
+// dialUnbound opens a connection for a bind as the user, without the
+// service-account bind: the dialer would bind BindDN with an empty password,
+// which go-ldap refuses.
+func (s *Service) dialUnbound(cfg *store.LDAPSettings) (Client, error) {
+	c := *cfg
+	c.BindDN = ""
+	return s.dialer(&c, "")
+}
+
 // Authenticate verifies user credentials against LDAP and provisions/updates the local user.
 func (s *Service) Authenticate(ctx context.Context, username, password string) (*store.User, error) {
 	cfg, err := s.store.LDAPSettings.Get(ctx)
@@ -187,7 +204,7 @@ func (s *Service) Authenticate(ctx context.Context, username, password string) (
 	userDN := entry.DN
 
 	// Test user bind on a separate connection
-	userConn, err := s.dialer(cfg, "")
+	userConn, err := s.dialUnbound(cfg)
 	if err != nil {
 		return nil, fmt.Errorf("ldap dial for user bind: %w", err)
 	}
@@ -222,11 +239,13 @@ func (s *Service) Authenticate(ctx context.Context, username, password string) (
 	mappedGroupID := resolveGroupID(groups, cfg.GroupMappings, cfg.DefaultUserGroupID)
 
 	// Upsert user in local database
-	existing, err := s.store.Users.GetByLDAPDN(ctx, userDN)
-	if errors.Is(err, store.ErrNotFound) {
-		existing, err = s.store.Users.GetByUsername(ctx, entryUsername)
+	existing, err := s.linkedUser(ctx, userDN, entryUsername)
+	if errors.Is(err, ErrLocalAccount) {
+		s.logger.Warn("ldap login refused: the directory entry matches a local (non-LDAP) account",
+			"username", entryUsername, "dn", userDN)
+		return nil, ErrLocalAccount
 	}
-	if err != nil && !errors.Is(err, store.ErrNotFound) {
+	if err != nil {
 		return nil, err
 	}
 
@@ -249,6 +268,10 @@ func (s *Service) Authenticate(ctx context.Context, username, password string) (
 	if !cfg.AutoRegister {
 		return nil, ErrAutoRegisterOff
 	}
+	if !store.ValidUsername(entryUsername) {
+		s.logger.Warn("ldap login refused: the directory username is not a valid panel username", "dn", userDN)
+		return nil, ErrInvalidUsername
+	}
 
 	newUser := &store.User{
 		Username:    entryUsername,
@@ -264,6 +287,32 @@ func (s *Service) Authenticate(ctx context.Context, username, password string) (
 		return nil, fmt.Errorf("create ldap user: %w", err)
 	}
 	return newUser, nil
+}
+
+// linkedUser returns the local user an LDAP entry maps to: the user linked to
+// dn, else an LDAP-provisioned user (is_ldap) with that username, else nil. A
+// local account (is_ldap = 0) is never returned: ErrLocalAccount instead.
+func (s *Service) linkedUser(ctx context.Context, dn, username string) (*store.User, error) {
+	u, err := s.store.Users.GetByLDAPDN(ctx, dn)
+	if err == nil {
+		if !u.IsLDAP {
+			return nil, ErrLocalAccount
+		}
+		return u, nil
+	}
+	if !errors.Is(err, store.ErrNotFound) {
+		return nil, err
+	}
+	u, err = s.store.Users.GetByUsername(ctx, username)
+	switch {
+	case errors.Is(err, store.ErrNotFound):
+		return nil, nil
+	case err != nil:
+		return nil, err
+	case !u.IsLDAP:
+		return nil, ErrLocalAccount
+	}
+	return u, nil
 }
 
 // Test checks connectivity, bind credentials, user search and optional user password verification.
@@ -377,7 +426,7 @@ func (s *Service) Test(ctx context.Context, req TestRequest) (*TestResult, error
 	res.MappedGroupID = resolveGroupID(res.Groups, cfg.GroupMappings, cfg.DefaultUserGroupID)
 
 	if req.TestPassword != "" {
-		userConn, err := s.dialer(cfg, "")
+		userConn, err := s.dialUnbound(cfg)
 		if err != nil {
 			res.OK = false
 			res.Message = fmt.Sprintf("Dial for user bind failed: %v", err)
@@ -448,13 +497,15 @@ func (s *Service) Sync(ctx context.Context) (*SyncResult, error) {
 
 	searchReq := ldapv3.NewSearchRequest(
 		searchBase,
-		ldapv3.ScopeWholeSubtree, ldapv3.NeverDerefAliases, 5000, 30, false,
+		ldapv3.ScopeWholeSubtree, ldapv3.NeverDerefAliases, 0, 30, false,
 		syncFilter,
 		attrs,
 		nil,
 	)
 
-	sr, err := conn.Search(searchReq)
+	// Paged: a directory with more users than the server's page/size limit
+	// (1000 on Active Directory) fails an unpaged search.
+	sr, err := conn.SearchWithPaging(searchReq, syncPageSize)
 	if err != nil {
 		errMsg := fmt.Sprintf("search: %v", err)
 		_ = s.store.LDAPSettings.UpdateSyncResult(ctx, s.now(), "error: "+errMsg, 0)
@@ -478,9 +529,15 @@ func (s *Service) Sync(ctx context.Context) (*SyncResult, error) {
 		}
 		mappedGroupID := resolveGroupID(groups, cfg.GroupMappings, cfg.DefaultUserGroupID)
 
-		existing, err := s.store.Users.GetByLDAPDN(ctx, entry.DN)
-		if errors.Is(err, store.ErrNotFound) {
-			existing, _ = s.store.Users.GetByUsername(ctx, username)
+		existing, err := s.linkedUser(ctx, entry.DN, username)
+		if errors.Is(err, ErrLocalAccount) {
+			s.logger.Warn("ldap sync: skipping entry that matches a local (non-LDAP) account",
+				"username", username, "dn", entry.DN)
+			continue
+		}
+		if err != nil {
+			s.logger.Warn("ldap sync: look up local user", "username", username, "err", err)
+			continue
 		}
 
 		if existing != nil {
@@ -493,9 +550,16 @@ func (s *Service) Sync(ctx context.Context) (*SyncResult, error) {
 			if mappedGroupID != nil {
 				existing.UserGroupID = mappedGroupID
 			}
-			_ = s.store.Users.Update(ctx, existing)
+			if err := s.store.Users.Update(ctx, existing); err != nil {
+				s.logger.Warn("ldap sync: update user", "username", username, "err", err)
+				continue
+			}
 			count++
 		} else if cfg.AutoRegister {
+			if !store.ValidUsername(username) {
+				s.logger.Warn("ldap sync: skipping entry whose username is not a valid panel username", "dn", entry.DN)
+				continue
+			}
 			newUser := &store.User{
 				Username:    username,
 				DisplayName: displayName,
@@ -506,9 +570,11 @@ func (s *Service) Sync(ctx context.Context) (*SyncResult, error) {
 				LDAPDN:      entry.DN,
 				UserGroupID: mappedGroupID,
 			}
-			if err := s.store.Users.Create(ctx, newUser); err == nil {
-				count++
+			if err := s.store.Users.Create(ctx, newUser); err != nil {
+				s.logger.Warn("ldap sync: create user", "username", username, "err", err)
+				continue
 			}
+			count++
 		}
 	}
 

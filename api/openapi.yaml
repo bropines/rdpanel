@@ -31,7 +31,7 @@ info:
     `totp_enrollment_required`, `reauth_failed`, `oidc_not_configured`,
     `provider_unavailable`, `last_admin`, `server_unavailable`, `passkey_failed`,
     `passkeys_unavailable`, `no_passkeys`, `passkey_limit`, `reauth_required`,
-    `insufficient_scope`, `cookie_session_required`, `api_token_limit`).
+    `insufficient_scope`, `cookie_session_required`, `api_token_limit`, `role_in_use`).
 
     **Route guards.** Resource routes require a full session; while an admin-forced
     2FA enrolment is pending only `/auth/*` and `/me/security/*` are reachable
@@ -1893,6 +1893,10 @@ paths:
       tags: [control-roles]
       operationId: deleteControlRole
       summary: Delete control role.
+      description: |
+        The default role cannot be deleted (400). A role referenced by any connection rule,
+        enabled or not, cannot be deleted either (409 `role_in_use`): its rules would
+        silently fall back to the default role. Change or delete those rules first.
       parameters:
         - $ref: "#/components/parameters/CsrfHeader"
       responses:
@@ -1901,6 +1905,11 @@ paths:
         "401": { $ref: "#/components/responses/Unauthorized" }
         "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/NotFound" }
+        "409":
+          description: The role is referenced by connection rules (`role_in_use`).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
   /control-roles/{role_id}/default:
     parameters:
       - $ref: "#/components/parameters/RoleId"
@@ -3773,6 +3782,12 @@ paths:
       tags: [settings]
       operationId: testLDAPSettings
       summary: Test LDAP connection, bind credentials, user search or user password.
+      description: |
+        `settings` overrides the saved configuration for this test only. The saved bind
+        password is used only with the saved `server_url` (scheme and host:port), `bind_dn`
+        and TLS settings: when `settings` changes any of them (or turns `start_tls` off /
+        `insecure_skip_verify` on) the request must carry `bind_password`, otherwise 400
+        `validation_failed` (field `bind_password`).
       parameters:
         - $ref: "#/components/parameters/CsrfHeader"
       requestBody:
@@ -4265,7 +4280,9 @@ components:
         bind_password: { type: string, description: "Omit to keep; empty string clears; plaintext sealed with AEAD." }
         base_dn: { type: string }
         user_search_base: { type: string }
-        user_filter: { type: string }
+        user_filter:
+          type: string
+          description: LDAP filter for the login search; `%s` (at most once, 400 otherwise) is replaced by the escaped username.
         username_attribute: { type: string }
         display_name_attribute: { type: string }
         email_attribute: { type: string }

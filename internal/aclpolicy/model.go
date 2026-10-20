@@ -26,7 +26,7 @@ type ACLRuleSpec struct {
 	Name     string   `json:"name"`
 	Action   string   `json:"action"` // "allow" or "deny"
 	Src      []string `json:"src"`    // user:<username>, group:<name>, *
-	Dst      []string `json:"dst"`    // device:<rustdesk_id|alias>, device_group:<name>, *
+	Dst      []string `json:"dst"`    // device:<rustdesk_id>, device_group:<name>, *
 	Role     string   `json:"role,omitempty"`
 	Priority int      `json:"priority,omitempty"`
 	Enabled  *bool    `json:"enabled,omitempty"`

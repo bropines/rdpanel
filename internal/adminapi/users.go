@@ -5,7 +5,6 @@ import (
 	"errors"
 	"net/http"
 	"net/mail"
-	"regexp"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -21,8 +20,6 @@ var (
 	errSelf      = errors.New("cannot delete yourself")
 	errNoEmail   = errors.New("user has no e-mail address")
 )
-
-var usernameRe = regexp.MustCompile(`^[A-Za-z0-9._@-]{1,128}$`)
 
 // userListItemDTO is components.schemas.UserListItem.
 type userListItemDTO struct {
@@ -112,7 +109,7 @@ func (a *resources) validateUser(ctx context.Context, in *userInput, create bool
 	f := map[string]string{}
 	if in.Username != nil {
 		*in.Username = strings.TrimSpace(*in.Username)
-		if !usernameRe.MatchString(*in.Username) {
+		if !store.ValidUsername(*in.Username) {
 			f["username"] = "1-128 characters: letters, digits, '.', '_', '@' or '-'"
 		}
 	} else if create {
