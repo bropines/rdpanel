@@ -42,7 +42,7 @@ func newLegacyFile(t *testing.T) string {
 }
 
 func TestCLIMigrateLegacy(t *testing.T) {
-	env, dir := testEnv(t, nil)
+	env, dir := testEnv(t, map[string]string{"RDPANEL_DB_TYPE": "sqlite"}) // the importer is SQLite-only
 	src := newLegacyFile(t)
 	report := filepath.Join(dir, "report.json")
 	ctx := context.Background()

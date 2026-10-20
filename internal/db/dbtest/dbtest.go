@@ -74,7 +74,34 @@ func OpenSQLite(t testing.TB, path string) *db.DB {
 	return d
 }
 
+// PostgresURL creates a fresh, migrated PostgreSQL database for the test
+// (dropped when it ends) and returns its DSN, for tests that open the
+// database themselves (through the config, for instance). Only call it when
+// Postgres reports true.
+func PostgresURL(t testing.TB) string {
+	t.Helper()
+	dsn := PostgresDSN()
+	if dsn == "" {
+		t.Fatal("dbtest: PostgresURL without " + EnvPostgresDSN)
+	}
+	return withDatabase(dsn, createDatabase(t, dsn, true))
+}
+
 func openPostgres(t testing.TB, dsn string, migrated bool) *db.DB {
+	t.Helper()
+	name := createDatabase(t, dsn, migrated)
+	// Closed before the database is dropped (cleanups run last-in first-out).
+	d, err := db.OpenPostgres(context.Background(), withDatabase(dsn, name), db.PostgresOptions{MaxOpenConns: 8, MaxIdleConns: 4})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = d.Close() })
+	return d
+}
+
+// createDatabase creates a database (a copy of the migrated template, or
+// empty) that is dropped when the test ends, and returns its name.
+func createDatabase(t testing.TB, dsn string, migrated bool) string {
 	t.Helper()
 	ctx := context.Background()
 	admin, err := adminPool(dsn)
@@ -98,12 +125,7 @@ func openPostgres(t testing.TB, dsn string, migrated bool) *db.DB {
 			t.Errorf("dbtest: drop %s: %v", name, err)
 		}
 	})
-	d, err := db.OpenPostgres(ctx, withDatabase(dsn, name), db.PostgresOptions{MaxOpenConns: 8, MaxIdleConns: 4})
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = d.Close() })
-	return d
+	return name
 }
 
 var (
