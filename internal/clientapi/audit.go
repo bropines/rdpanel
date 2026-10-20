@@ -197,27 +197,7 @@ func (h *handler) auditConn(w http.ResponseWriter, r *http.Request) {
 				a.ControllerName = clip(req.Peer[1], 255)
 			}
 			if h.Kicks != nil && len(req.Peer) > 0 && req.Peer[0] != "" {
-				targetDev, err := tx.Devices.GetByRustdeskID(ctx, req.ID)
-				if err == nil && targetDev != nil {
-					var controllerUserID int64
-					ctrlDev, err := tx.Devices.GetByRustdeskID(ctx, req.Peer[0])
-					if err == nil && ctrlDev != nil && ctrlDev.OwnerUserID != nil {
-						controllerUserID = *ctrlDev.OwnerUserID
-					}
-					dec, rule, _, err := tx.ConnectionACLs.Evaluate(ctx, controllerUserID, targetDev.ID)
-					if err == nil && dec == store.ACLDecisionDeny {
-						ruleName := "unmatched"
-						if rule != nil {
-							ruleName = rule.Name
-						}
-						h.log.WarnContext(ctx, "audit: connection denied by ACL",
-							slog.String("target_device", req.ID),
-							slog.String("controller", req.Peer[0]),
-							slog.Int("conn_id", int(req.ConnID)),
-							slog.String("rule", ruleName))
-						h.Kicks.Kick(req.ID, int32(req.ConnID))
-					}
-				}
+				h.checkConnACL(ctx, tx, req.ID, req.Peer[0], req.ConnID)
 			}
 			if create {
 				return tx.ConnectionAudits.Create(ctx, a)
@@ -227,6 +207,73 @@ func (h *handler) auditConn(w http.ResponseWriter, r *http.Request) {
 			return nil // unknown future action: acknowledge, nothing to store
 		}
 	})
+}
+
+// checkConnACL kicks an authorized connection to targetID that the
+// connection rules deny. Best effort: controllerID is the RustDesk id the
+// controlling client reported about itself (relayed by the controlled side),
+// and the controller's user is the owner of that device. Admins are never
+// kicked. Without enabled rules nothing is checked; with rules, a controller
+// whose user cannot be determined (unknown device, no owner) is denied, as
+// unmatched access is under the default-deny model. Lookup errors are logged
+// and nobody is kicked.
+func (h *handler) checkConnACL(ctx context.Context, tx *store.Store, targetID, controllerID string, connID int64) {
+	fail := func(err error) {
+		h.log.WarnContext(ctx, "audit: connection ACL check", slog.Any("err", err))
+	}
+	has, err := tx.ConnectionACLs.HasEnabledRules(ctx)
+	if err != nil {
+		fail(err)
+		return
+	}
+	if !has {
+		return
+	}
+	target, err := tx.Devices.GetByRustdeskID(ctx, targetID)
+	if err != nil {
+		fail(err)
+		return
+	}
+	var user *store.User
+	ctrl, err := tx.Devices.GetByRustdeskID(ctx, controllerID)
+	switch {
+	case errors.Is(err, store.ErrNotFound):
+		// Unknown controller device: no user.
+	case err != nil:
+		fail(err)
+		return
+	case ctrl.OwnerUserID != nil:
+		user, err = tx.Users.GetByID(ctx, *ctrl.OwnerUserID)
+		if err != nil && !errors.Is(err, store.ErrNotFound) {
+			fail(err)
+			return
+		}
+	}
+
+	reason := "unknown controller user"
+	if user != nil {
+		if user.IsAdmin() {
+			return
+		}
+		dec, rule, _, err := tx.ConnectionACLs.Evaluate(ctx, user.ID, target.ID)
+		if err != nil {
+			fail(err)
+			return
+		}
+		if dec != store.ACLDecisionDeny {
+			return
+		}
+		reason = "unmatched"
+		if rule != nil {
+			reason = rule.Name
+		}
+	}
+	h.log.WarnContext(ctx, "audit: connection denied by ACL",
+		slog.String("target_device", targetID),
+		slog.String("controller", controllerID),
+		slog.Int64("conn_id", connID),
+		slog.String("rule", reason))
+	h.Kicks.Kick(targetID, int32(connID))
 }
 
 // sessionNote stores the controller's note sent to /api/audit/conn.
