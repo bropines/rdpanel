@@ -579,23 +579,54 @@ func (r *ConnectionACLs) Evaluate(
 	if err != nil {
 		return "", nil, nil, fmt.Errorf("device lookup: %w", mapErr(err))
 	}
-	dec, rule := u.Decide(&Device{ID: deviceID, OwnerUserID: ptrID(ownerUserID), DeviceGroupID: ptrID(deviceGroupID)})
+	return r.evaluate(ctx, u, &Device{ID: deviceID, OwnerUserID: ptrID(ownerUserID), DeviceGroupID: ptrID(deviceGroupID)})
+}
+
+// EvaluateDevice is Evaluate for an already loaded device (its ID,
+// OwnerUserID and DeviceGroupID are used), saving the device lookup.
+func (r *ConnectionACLs) EvaluateDevice(
+	ctx context.Context,
+	userID int64,
+	d *Device,
+) (ACLDecision, *ConnectionACL, *ControlRole, error) {
+	u, err := r.ForUser(ctx, userID)
+	if err != nil {
+		return "", nil, nil, err
+	}
+	return r.evaluate(ctx, u, d)
+}
+
+func (r *ConnectionACLs) evaluate(ctx context.Context, u *UserACL, d *Device) (ACLDecision, *ConnectionACL, *ControlRole, error) {
+	dec, rule := u.Decide(d)
 	if dec == ACLDecisionDeny {
 		return dec, rule, nil, nil
 	}
-	roles := &ControlRoles{q: r.q, now: r.now}
-	var role *ControlRole
-	if rule != nil && rule.ControlRoleID != nil {
-		if role, err = roles.Get(ctx, *rule.ControlRoleID); err != nil && !errors.Is(err, ErrNotFound) {
-			return "", nil, nil, err
-		}
-	}
-	if role == nil {
-		if role, err = roles.GetDefault(ctx); err != nil && !errors.Is(err, ErrNotFound) {
-			return "", nil, nil, err
-		}
+	role, err := r.EffectiveRole(ctx, rule)
+	if err != nil {
+		return "", nil, nil, err
 	}
 	return dec, rule, role, nil
+}
+
+// EffectiveRole is the control role of a connection allowed by rule (nil:
+// allowed without a matching rule): the rule's role, else the default role.
+// It is nil only when no role exists at all.
+func (r *ConnectionACLs) EffectiveRole(ctx context.Context, rule *ConnectionACL) (*ControlRole, error) {
+	roles := &ControlRoles{q: r.q, now: r.now}
+	if rule != nil && rule.ControlRoleID != nil {
+		role, err := roles.Get(ctx, *rule.ControlRoleID)
+		if err == nil {
+			return role, nil
+		}
+		if !errors.Is(err, ErrNotFound) {
+			return nil, err
+		}
+	}
+	role, err := roles.GetDefault(ctx)
+	if errors.Is(err, ErrNotFound) {
+		return nil, nil
+	}
+	return role, err
 }
 
 // FilterAccessibleDevices filters devices to only those permitted for userID

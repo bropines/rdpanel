@@ -210,6 +210,12 @@ server {
   #   proxy_set_header X-Forwarded-For $remote_addr;
   #   proxy_read_timeout 1h;
   ```
+- **`/internal/hbbs/authorize`** (hbbs asks the panel before each connection) answers only
+  requests from a loopback TCP peer that carry no forwarding header (`X-Forwarded-For`,
+  `X-Real-IP`, `Forwarded`, …) and present the secret from `hbbs-authz.key`; everything
+  else, including requests through a reverse proxy on the same host, gets a 404. Your
+  proxy does not need to forward `/internal/` at all; blocking it on the public vhost does
+  no harm. Keep `hbbs-authz.key` readable only by the service user (the default).
 - **Never** forward anything (stream/L4 proxies, ssh `-L`, frp, cloudflared) to
   `127.0.0.1:21115` or `127.0.0.1:21117`. The hbbs/hbbr admin channel has no
   authentication besides "connection comes from loopback". With `network_mode: host`,
@@ -285,6 +291,7 @@ Summary:
 | `WS_RELAY_SERVERS` | hbbs | first `RELAY` entry | relays offered to browser (WebSocket) clients such as the [web client](web-client.md); they must be reachable as `wss://<host>/ws/relay`, so by default only the local hbbr behind the panel. Set empty to use the normal rotation |
 | `WEBRTC` | hbbs | `N` | `Y` forwards WebRTC signaling for RustDesk 1.5+ clients (see [WebRTC](webrtc.md)) |
 | `RUSTDESK_API_JWT_KEY` | panel, hbbs | generated `jwt.key` | HS256 key of client tokens (raw string) |
+| `AUTHZ_URL`, `AUTHZ_SECRET_FILE` | hbbs | `http://127.0.0.1:<port of RDPANEL_LISTEN>/internal/hbbs/authorize`, `RDPANEL_HBBS_AUTHZ_SECRET_FILE` | where hbbs asks the panel before every connection (connection rules, control roles; see [acl-policy.md → Enforcement](acl-policy.md#3-enforcement)) and the secret it presents. Derived by the hbbs run script; set them only to override. Not set with `RDPANEL_HBBS_AUTHZ=false`, nor when `RDPANEL_LISTEN` is neither a loopback nor a wildcard address (the endpoint answers loopback peers only) |
 | `KEY_PRIV`, `KEY_PUB` | key-secret | — | initial key pair (also docker secrets `key_priv`/`key_pub`) |
 | `LIMIT_SPEED`, `SINGLE_BANDWIDTH`, `TOTAL_BANDWIDTH`, `DOWNGRADE_THRESHOLD`, `DOWNGRADE_START_CHECK` | hbbr | hbbr defaults | relay bandwidth limits |
 | `RUST_LOG` | hbbs, hbbr | `info` | log filter |
@@ -304,12 +311,13 @@ Summary:
 | `RDPANEL_HBB_REF` | panel | image `HBB_REF` build arg | hbbs/hbbr source ref shown in `rdpanel_build_info` |
 | `RDPANEL_HBBS_ID_SERVER`, `RDPANEL_HBBS_RELAY_SERVER`, `RDPANEL_HBBS_PUBLIC_KEY_FILE` | panel | `127.0.0.1:21116`, `127.0.0.1:21117`, `/data/id_ed25519.pub` | where hbbs/hbbr are |
 | `RDPANEL_HBBS_WEB_PROXY`, `RDPANEL_HBBS_WS_ID_SERVER`, `RDPANEL_HBBS_WS_RELAY_SERVER` | panel | `true`, `127.0.0.1:21118`, `127.0.0.1:21119` | web client WebSocket proxy at `/ws/id` and `/ws/relay` (targets default to the id/relay server port + 2) |
+| `RDPANEL_HBBS_AUTHZ`, `RDPANEL_HBBS_AUTHZ_SECRET_FILE` | panel, hbbs, key-secret | `true`, `/data/panel/hbbs-authz.key` | connection authorization for hbbs (`/internal/hbbs/authorize`); `key-secret` creates the secret before hbbs starts. `false` = connection rules only disconnect after the fact and control roles are not applied (see [configuration.md](configuration.md#hbbshbbr)) |
 | `RDPANEL_HBBS_RELAY_PUBLIC_HOST`, `RDPANEL_MODE`, `RDPANEL_AGENT_*` | panel, agent | first `RELAY` entry, `panel` | local relay host; `RDPANEL_MODE=agent` turns the image into a relay agent, see [relay-agents.md](relay-agents.md) |
 | `RDPANEL_LOG_LEVEL`, `RDPANEL_LOG_FORMAT`, `RDPANEL_CONFIG` | panel | `info`, `json`, — | logging, optional YAML file |
 | `RDPANEL_LOGS_BUFFER`, `RDPANEL_LOGS_DIR` | panel, log pipelines | `2000`, `/run/rdpanel/logs` | Server → Logs: lines kept per source (`0` = off) and the s6-log capture dir (see [Server logs](#server-logs)) |
 | `RDPANEL_UPDATE_CHECK` | panel | `true` | About page release check against the GitHub API (see [below](#about-page-and-update-check)); `false` = no outbound request |
 | `RDPANEL_API_DOCS` | panel | `auth` | Swagger UI at `/api/v1/docs` + spec: `auth`, `public` or `off` (see [api.md](api.md#interactive-docs)); being under `/api/v1/`, a public vhost that 404s `/api/v1/*` keeps it internal |
-| `RDPANEL_WEBCLIENT_ENABLED`, `_ADMIN_ONLY`, `_ID_URL`, `_RELAY_URL` | panel | on, off, same origin `/ws/id`, `/ws/relay` | browser web client (see [web-client.md](web-client.md)); the reverse proxy must forward `/ws/id` → 21118 and `/ws/relay` → 21119 with WebSocket upgrade |
+| `RDPANEL_WEBCLIENT_ENABLED`, `_ADMIN_ONLY`, `_ID_URL`, `_RELAY_URL`, `_SERVERS`, `_CUSTOM_SERVERS` | panel | on, off, same origin `/ws/id`, `/ws/relay`, none, off | browser web client (see [web-client.md](web-client.md)); the reverse proxy must forward `/ws/id` → 21118 and `/ws/relay` → 21119 with WebSocket upgrade |
 | `RDPANEL_FEDERATION_ENABLED`, `RDPANEL_FEDERATION_TOKEN` | panel | off, — | opt-in panel federation; the token (≥ 16 characters) is what peers present to this panel (see [Panel federation](#panel-federation)) |
 | `RDPANEL_WEBHOOK_URL`, `_SECRET` | panel | off | alerts for critical events (relay degraded/offline, hbbs down) sent via HTTP POST with optional HMAC-SHA256 signature over timestamp and body ([configuration.md → Webhooks](configuration.md#webhooks)) |
 | `RDPANEL_SMTP_HOST`, `_PORT`, `_ENCRYPTION`, `_USERNAME`, `_PASSWORD`, `_PASSWORD_FILE`, `_FROM`, `_INSECURE_SKIP_VERIFY` | panel | off | outgoing e-mail (see [E-mail](#e-mail-verification-codes-and-password-reset)); otherwise configurable in Settings → E-mail |
@@ -331,6 +339,7 @@ Summary:
     panel.db (+ -wal, -shm)  panel database (SQLite WAL)
     secret.key               AEAD key for secrets at rest (back it up with panel.db!)
     jwt.key                  client token key when RUSTDESK_API_JWT_KEY is unset
+    hbbs-authz.key           secret hbbs presents to /internal/hbbs/authorize (0600)
 ```
 
 Back up the whole `/data`: stop the container, or use `sqlite3 .backup` for the databases.
@@ -670,6 +679,11 @@ Background for troubleshooting and hardening; not needed for a normal install.
    - **JWT key:** if `RUSTDESK_API_JWT_KEY` is unset, makes sure
      `$RDPANEL_DATA_DIR/jwt.key` exists. The hbbs run script exports its content as
      `RUSTDESK_API_JWT_KEY`, so the panel and hbbs (MUST_LOGIN) always use the same key.
+   - **hbbs authorization secret:** unless `RDPANEL_HBBS_AUTHZ=false`, makes sure
+     `RDPANEL_HBBS_AUTHZ_SECRET_FILE` (default `$RDPANEL_DATA_DIR/hbbs-authz.key`, 32 random
+     bytes as hex, 0600) exists. The hbbs run script passes its path to hbbs as
+     `AUTHZ_SECRET_FILE`, together with `AUTHZ_URL` (the panel's loopback address from
+     `RDPANEL_LISTEN`); the panel, which starts after hbbs, reads the same file.
    - **Machine id:** `/etc/machine-id` is a link to `/data/machine-id`, created once
      with 32 random hex chars (hbbs/hbbr read it; a non-empty `/etc/machine-id` you
      mount yourself is left alone).

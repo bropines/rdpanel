@@ -41,6 +41,7 @@ import {
   type CloseInfo,
   type InputMode,
   type PeerSummary,
+  type AudioState,
   type ScaleMode,
   type ServerConfig,
   type SessionSettings,
@@ -68,6 +69,8 @@ import {
   type WebClientPrefs,
 } from "./prefs";
 import { FilesSheet } from "./FilesSheet";
+import { ServerPicker } from "./ServerPicker";
+import { loadSelectedServer, relayUrlOf, saveSelectedServer, type OtherServer } from "./servers";
 import { SettingsSheet } from "./SettingsSheet";
 import { DEFAULT_PINNED_DESKTOP, DEFAULT_PINNED_TOUCH, Toolbar, type ActionId, type ToolbarAction } from "./Toolbar";
 
@@ -89,7 +92,8 @@ export function WebClientPage() {
   const navigate = useNavigate();
   const config = useQuery({ queryKey: ["webclient", "config"], queryFn: webClientApi.config, staleTime: 60_000 });
   const [peerId, setPeerId] = useState(() => (search.id ?? "").replace(/\s+/g, ""));
-  const [active, setActive] = useState<{ id: string; attempt: number } | null>(null);
+  const [active, setActive] = useState<{ id: string; attempt: number; server: OtherServer | null } | null>(null);
+  const [serverId, setServerId] = useState(loadSelectedServer);
 
   useEffect(() => {
     purgeLegacyStorage();
@@ -100,7 +104,7 @@ export function WebClientPage() {
   useEffect(() => {
     if (autoStarted.current || !config.data?.enabled || !search.id) return;
     autoStarted.current = true;
-    setActive({ id: search.id.replace(/\s+/g, ""), attempt: 0 });
+    setActive({ id: search.id.replace(/\s+/g, ""), attempt: 0, server: null });
   }, [config.data, search.id]);
 
   const leave = useCallback(() => {
@@ -143,14 +147,24 @@ export function WebClientPage() {
     );
   }
 
+  const adminServers: OtherServer[] = (cfg.servers ?? []).map((sv, i) => ({
+    id: `admin:${i}`,
+    name: sv.name,
+    idUrl: sv.id_url,
+    relayUrl: sv.relay_url,
+    key: sv.key,
+    source: "admin" as const,
+  }));
+
   if (active) {
     return (
-      <SavedCredentials peerId={active.id} key={`creds-${active.id}#${active.attempt}`}>
+      <SavedCredentials peerId={active.id} enabled={!active.server} key={`creds-${active.id}#${active.attempt}`}>
         {(creds) => (
           <RemoteSession
             key={`${active.id}#${active.attempt}`}
             peerId={active.id}
             config={cfg}
+            other={active.server}
             credentials={creds}
         onLeave={leave}
             onReconnect={() => setActive((a) => (a ? { ...a, attempt: a.attempt + 1 } : a))}
@@ -160,14 +174,36 @@ export function WebClientPage() {
     );
   }
 
-  return <ConnectForm peerId={peerId} setPeerId={setPeerId} onConnect={(id) => setActive({ id, attempt: 0 })} />;
+  return (
+    <ConnectForm
+      peerId={peerId}
+      setPeerId={setPeerId}
+      adminServers={adminServers}
+      allowCustom={cfg.custom_servers}
+      serverId={serverId}
+      setServerId={(id) => {
+        setServerId(id);
+        saveSelectedServer(id);
+      }}
+      onConnect={(id, server) => setActive({ id, attempt: 0, server })}
+    />
+  );
 }
 
 /** Loads the device's saved login from the user's address books first. */
-function SavedCredentials({ peerId, children }: { peerId: string; children: (c: WebClientCredentials | null) => React.ReactNode }) {
+function SavedCredentials({
+  peerId,
+  enabled = true,
+  children,
+}: {
+  peerId: string;
+  enabled?: boolean;
+  children: (c: WebClientCredentials | null) => React.ReactNode;
+}) {
   const q = useQuery({
     queryKey: ["webclient", "credentials", peerId],
     queryFn: () => webClientApi.credentials(peerId),
+    enabled,
     retry: false,
     staleTime: 0,
     gcTime: 0,
@@ -190,14 +226,31 @@ function CenterCard({ children }: { children: React.ReactNode }) {
   );
 }
 
-function ConnectForm({ peerId, setPeerId, onConnect }: { peerId: string; setPeerId: (v: string) => void; onConnect: (id: string) => void }) {
+function ConnectForm({
+  peerId,
+  setPeerId,
+  adminServers,
+  allowCustom,
+  serverId,
+  setServerId,
+  onConnect,
+}: {
+  peerId: string;
+  setPeerId: (v: string) => void;
+  adminServers: OtherServer[];
+  allowCustom: boolean;
+  serverId: string;
+  setServerId: (id: string) => void;
+  onConnect: (id: string, server: OtherServer | null) => void;
+}) {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const recent = useMemo(loadRecent, []);
+  const [server, setServer] = useState<OtherServer | null>(null);
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
     const id = peerId.replace(/\s+/g, "");
-    if (id) onConnect(id);
+    if (id) onConnect(id, server);
   };
   return (
     <div className="flex min-h-dvh items-start justify-center bg-background p-4 sm:items-center">
@@ -208,6 +261,17 @@ function ConnectForm({ peerId, setPeerId, onConnect }: { peerId: string; setPeer
           </Button>
           <h1 className="min-w-0 truncate text-lg font-semibold">{t("webclient.title")}</h1>
         </div>
+        {(adminServers.length > 0 || allowCustom) && (
+          <ServerPicker
+            adminServers={adminServers}
+            allowCustom={allowCustom}
+            value={serverId}
+            onChange={(id, sv) => {
+              setServerId(id);
+              setServer(sv);
+            }}
+          />
+        )}
         <div className="space-y-1.5">
           <Label htmlFor="wc-peer">{t("webclient.peerId")}</Label>
           <Input
@@ -228,7 +292,7 @@ function ConnectForm({ peerId, setPeerId, onConnect }: { peerId: string; setPeer
             <div className="text-xs text-muted-foreground">{t("webclient.recent")}</div>
             <div className="flex flex-wrap gap-1.5">
               {recent.map((r) => (
-                <Button key={r.id} type="button" variant="outline" size="sm" className="max-w-full" onClick={() => onConnect(r.id)}>
+                <Button key={r.id} type="button" variant="outline" size="sm" className="max-w-full" onClick={() => onConnect(r.id, server)}>
                   <span className="truncate">{r.name ? `${r.name} · ${r.id}` : r.id}</span>
                 </Button>
               ))}
@@ -251,12 +315,15 @@ type Sticky = (typeof STICKY)[number];
 function RemoteSession({
   peerId,
   config,
+  other,
   credentials,
   onLeave,
   onReconnect,
 }: {
   peerId: string;
   config: WebClientConfig;
+  /** Another server (admin-offered or user-entered); null = this panel's server. */
+  other: OtherServer | null;
   credentials: WebClientCredentials | null;
   onLeave: () => void;
   onReconnect: () => void;
@@ -288,17 +355,22 @@ function RemoteSession({
   const [resolution, setResolution] = useState("current");
   const [privacyOn, setPrivacyOn] = useState(false);
   const [blockOn, setBlockOn] = useState(false);
+  const [audioState, setAudioState] = useState<AudioState>("off");
   const [permKeyboard, setPermKeyboard] = useState(true);
-  const [hasSaved, setHasSaved] = useState(() => hasRememberedHash(config.public_key, peerId));
+  // Panel features (login token, web id, account passwords) only exist on our own server.
+  const own = !other;
+  const serverKey = other ? other.key.trim() : config.public_key;
+  const myId = own ? config.my_id || undefined : undefined;
+  const [hasSaved, setHasSaved] = useState(() => hasRememberedHash(serverKey, peerId));
   const inputMode: InputMode = prefs.view.inputMode ?? (isTouchFirst() ? "trackpad" : "mouse");
   const server = useMemo<ServerConfig>(
     () => ({
-      rendezvousUrl: wsUrl(config.rendezvous_url, "/ws/id"),
-      relayUrl: () => wsUrl(config.relay_url, "/ws/relay"),
-      key: config.public_key,
-      token: config.token ?? undefined,
+      rendezvousUrl: other ? other.idUrl : wsUrl(config.rendezvous_url, "/ws/id"),
+      relayUrl: () => (other ? relayUrlOf(other) : wsUrl(config.relay_url, "/ws/relay")),
+      key: serverKey,
+      token: other ? undefined : (config.token ?? undefined),
     }),
-    [config],
+    [config, other, serverKey],
   );
   const touch = inputMode !== "mouse";
 
@@ -309,7 +381,7 @@ function RemoteSession({
     const p = loadPrefs();
     // Saved logins, in the desktop client's order: this browser's remembered
     // hash, the personal address book's hash, then a shared book's password.
-    const localHash = loadRememberedHash(config.public_key, peerId);
+    const localHash = loadRememberedHash(serverKey, peerId);
     let abHash: Uint8Array | undefined;
     if (!localHash && credentials?.hash) {
       try {
@@ -319,6 +391,7 @@ function RemoteSession({
       }
     }
     let abPasswordTried = !credentials?.password;
+    let audioHintShown = false;
     let session: Session;
     try {
       session = new Session({
@@ -326,7 +399,7 @@ function RemoteSession({
         server,
         rememberedHash: localHash ?? abHash,
         myName: config.display_name,
-        myId: config.my_id || undefined,
+        myId,
         settings: p.settings,
       });
     } catch (e) {
@@ -346,7 +419,7 @@ function RemoteSession({
         if (!abPasswordTried && credentials?.password) {
           abPasswordTried = true;
           if (wrong && localHash) {
-            saveRememberedHash(config.public_key, peerId, null);
+            saveRememberedHash(serverKey, peerId, null);
             setHasSaved(false);
           }
           void session.login(credentials.password);
@@ -354,10 +427,10 @@ function RemoteSession({
         }
         setPwWrong(wrong);
         if (wrong && localHash) {
-          saveRememberedHash(config.public_key, peerId, null);
+          saveRememberedHash(serverKey, peerId, null);
           setHasSaved(false);
         }
-        if (wrong && abHash && !credentials?.book) void webClientApi.forget(peerId).catch(() => {});
+        if (wrong && own && abHash && !credentials?.book) void webClientApi.forget(peerId).catch(() => {});
         setDialog("password");
       }),
       session.on("waitingForApproval", () => {
@@ -376,16 +449,23 @@ function RemoteSession({
         setWaiting(false);
         pushRecent(peerId, peer.hostname || undefined);
         if (rememberedHash && rememberRef.current) {
-          saveRememberedHash(config.public_key, peerId, rememberedHash);
+          saveRememberedHash(serverKey, peerId, rememberedHash);
           setHasSaved(true);
           // the personal address book: other browsers and RustDesk apps signed in to this account
-          webClientApi.remember(peerId, encodeBase64(rememberedHash)).catch(() => toast.error(t("webclient.rememberAccountFailed")));
+          if (own) webClientApi.remember(peerId, encodeBase64(rememberedHash)).catch(() => toast.error(t("webclient.rememberAccountFailed")));
         }
         viewer.focus();
       }),
       session.on("peer", ({ peer }) => setPeer(peer)),
       session.on("display", ({ display }) => setCurrentDisplay(display.index)),
       session.on("stats", setStats),
+      session.on("audio", ({ state }) => {
+        setAudioState(state);
+        if (state === "blocked" && !audioHintShown) {
+          audioHintShown = true;
+          toast(t("webclient.sound.blocked"));
+        }
+      }),
       session.on("permission", ({ name, enabled }) => {
         if (name === "keyboard") setPermKeyboard(enabled);
       }),
@@ -523,6 +603,14 @@ function RemoteSession({
   const off = !connected;
   const st = prefs.settings;
   const actions: ToolbarAction[] = [
+    {
+      id: "sound",
+      label: t("webclient.sound.enable"),
+      icon: VolumeX,
+      hidden: audioState !== "blocked",
+      forced: true,
+      run: () => s?.resumeAudio(),
+    },
     { id: "settings", label: t("webclient.settings.title"), icon: Settings2, disabled: off, run: () => setSettingsOpen(true) },
     { id: "files", label: t("webclient.files.title"), icon: FolderOpen, disabled: off || s?.permission.file === false, run: () => setFilesOpen(true) },
     {
@@ -594,8 +682,12 @@ function RemoteSession({
       icon: Trash2,
       hidden: !hasSaved && !(credentials?.hash && !credentials.book),
       run: () => {
-        saveRememberedHash(config.public_key, peerId, null);
+        saveRememberedHash(serverKey, peerId, null);
         setHasSaved(false);
+        if (!own) {
+          toast.success(t("webclient.passwordCleared"));
+          return;
+        }
         void webClientApi.forget(peerId).then(
           () => toast.success(t("webclient.passwordCleared")),
           () => toast.error(t("webclient.rememberAccountFailed")),
@@ -699,7 +791,7 @@ function RemoteSession({
         server={server}
         rememberedHash={loginHash}
         myName={config.display_name}
-        myId={config.my_id || undefined}
+        myId={myId}
       />
       <SettingsSheet
         open={settingsOpen}

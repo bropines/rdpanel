@@ -178,6 +178,17 @@ func TestAuthTokens(t *testing.T) {
 	if _, err := s.AuthTokens.GetActive(ctx, TokenWeb, hash); !errors.Is(err, ErrNotFound) {
 		t.Fatal("kind must be checked")
 	}
+	inactive := func(h []byte) bool {
+		t.Helper()
+		v, err := s.AuthTokens.Inactive(ctx, TokenClient, h)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return v
+	}
+	if inactive(hash) || inactive(crypto.HashToken("never-stored")) {
+		t.Fatal("active / unknown token reported inactive")
+	}
 
 	// Sliding expiry.
 	clk.advance(50 * time.Minute)
@@ -192,6 +203,9 @@ func TestAuthTokens(t *testing.T) {
 	clk.advance(time.Hour)
 	if _, err := s.AuthTokens.GetActive(ctx, TokenClient, hash); !errors.Is(err, ErrNotFound) {
 		t.Fatal("expired token active")
+	}
+	if !inactive(hash) {
+		t.Fatal("expired token not reported inactive")
 	}
 
 	// Web session: idle slides but never past absolute.
@@ -214,8 +228,14 @@ func TestAuthTokens(t *testing.T) {
 	if len(active) != 2 {
 		t.Fatalf("active = %d", len(active))
 	}
+	if inactive(crypto.HashToken("c2")) {
+		t.Fatal("fresh token reported inactive")
+	}
 	if n, _ := s.AuthTokens.RevokeForDevice(ctx, "uuid-2", "device deleted"); n != 1 {
 		t.Fatalf("revoke device = %d", n)
+	}
+	if !inactive(crypto.HashToken("c2")) {
+		t.Fatal("revoked token not reported inactive")
 	}
 	if n, _ := s.AuthTokens.RevokeForUser(ctx, u.ID, TokenWeb, "password reset"); n != 1 {
 		t.Fatalf("revoke user web = %d", n)

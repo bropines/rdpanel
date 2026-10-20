@@ -10,6 +10,11 @@
 #                        to the first RELAY entry: browsers reach the local hbbr
 #                        through the panel's reverse proxy (/ws/relay), not
 #                        remote relay agents in the rotation
+#      AUTHZ_URL, AUTHZ_SECRET_FILE
+#                     -> the panel's connection authorization endpoint and
+#                        its secret; derived from RDPANEL_LISTEN and
+#                        RDPANEL_HBBS_AUTHZ_SECRET_FILE when unset
+#                        (/usr/libexec/rdpanel/hbbs-authz-env)
 #      ALWAYS_USE_RELAY, MUST_LOGIN, TCP_KEEPALIVE, WEBRTC, RUSTDESK_API_JWT_KEY,
 #      TRUSTED_PROXIES, WS_PEERS, RUST_LOG
 #                     -> read by hbbs itself from the environment (with-contenv
@@ -44,5 +49,10 @@ if [ -z "${RUSTDESK_API_JWT_KEY:-}" ]; then
 		export RUSTDESK_API_JWT_KEY
 	fi
 fi
+
+# Connection rules and control roles: hbbs asks the panel before every
+# punch-hole / relay request (AUTHZ_URL, AUTHZ_SECRET_FILE; key-secret has
+# created the secret file). RDPANEL_HBBS_AUTHZ=false turns it off.
+. /usr/libexec/rdpanel/hbbs-authz-env
 
 exec /usr/libexec/rdpanel/as-service-user /usr/bin/hbbs "$@"

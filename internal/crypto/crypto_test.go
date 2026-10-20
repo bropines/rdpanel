@@ -143,6 +143,69 @@ func TestLoadOrCreateTextKey(t *testing.T) {
 	}
 }
 
+func TestLoadOrCreateHexSecret(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "panel")
+	path := filepath.Join(dir, "hbbs-authz.key")
+	s1, src, err := LoadOrCreateHexSecret(path, 32)
+	if err != nil || src != KeyGeneratedFile {
+		t.Fatalf("err=%v src=%s", err, src)
+	}
+	if b, err := hex.DecodeString(s1); err != nil || len(b) != 32 {
+		t.Fatalf("secret %q is not 32 hex-encoded bytes", s1)
+	}
+	raw, err := os.ReadFile(path)
+	if err != nil || string(raw) != s1+"\n" {
+		t.Fatalf("file content %q, err %v", raw, err)
+	}
+	if runtime.GOOS != "windows" {
+		st, err := os.Stat(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if perm := st.Mode().Perm(); perm != 0o600 {
+			t.Errorf("perm = %o, want 600", perm)
+		}
+	}
+	entries, _ := os.ReadDir(dir)
+	if len(entries) != 1 {
+		t.Errorf("temporary files left behind: %v", entries)
+	}
+	s2, src, err := LoadOrCreateHexSecret(path, 32)
+	if err != nil || src != KeyFromFile || s2 != s1 {
+		t.Fatalf("reload: %q %s %v", s2, src, err)
+	}
+
+	// An operator-provided file is used as is (trimmed), never replaced.
+	own := filepath.Join(t.TempDir(), "own.key")
+	if err := os.WriteFile(own, []byte("  operator-chosen-secret-0123\r\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if s, src, err := LoadOrCreateHexSecret(own, 32); err != nil || src != KeyFromFile || s != "operator-chosen-secret-0123" {
+		t.Fatalf("own: %q %s %v", s, src, err)
+	}
+	short := filepath.Join(t.TempDir(), "short.key")
+	if err := os.WriteFile(short, []byte("short\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := LoadOrCreateHexSecret(short, 32); err == nil {
+		t.Fatal("short secret accepted")
+	}
+}
+
+// writeNewFile never replaces a file that appeared meanwhile.
+func TestWriteNewFileKeepsExisting(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "k")
+	if created, err := writeNewFile(path, []byte("first"), 0o600); err != nil || !created {
+		t.Fatalf("first: %v %v", created, err)
+	}
+	if created, err := writeNewFile(path, []byte("second"), 0o600); err != nil || created {
+		t.Fatalf("second: %v %v", created, err)
+	}
+	if b, _ := os.ReadFile(path); string(b) != "first" {
+		t.Fatalf("content %q", b)
+	}
+}
+
 func TestHashToken(t *testing.T) {
 	// sha256("abc") known answer.
 	want, _ := hex.DecodeString("ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad")

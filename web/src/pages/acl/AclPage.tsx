@@ -9,6 +9,7 @@ import {
   FlaskConical,
   FolderTree,
   HardDrive,
+  Info,
   Keyboard,
   Layers,
   Lock,
@@ -59,6 +60,10 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton, Switch, Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/misc";
 import { cn } from "@/lib/utils";
+
+/** First RustDesk release whose controlled side applies the permissions hbbs
+ * attaches to a connection (rustdesk/rustdesk#13974). */
+const CONTROL_PERMISSIONS_MIN_VERSION = "1.4.5";
 
 export function AclPage() {
   const { t } = useTranslation();
@@ -444,13 +449,18 @@ function RolesTab({
 
   return (
     <div className="space-y-4">
-      <p
-        role="note"
-        className="flex items-start gap-2 rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-sm text-amber-800 dark:text-amber-300"
-      >
-        <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
-        <span>{t("acl.rolesInformational")}</span>
-      </p>
+      <div role="note" className="flex items-start gap-2 rounded-md border bg-muted/50 p-3 text-sm text-muted-foreground">
+        <Info className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
+        <div className="space-y-1">
+          <p className="font-medium text-foreground">{t("acl.rolesEnforcement.title")}</p>
+          <ul className="list-disc space-y-0.5 pl-4">
+            <li>{t("acl.rolesEnforcement.blocking")}</li>
+            <li>{t("acl.rolesEnforcement.connTypes")}</li>
+            <li>{t("acl.rolesEnforcement.version", { version: CONTROL_PERMISSIONS_MIN_VERSION })}</li>
+            <li>{t("acl.rolesEnforcement.restrictOnly")}</li>
+          </ul>
+        </div>
+      </div>
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
         {roles.map((role) => (
           <Card key={role.id} className={cn("flex flex-col relative", role.is_default && "border-primary/50 shadow-sm")}>

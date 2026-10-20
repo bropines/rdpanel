@@ -61,3 +61,24 @@ tests:
               summary: "Online devices dropped by more than half on panel:21114"
               description: >-
                 20 devices are online now, less than half of 15 minutes ago. Look for a network outage, a DNS/certificate change or an hbbs restart.
+
+  - interval: 1m
+    input_series:
+      # hbbs presents a wrong secret on every connection attempt; decisions
+      # that went through do not count.
+      - series: 'rdpanel_hbbs_authz_total{job="rustdesk-panel", instance="panel:21114", result="error"}'
+        values: '0+1x30'
+      - series: 'rdpanel_hbbs_authz_total{job="rustdesk-panel", instance="panel:21114", result="deny"}'
+        values: '0+5x30'
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: RustDeskHBBSAuthzErrors
+        exp_alerts: []
+      - eval_time: 25m
+        alertname: RustDeskHBBSAuthzErrors
+        exp_alerts:
+          - exp_labels: {severity: warning, job: rustdesk-panel, instance: "panel:21114"}
+            exp_annotations:
+              summary: "hbbs connection authorization failing on panel:21114"
+              description: >-
+                Requests from hbbs to /internal/hbbs/authorize fail (wrong AUTHZ_SECRET_FILE, bad request or database error). hbbs then lets connections start without the panel's decision: connection rules are only enforced after the fact and control roles not at all. Check the rdpanel log.

@@ -4901,7 +4901,7 @@ components:
 
     WebClientConfig:
       type: object
-      required: [enabled, rendezvous_url, relay_url, public_key, token, token_expires_at, display_name, my_id]
+      required: [enabled, rendezvous_url, relay_url, public_key, token, token_expires_at, display_name, my_id, servers, custom_servers]
       properties:
         enabled: { type: boolean }
         rendezvous_url: { type: string, description: "hbbs WebSocket URL; empty = same origin /ws/id" }
@@ -4911,6 +4911,20 @@ components:
         token_expires_at: { type: [string, "null"], format: date-time }
         display_name: { type: string, description: "Name shown to the remote user" }
         my_id: { type: string, description: "Session id announced to the device (web-…); lets connection rules apply to this user. Valid 12 h." }
+        servers:
+          type: array
+          description: Other servers the admin offers (RDPANEL_WEBCLIENT_SERVERS). Their sessions get no panel token or web id.
+          items: { $ref: "#/components/schemas/WebClientServer" }
+        custom_servers: { type: boolean, description: "Users may enter their own servers (RDPANEL_WEBCLIENT_CUSTOM_SERVERS)" }
+
+    WebClientServer:
+      type: object
+      required: [name, id_url, relay_url, key]
+      properties:
+        name: { type: string }
+        id_url: { type: string, description: "hbbs WebSocket URL (wss://host/ws/id)" }
+        relay_url: { type: string, description: "hbbr WebSocket URL; empty = id_url with /ws/relay" }
+        key: { type: string, description: "Server public key (base64)" }
 
     About:
       type: object

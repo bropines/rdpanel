@@ -74,6 +74,7 @@ names, user ids, IPs or device ids, except the opt-in per-device gauge.
 | `auth_client_tokens_issued_total` | counter | `method` | RustDesk client tokens minted (`/api/login`, OIDC auth-query) |
 | `auth_api_token_requests_total` | counter | `result` (`success`, `failure`, `rate_limited`) | admin API / SSE requests presenting a personal API token ([`api.md`](api.md)); `failure` = unknown, expired or revoked token or disabled owner |
 | `audit_events_total` | counter | `type` (`conn`, `file`, `alarm`), `result` (`stored`, `rejected`, `error`) | client audit records (`/api/audit/*`); `rejected` = unknown device / uuid mismatch / bad nonce |
+| `hbbs_authz_total` | counter | `result` (`allow`, `deny`, `error`) | connection authorization requests from hbbs ([acl-policy.md → Enforcement](acl-policy.md#3-enforcement)); `error` = wrong secret, bad request or failed lookup, after which hbbs proceeds without the panel's decision. Only exported while `RDPANEL_HBBS_AUTHZ` is on |
 | `events_published_total`, `events_dropped_total`, `events_subscribers` | | `type` | in-process event bus behind the SSE stream |
 | `logs_lines_total` / `logs_dropped_total` | counter | `source` (`hbbs`, `hbbr`, `panel`, `other`) | lines captured for Server → Logs / lines a too-slow live log viewer skipped ([deploy.md → Server logs](deploy.md#server-logs)) |
 
@@ -128,6 +129,7 @@ Rules: [`alerts.yaml`](../deploy/monitoring/prometheus/alerts.yaml) — group
 | `RustDeskOnlineDevicesDrop` | warning | online devices < 50 % of 15 min ago (from at least 5) for 5 min |
 | `RustDeskLoginFailureSpike` | warning | > 10 failed or rate-limited logins/min per surface for 5 min |
 | `RustDeskAuditStoreErrors` | warning | audit records fail to store (5xx to clients) |
+| `RustDeskHBBSAuthzErrors` | warning | hbbs connection authorization requests fail for 10 min (connections then start without the panel's decision) |
 
 Thresholds are starting points. Check changes with:
 
@@ -146,7 +148,7 @@ docker run --rm -v "$PWD":/w -w /w --entrypoint promtool prom/prometheus:v3.5.0 
   relay sessions, hbbs RTT, build info table (version, commit, hbbs/hbbr ref);
 - **Presence**: online vs known devices, hbbs probe latency and poll errors;
 - **Logins and audit**: attempts by surface/method/result, failures, client
-  tokens issued, client audit records;
+  tokens issued, client audit records, hbbs connection authorization decisions;
 - **HTTP**: request rate, p95 latency (SSE excluded) and 5xx by route;
 - **Relay (hbbr)**: sessions, bandwidth, bytes of active relays;
 - **Server settings reconciler**: admin channels, re-applications, drift corrections;

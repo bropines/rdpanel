@@ -12,6 +12,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/bropines/rdpanel/internal/authz"
 	"github.com/bropines/rdpanel/internal/metrics"
 	"github.com/bropines/rdpanel/internal/store"
 	"github.com/bropines/rdpanel/internal/websessions"
@@ -199,7 +200,7 @@ func (h *handler) auditConn(w http.ResponseWriter, r *http.Request) {
 				a.ControllerName = clip(req.Peer[1], 255)
 			}
 			if h.Kicks != nil && len(req.Peer) > 0 && req.Peer[0] != "" {
-				h.checkConnACL(ctx, tx, req.ID, req.Peer[0], req.ConnID)
+				h.checkConnACL(ctx, tx, req.ID, req.Peer[0], req.ConnID, a.ConnType)
 			}
 			if create {
 				return tx.ConnectionAudits.Create(ctx, a)
@@ -211,59 +212,75 @@ func (h *handler) auditConn(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// checkConnACL kicks an authorized connection to targetID that the
-// connection rules deny. Best effort: controllerID is the RustDesk id the
-// controlling client reported about itself (relayed by the controlled side),
-// and the controller's user is the owner of that device. Admins are never
-// kicked. Without enabled rules nothing is checked; with rules, a controller
-// whose user cannot be determined (unknown device, no owner) is denied, as
-// unmatched access is under the default-deny model. Lookup errors are logged
+// checkConnACL kicks an authorized connection to targetID that the panel
+// would not have let start: the same decision hbbs gets from
+// /internal/hbbs/authorize (authz.Decide: connection rules, then the
+// effective control role's file transfer / tunnel / terminal limits). It
+// backs up that check for clients and servers that do not apply it
+// (RustDesk before 1.4.5, Android, hbbs without AUTHZ_URL). Best effort:
+// controllerID is the RustDesk id the controlling client reported about
+// itself (relayed by the controlled side), and the controller's user is the
+// owner of that device or the panel user of a web client session. Admins are
+// never kicked; while rules are enabled a controller whose user cannot be
+// determined (unknown device, no owner) is denied. Lookup errors are logged
 // and nobody is kicked.
-func (h *handler) checkConnACL(ctx context.Context, tx *store.Store, targetID, controllerID string, connID int64) {
+func (h *handler) checkConnACL(ctx context.Context, tx *store.Store, targetID, controllerID string, connID int64, connType int) {
 	fail := func(err error) {
 		h.log.WarnContext(ctx, "audit: connection ACL check", slog.Any("err", err))
-	}
-	has, err := tx.ConnectionACLs.HasEnabledRules(ctx)
-	if err != nil {
-		fail(err)
-		return
-	}
-	if !has {
-		return
 	}
 	target, err := tx.Devices.GetByRustdeskID(ctx, targetID)
 	if err != nil {
 		fail(err)
 		return
 	}
-	var user *store.User
-	if uid, ok := h.webSessionUser(controllerID); ok {
-		// A browser session started from the panel: the id was issued to
-		// this user by /api/v1/admin/webclient/config.
-		user, err = tx.Users.GetByID(ctx, uid)
-		if err != nil && !errors.Is(err, store.ErrNotFound) {
-			fail(err)
-			return
-		}
-		h.applyConnACL(ctx, tx, user, target, targetID, controllerID, connID)
-		return
-	}
-	ctrl, err := tx.Devices.GetByRustdeskID(ctx, controllerID)
-	switch {
-	case errors.Is(err, store.ErrNotFound):
-		// Unknown controller device: no user.
-	case err != nil:
+	user, err := h.controllerUser(ctx, tx, controllerID)
+	if err != nil {
 		fail(err)
 		return
-	case ctrl.OwnerUserID != nil:
-		user, err = tx.Users.GetByID(ctx, *ctrl.OwnerUserID)
-		if err != nil && !errors.Is(err, store.ErrNotFound) {
-			fail(err)
-			return
-		}
 	}
+	d, err := authz.Decide(ctx, tx.ConnectionACLs, user, target, authz.AuditConnType(connType))
+	if err != nil {
+		fail(err)
+		return
+	}
+	if d.Allow {
+		return
+	}
+	h.log.WarnContext(ctx, "audit: connection denied by ACL",
+		slog.String("target_device", targetID),
+		slog.String("controller", controllerID),
+		slog.Int64("conn_id", connID),
+		slog.String("cause", d.Cause),
+		slog.String("rule", d.Rule),
+		slog.String("role", d.Role))
+	h.Kicks.Kick(targetID, int32(connID))
+}
 
-	h.applyConnACL(ctx, tx, user, target, targetID, controllerID, connID)
+// controllerUser resolves the controller of a connection to a panel user, or
+// nil: a web client session id maps to the panel user it was issued to, any
+// other id to the owner of that device.
+func (h *handler) controllerUser(ctx context.Context, tx *store.Store, controllerID string) (*store.User, error) {
+	var uid int64
+	if id, ok := h.webSessionUser(controllerID); ok {
+		uid = id
+	} else {
+		ctrl, err := tx.Devices.GetByRustdeskID(ctx, controllerID)
+		if errors.Is(err, store.ErrNotFound) {
+			return nil, nil
+		}
+		if err != nil {
+			return nil, err
+		}
+		if ctrl.OwnerUserID == nil {
+			return nil, nil
+		}
+		uid = *ctrl.OwnerUserID
+	}
+	u, err := tx.Users.GetByID(ctx, uid)
+	if errors.Is(err, store.ErrNotFound) {
+		return nil, nil
+	}
+	return u, err
 }
 
 func (h *handler) webSessionUser(controllerID string) (int64, bool) {
@@ -271,37 +288,6 @@ func (h *handler) webSessionUser(controllerID string) (int64, bool) {
 		return 0, false
 	}
 	return h.WebSessions.User(controllerID)
-}
-
-// applyConnACL decides for a resolved (or unresolved: nil) controller user.
-func (h *handler) applyConnACL(ctx context.Context, tx *store.Store, user *store.User, target *store.Device, targetID, controllerID string, connID int64) {
-	fail := func(err error) {
-		h.log.WarnContext(ctx, "audit: connection ACL check", slog.Any("err", err))
-	}
-	reason := "unknown controller user"
-	if user != nil {
-		if user.IsAdmin() {
-			return
-		}
-		dec, rule, _, err := tx.ConnectionACLs.Evaluate(ctx, user.ID, target.ID)
-		if err != nil {
-			fail(err)
-			return
-		}
-		if dec != store.ACLDecisionDeny {
-			return
-		}
-		reason = "unmatched"
-		if rule != nil {
-			reason = rule.Name
-		}
-	}
-	h.log.WarnContext(ctx, "audit: connection denied by ACL",
-		slog.String("target_device", targetID),
-		slog.String("controller", controllerID),
-		slog.Int64("conn_id", connID),
-		slog.String("rule", reason))
-	h.Kicks.Kick(targetID, int32(connID))
 }
 
 // sessionNote stores the controller's note sent to /api/audit/conn.

@@ -41,7 +41,9 @@ A Go backend + React UI for [RustDesk](https://rustdesk.com), and a drop-in repl
   - devices with live online status from hbbs (pushed over SSE);
   - users and groups, unified address books with sharing and coloured tags;
   - browser web client: connect to devices from the panel, no install ([rdweb](https://github.com/bropines/rdweb), end-to-end verified and encrypted);
-  - connection access control (ACL); control roles are defined but not yet enforced on devices;
+  - connection access control (ACL) enforced by hbbs before a connection starts, with
+    control roles that restrict sessions on RustDesk 1.4.5+ devices
+    ([how](docs/acl-policy.md#3-enforcement));
   - client MDM strategies with heartbeat push (security presets, group and device overrides);
   - audit logs, identity providers, hbbs/hbbr control;
   - English and Russian, light and dark themes, mobile layout.

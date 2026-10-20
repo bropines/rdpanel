@@ -27,6 +27,7 @@ web/playwright-report/
 *.sqlite3
 secret.key
 jwt.key
+hbbs-authz.key
 .env
 .env.*
 !.env.example

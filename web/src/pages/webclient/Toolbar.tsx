@@ -17,6 +17,7 @@ import { Checkbox } from "@/components/ui/misc";
 import { cn } from "@/lib/utils";
 
 export type ActionId =
+  | "sound"
   | "settings"
   | "files"
   | "keyboard"
@@ -50,6 +51,8 @@ export interface ToolbarAction {
   /** Not available for this device/session: neither shown nor offered for pinning. */
   hidden?: boolean;
   danger?: boolean;
+  /** Shown on the bar even when not pinned (temporary, e.g. "enable sound"). */
+  forced?: boolean;
   run: () => void;
 }
 
@@ -89,8 +92,9 @@ export function Toolbar(p: ToolbarProps) {
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const visible = p.actions.filter((a) => !a.hidden);
   const byId = new Map(visible.map((a) => [a.id, a]));
-  const pinnedActions = p.pinned.map((id) => byId.get(id)).filter((a): a is ToolbarAction => !!a);
-  const rest = visible.filter((a) => !p.pinned.includes(a.id));
+  const forced = visible.filter((a) => a.forced && !p.pinned.includes(a.id));
+  const pinnedActions = [...forced, ...p.pinned.map((id) => byId.get(id)).filter((a): a is ToolbarAction => !!a)];
+  const rest = visible.filter((a) => !p.pinned.includes(a.id) && !a.forced);
   const stayOpen = p.keepOpen || !p.canCollapse || menuOpen || customizeOpen || dragX !== null;
 
   const scheduleCollapse = useCallback(() => {
@@ -319,7 +323,7 @@ function CustomizeDialog({
           <DialogDescription>{t("webclient.toolbar.customizeDesc")}</DialogDescription>
         </DialogHeader>
         <div className="max-h-[55vh] space-y-0.5 overflow-y-auto pr-1">
-          {actions.map((a) => (
+          {actions.filter((a) => !a.forced).map((a) => (
             <label key={a.id} className="flex cursor-pointer items-center gap-3 rounded-md px-2 py-1.5 hover:bg-muted">
               <Checkbox checked={pinned.includes(a.id)} onCheckedChange={(v) => toggle(a.id, v === true)} aria-label={a.label} />
               <a.icon className="h-4 w-4 shrink-0 text-muted-foreground" />

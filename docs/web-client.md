@@ -47,6 +47,83 @@ login token for the signed-in user.
   to that device but does not reveal the password. **Actions → Forget saved
   password** removes it.
 
+## Other servers
+
+The web client can also reach devices registered on other RustDesk-compatible
+servers (for example a second office, or a customer's own server).
+
+**Offered by the admin** — safe default, only these origins are allowed by the
+page's Content-Security-Policy:
+
+```sh
+RDPANEL_WEBCLIENT_SERVERS='[{"name":"Office","id_url":"wss://rd.office.example/ws/id","key":"MEbIUN8…H+A="}]'
+```
+
+or in YAML:
+
+```yaml
+webclient:
+  servers:
+    - name: Office
+      id_url: wss://rd.office.example/ws/id
+      relay_url: wss://rd.office.example/ws/relay   # optional, this is the default
+      key: MEbIUN8…H+A=                             # that server's id_ed25519.pub
+```
+
+**Entered by users** — `RDPANEL_WEBCLIENT_CUSTOM_SERVERS=true` adds "Other
+server…" to the connect form: users type a host (or paste a RustDesk config
+string, the one the RustDesk client's ID/Relay server dialog and RD Panel's
+Server page export) and the key. The CSP then allows WebSocket connections to
+every `wss:` origin, which a cross-site scripting bug could use to send data
+anywhere over WebSocket — leave it off unless you need it.
+
+Sessions to other servers are plain RustDesk sessions: the panel's login
+token, web session id, connection rules, control roles and address-book
+passwords do not apply there (the other server does not know this panel).
+
+### What the other server needs
+
+The browser only speaks WebSocket over TLS, so the other server must expose
+hbbs and hbbr through a reverse proxy with a certificate:
+
+| path | upstream | |
+|---|---|---|
+| `wss://<host>/ws/id` | hbbs `21118` (WebSocket) | rendezvous |
+| `wss://<host>/ws/relay` | hbbr `21119` (WebSocket) | relay |
+
+Example (nginx / Angie):
+
+```nginx
+location /ws/id {
+    proxy_pass http://127.0.0.1:21118;
+    proxy_http_version 1.1;
+    proxy_set_header Upgrade $http_upgrade;
+    proxy_set_header Connection "upgrade";
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_read_timeout 86400s;
+}
+location /ws/relay {
+    proxy_pass http://127.0.0.1:21119;
+    proxy_http_version 1.1;
+    proxy_set_header Upgrade $http_upgrade;
+    proxy_set_header Connection "upgrade";
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_read_timeout 86400s;
+}
+```
+
+Also on that server:
+
+- **Key:** copy its `id_ed25519.pub` (the public key RustDesk clients use);
+  the web client refuses servers it cannot verify.
+- **Relay:** hbbs must announce a relay that browsers can reach through
+  `/ws/relay` on the same host (its own hbbr). With RD Panel's image this is
+  automatic (`WS_RELAY_SERVERS`); with plain hbbs, use a single local relay.
+- **Login:** with `MUST_LOGIN=Y` on that server, browser sessions without its
+  token are refused — leave it off for web access.
+- hbbs/hbbr from upstream RustDesk 1.1.11+ (or this panel's image) serve
+  WebSocket on 21118/21119; the ports only need to be reachable by the proxy.
+
 ## Toolbar
 
 The session toolbar floats at the top of the screen and folds into a small

@@ -1,12 +1,15 @@
 package app
 
 import (
+	"fmt"
 	"log/slog"
 	"os"
 	"strings"
 
 	"github.com/bropines/rdpanel/internal/adminapi"
+	"github.com/bropines/rdpanel/internal/authz"
 	"github.com/bropines/rdpanel/internal/buildinfo"
+	"github.com/bropines/rdpanel/internal/crypto"
 
 	"github.com/bropines/rdpanel/internal/events"
 	"github.com/bropines/rdpanel/internal/hbbs/control"
@@ -91,6 +94,36 @@ func (a *App) initHBBS() error {
 		return err
 	}
 	a.HBBS.RelayStats = rs
+	return nil
+}
+
+// hbbsAuthzSecretBytes is the size of a generated hbbs authorization secret
+// (written as hex).
+const hbbsAuthzSecretBytes = 32
+
+// initAuthz loads (or generates) the secret hbbs presents to
+// /internal/hbbs/authorize and builds that endpoint (RDPANEL_HBBS_AUTHZ).
+// Disabled: no endpoint and no key file.
+func (a *App) initAuthz() error {
+	cfg := a.Config.HBBS
+	if !cfg.Authz {
+		a.Log.Info("hbbs connection authorization disabled (RDPANEL_HBBS_AUTHZ=false); " +
+			"connection rules are only enforced after the fact and control roles not at all")
+		return nil
+	}
+	secret, src, err := crypto.LoadOrCreateHexSecret(cfg.AuthzSecretFile, hbbsAuthzSecretBytes)
+	if err != nil {
+		return fmt.Errorf("hbbs authz secret: %w", err)
+	}
+	a.keySecrets = append(a.keySecrets, secret)
+	h, err := authz.NewHandler(&authz.Service{Store: a.Store, JWT: a.JWT}, secret, a.Config.HTTP.RealIPHeader,
+		a.Registry, a.Log.With("component", "authz"))
+	if err != nil {
+		return err
+	}
+	a.hbbsAuthz = h
+	a.Log.Info("hbbs connection authorization enabled", slog.String("path", authz.Path),
+		slog.String("secret_file", cfg.AuthzSecretFile), slog.String("source", string(src)))
 	return nil
 }
 

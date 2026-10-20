@@ -705,6 +705,8 @@ export const handlers = [
       token_expires_at: null,
       display_name: "admin",
       my_id: "web-0000000001",
+      servers: [],
+      custom_servers: true,
     }),
   ),
 

@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"net/url"
+	"strings"
 	"sync"
 	"time"
 
@@ -17,7 +18,9 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 
 	"github.com/bropines/rdpanel/internal/adminapi"
+	"github.com/bropines/rdpanel/internal/authz"
 	"github.com/bropines/rdpanel/internal/clientapi"
+	"github.com/bropines/rdpanel/internal/config"
 	"github.com/bropines/rdpanel/internal/events"
 	"github.com/bropines/rdpanel/internal/httpx"
 	"github.com/bropines/rdpanel/internal/oidc"
@@ -37,6 +40,7 @@ const shutdownTimeout = 15 * time.Second
 //	/api/*           RustDesk client API (stream A)
 //	/agent/v1/*      relay agent hub (enroll, WebSocket session)
 //	/agent/install.sh relay agent installer (static script, no auth)
+//	/internal/hbbs/authorize  connection authorization for hbbs (loopback + secret)
 //	/*               embedded SPA
 func (a *App) Handler() http.Handler {
 	cfg := a.Config
@@ -48,7 +52,7 @@ func (a *App) Handler() http.Handler {
 		httpx.Logger(a.Log),
 		httpx.Recoverer(a.Log),
 		a.httpMetrics.Middleware,
-		web.SecurityHeaders(cfg.HTTPS(), cfg.WebClient.IDURL, cfg.WebClient.RelayURL),
+		web.SecurityHeaders(cfg.HTTPS(), webClientConnectSources(cfg)),
 	)
 
 	r.Get("/healthz", a.handleHealthz)
@@ -124,6 +128,17 @@ func (a *App) Handler() http.Handler {
 		r.Route("/agent/v1", a.Relays.Register)
 		r.Method(http.MethodGet, relays.InstallScriptPath, http.HandlerFunc(a.Relays.HandleInstallScript))
 		r.Method(http.MethodHead, relays.InstallScriptPath, http.HandlerFunc(a.Relays.HandleInstallScript))
+	}
+
+	// hbbs connection authorization (RDPANEL_HBBS_AUTHZ): only loopback
+	// callers with the shared secret get an answer; everything else under
+	// /internal is the same JSON 404.
+	if a.hbbsAuthz != nil {
+		r.Route("/internal", func(ir chi.Router) {
+			ir.NotFound(httpx.NotFound)
+			ir.MethodNotAllowed(httpx.NotFound)
+			ir.Handle(strings.TrimPrefix(authz.Path, "/internal"), a.hbbsAuthz)
+		})
 	}
 
 	// Web client WebSocket reverse proxy (/ws/id and /ws/relay) to local hbbs/hbbr.
@@ -233,4 +248,20 @@ func (a *App) ServeListener(ctx context.Context, ln net.Listener) error {
 	}
 	a.Log.Info("server stopped")
 	return nil
+}
+
+// webClientConnectSources lists the WebSocket origins the web client may use:
+// the configured hbbs/hbbr URLs, the extra servers, and any wss: origin when
+// users may enter their own servers.
+func webClientConnectSources(cfg *config.Config) web.ConnectSources {
+	wc := cfg.WebClient
+	cs := web.ConnectSources{Origins: []string{wc.IDURL, wc.RelayURL}}
+	if !wc.Enabled {
+		return cs
+	}
+	for _, s := range wc.Servers {
+		cs.Origins = append(cs.Origins, s.IDURL, s.RelayURL)
+	}
+	cs.AnyWSS = wc.CustomServers
+	return cs
 }

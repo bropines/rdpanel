@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io/fs"
 	"log/slog"
+	"net/http"
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
@@ -100,6 +101,9 @@ type App struct {
 	httpMetrics *httpx.Metrics
 	// keySecrets are encodings of loaded key material, hidden from Logs.
 	keySecrets []string
+	// hbbsAuthz serves /internal/hbbs/authorize (nil when
+	// RDPANEL_HBBS_AUTHZ=false).
+	hbbsAuthz http.Handler
 }
 
 // New opens the database (applying migrations), loads keys and builds the App.
@@ -144,6 +148,10 @@ func New(ctx context.Context, cfg *config.Config, log *slog.Logger, opts ...Opti
 		return nil, err
 	}
 	if err := a.initHBBS(); err != nil {
+		_ = a.DB.Close()
+		return nil, err
+	}
+	if err := a.initAuthz(); err != nil {
 		_ = a.DB.Close()
 		return nil, err
 	}

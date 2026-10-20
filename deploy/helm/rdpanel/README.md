@@ -261,6 +261,7 @@ panel's `RDPANEL_*` settings that have no dedicated key go into `panel.env`
 | `panel.adminURL` | `""` | `RDPANEL_ADMIN_URL` (panel host when it differs from the public client-API host; expose only `/api/` minus `/api/v1/` publicly, see [docs/deploy.md](../../../docs/deploy.md#split-hosts-public-client-api--internal-admin-panel)) |
 | `panel.dataDir` | `/data/panel` | `RDPANEL_DATA_DIR` |
 | `panel.hbbsPublicKeyFile` | `/data/id_ed25519.pub` | `RDPANEL_HBBS_PUBLIC_KEY_FILE` |
+| `panel.hbbsAuthz` | `true` | `RDPANEL_HBBS_AUTHZ`: hbbs asks the panel before every connection (connection rules, control roles); see [docs/acl-policy.md](../../../docs/acl-policy.md#3-enforcement) |
 | `panel.trustedProxies` | loopback | `RDPANEL_TRUSTED_PROXIES` |
 | `panel.realIPHeader` | `X-Forwarded-For` | `RDPANEL_REAL_IP_HEADER` |
 | `panel.metricsAllow` | loopback | `RDPANEL_METRICS_ALLOW` |

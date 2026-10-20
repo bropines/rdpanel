@@ -77,3 +77,50 @@ func TestAuditConnACLWebSession(t *testing.T) {
 		t.Fatalf("unknown web id not denied: %v", k)
 	}
 }
+
+// The kick follows the effective control role like hbbs' authorization
+// does: connection types the role forbids are kicked, rules or not.
+func TestAuditConnACLRoleConnType(t *testing.T) {
+	e := newEnv(t)
+	ctx := context.Background()
+	target := e.device("300000021", "dGFyZ2V0")
+	bob := e.user("bob", "pw-bob-123456", nil)
+	admin := e.user("root", "pw-root-12345", func(u *store.User) { u.Role = store.RoleAdmin })
+	for id, owner := range map[string]int64{"300000022": bob.ID, "300000023": admin.ID} {
+		if err := e.st.Devices.Create(ctx, &store.Device{RustdeskID: id, OwnerUserID: &owner}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	authorized := func(connID, connType int, controller string) bool {
+		t.Helper()
+		body := fmt.Sprintf(`{"id":"300000021","uuid":"dGFyZ2V0","conn_id":%d,"session_id":"1","peer":[%q,"name"],"type":%d}`,
+			connID, controller, connType)
+		e.empty("POST", "/api/audit/conn", body, "")
+		return len(e.kicks.Take(target.RustdeskID, []int32{int32(connID)})) == 1
+	}
+	viewOnly, err := e.st.ControlRoles.GetByName(ctx, "View Only")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := e.st.ControlRoles.SetDefault(ctx, viewOnly.ID); err != nil {
+		t.Fatal(err)
+	}
+	// Audit types: 0 remote, 1 file transfer, 2 port forward, 3 camera, 4 terminal.
+	for i, c := range []struct {
+		connType   int
+		controller string
+		kicked     bool
+	}{
+		{0, "300000022", false},
+		{1, "300000022", true},
+		{2, "300000022", true},
+		{3, "300000022", false},
+		{4, "300000022", true},
+		{1, "399999999", true},  // unknown controller, still under the default role
+		{1, "300000023", false}, // admins are never restricted
+	} {
+		if got := authorized(10+i, c.connType, c.controller); got != c.kicked {
+			t.Errorf("type %d from %s: kicked=%v, want %v", c.connType, c.controller, got, c.kicked)
+		}
+	}
+}

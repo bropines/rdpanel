@@ -155,6 +155,20 @@ groups:
             /api/audit/{{ $labels.type }} answered 5xx (clients retry, but
             records may be lost). Check disk space and the rdpanel log.
 
+      - alert: RustDeskHBBSAuthzErrors
+        expr: sum by (job, instance) (increase(rdpanel_hbbs_authz_total{job="rustdesk-panel", result="error"}[10m])) > 0
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: hbbs connection authorization failing on {{ $labels.instance }}
+          description: >-
+            Requests from hbbs to /internal/hbbs/authorize fail (wrong
+            AUTHZ_SECRET_FILE, bad request or database error). hbbs then lets
+            connections start without the panel's decision: connection rules
+            are only enforced after the fact and control roles not at all.
+            Check the rdpanel log.
+
       # ---------------------------------------------------------------- relays
       - alert: RustDeskRelayOffline
         expr: rdpanel_relay_health{job="rustdesk-panel", state="offline"} == 1

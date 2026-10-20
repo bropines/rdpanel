@@ -104,6 +104,21 @@ func (r *AuthTokens) GetActive(ctx context.Context, kind TokenKind, hash []byte)
 		hash, kind, now, now, now))
 }
 
+// Inactive reports whether a token of the given kind with digest hash is
+// recorded but no longer active (revoked, or past its sliding, absolute or
+// JWT expiry). Digests without a row (e.g. the short-lived tokens handed to
+// the web client) are not inactive.
+func (r *AuthTokens) Inactive(ctx context.Context, kind TokenKind, hash []byte) (bool, error) {
+	now := toMs(r.now())
+	var n int
+	err := r.q.QueryRowContext(ctx, `SELECT count(*) FROM auth_tokens
+		WHERE token_sha256 = ? AND kind = ? AND (revoked_at IS NOT NULL OR expires_at <= ?
+		  OR (absolute_expires_at IS NOT NULL AND absolute_expires_at <= ?)
+		  OR (jwt_expires_at IS NOT NULL AND jwt_expires_at <= ?))`,
+		hash, kind, now, now, now).Scan(&n)
+	return n > 0, mapErr(err)
+}
+
 // Get returns a token by id regardless of state.
 func (r *AuthTokens) Get(ctx context.Context, id int64) (*AuthToken, error) {
 	return scanAuthToken(r.q.QueryRowContext(ctx, `SELECT `+authTokenColumns+` FROM auth_tokens WHERE id = ?`, id))

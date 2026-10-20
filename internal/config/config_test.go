@@ -228,6 +228,41 @@ func TestAPIDocs(t *testing.T) {
 	}
 }
 
+func TestHBBSAuthzSettings(t *testing.T) {
+	cfg, err := Load(env(map[string]string{"RDPANEL_DATA_DIR": "/srv/panel"}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !cfg.HBBS.Authz || cfg.HBBS.AuthzSecretFile != filepath.Join("/srv/panel", "hbbs-authz.key") {
+		t.Fatalf("defaults: authz=%v file=%q", cfg.HBBS.Authz, cfg.HBBS.AuthzSecretFile)
+	}
+	cfg, err = Load(env(map[string]string{
+		"RDPANEL_HBBS_AUTHZ":             "false",
+		"RDPANEL_HBBS_AUTHZ_SECRET_FILE": " /run/secrets/hbbs-authz ",
+	}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.HBBS.Authz || cfg.HBBS.AuthzSecretFile != "/run/secrets/hbbs-authz" {
+		t.Fatalf("env: authz=%v file=%q", cfg.HBBS.Authz, cfg.HBBS.AuthzSecretFile)
+	}
+	if _, err := Load(env(map[string]string{"RDPANEL_HBBS_AUTHZ": "sometimes"})); err == nil {
+		t.Fatal("invalid boolean accepted")
+	}
+
+	path := filepath.Join(t.TempDir(), "rdpanel.yaml")
+	if err := os.WriteFile(path, []byte("hbbs:\n  authz: false\n  authz_secret_file: /etc/rdpanel/authz.key\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err = Load(env(map[string]string{"RDPANEL_CONFIG": path}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.HBBS.Authz || cfg.HBBS.AuthzSecretFile != "/etc/rdpanel/authz.key" {
+		t.Fatalf("yaml: authz=%v file=%q", cfg.HBBS.Authz, cfg.HBBS.AuthzSecretFile)
+	}
+}
+
 func TestHBBSWorkerSettings(t *testing.T) {
 	cfg, err := Load(env(nil))
 	if err != nil {
@@ -397,4 +432,25 @@ func TestDBConfig(t *testing.T) {
 			t.Fatalf("expected error about db_type, got: %v", err)
 		}
 	})
+}
+
+func TestWebClientServersEnv(t *testing.T) {
+	cfg, err := Load(env(map[string]string{
+		"RDPANEL_WEBCLIENT_SERVERS":        `[{"name":"Other","id_url":"wss://o.example/ws/id","key":"MEbIUN8NZFq0Vu80BjNNIGDbQKdXxcg8QTbo69qrH+A="}]`,
+		"RDPANEL_WEBCLIENT_CUSTOM_SERVERS": "true",
+	}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(cfg.WebClient.Servers) != 1 || cfg.WebClient.Servers[0].IDURL != "wss://o.example/ws/id" || !cfg.WebClient.CustomServers {
+		t.Fatalf("%+v", cfg.WebClient)
+	}
+	if _, err := Load(env(map[string]string{
+		"RDPANEL_WEBCLIENT_SERVERS": `[{"name":"Bad","id_url":"ws://o.example/ws/id","key":"short"}]`,
+	})); err == nil {
+		t.Fatal("insecure URL and bad key must be rejected")
+	}
+	if _, err := Load(env(map[string]string{"RDPANEL_WEBCLIENT_SERVERS": "not json"})); err == nil {
+		t.Fatal("bad JSON must be rejected")
+	}
 }

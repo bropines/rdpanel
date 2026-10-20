@@ -83,6 +83,8 @@ See [deploy.md → Passkeys](deploy.md#passkeys) for how the RP id and origins a
 | `RDPANEL_HBBS_POLL_INTERVAL` (`hbbs.poll_interval`) | `5s` | presence poll period (batched `OnlineRequest`) |
 | `RDPANEL_HBBS_RECONCILE_INTERVAL` (`hbbs.reconcile_interval`) | `15s` | admin-channel probe / drift-correction period |
 | `RDPANEL_HBBS_LIST_DIR` (`hbbs.list_dir`) | empty | hbbr working dir; when set, `blacklist.txt`/`blocklist.txt` are kept in sync there (`/data` in the s6 image) |
+| `RDPANEL_HBBS_AUTHZ` (`hbbs.authz`) | `true` | serve `POST /internal/hbbs/authorize`, where hbbs asks before every connection whether it may start and with which control permissions (connection rules and control roles, [acl-policy.md → Enforcement](acl-policy.md#3-enforcement)). Answers only loopback peers without proxy headers that present the secret below; anything else gets a 404. `false` = no endpoint and no secret file: rules are then only enforced after the fact and roles not at all |
+| `RDPANEL_HBBS_AUTHZ_SECRET_FILE` (`hbbs.authz_secret_file`) | `<data>/hbbs-authz.key` | bearer secret hbbs presents (its `AUTHZ_SECRET_FILE`); generated on first start (32 random bytes as hex, mode 0600) when missing, an existing file is used as is (at least 16 characters). In the image `key-secret` creates it before hbbs starts, so set the path through this variable, not only in the YAML file |
 
 ### Logging and updates
 
@@ -98,6 +100,8 @@ See [deploy.md → Passkeys](deploy.md#passkeys) for how the RP id and origins a
 | `RDPANEL_WEBCLIENT_ADMIN_ONLY` (`webclient.admin_only`) | `false` | offer the web client to panel admins only |
 | `RDPANEL_WEBCLIENT_ID_URL` (`webclient.id_url`) | same origin `/ws/id` | WebSocket URL of hbbs (port 21118) as browsers reach it, e.g. `wss://rd.example.com/ws/id` |
 | `RDPANEL_WEBCLIENT_RELAY_URL` (`webclient.relay_url`) | same origin `/ws/relay` | WebSocket URL of hbbr (port 21119) as browsers reach it |
+| `RDPANEL_WEBCLIENT_SERVERS` (`webclient.servers`) | none | other servers offered in the web client: JSON array (env) / YAML list of `{name, id_url, relay_url, key}`; `id_url`/`relay_url` must be `wss://` (relay defaults to `id_url` with `/ws/relay`), `key` is that server's `id_ed25519.pub`. Their origins are added to the CSP ([web-client.md → Other servers](web-client.md#other-servers)) |
+| `RDPANEL_WEBCLIENT_CUSTOM_SERVERS` (`webclient.custom_servers`) | `false` | let users enter any server (host + key, or a RustDesk config string); the CSP then allows WebSocket connections to every `wss:` origin |
 | `RDPANEL_WEBHOOK_URL` (`webhook.url`) | empty | HTTP/HTTPS endpoint for critical alerts (relay degraded/offline, hbbs down); empty = disabled. Logs show only its scheme and host ([webhooks](#webhooks)) |
 | `RDPANEL_WEBHOOK_SECRET` (`webhook.secret`) | empty | optional HMAC-SHA256 secret: requests are signed over timestamp and body (`X-RDPanel-Timestamp`, `X-Signature-256`; [verifying](#webhooks)) |
 

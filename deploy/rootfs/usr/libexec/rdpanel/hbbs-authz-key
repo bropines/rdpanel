@@ -1,0 +1,28 @@
+#!/bin/sh
+# Usage: hbbs-authz-key <file>
+#
+# Makes sure <file> holds the secret hbbs presents to the panel's connection
+# authorization endpoint (AUTHZ_SECRET_FILE / RDPANEL_HBBS_AUTHZ_SECRET_FILE):
+# 32 random bytes as lowercase hex and a newline, the format rdpanel writes
+# itself when it starts first. A non-empty file is left alone. A new one is
+# written with mode 0600 to a temporary file and renamed into place, so
+# readers never see half a secret. Prints "exists" or "generated".
+set -eu
+f=${1:?usage: hbbs-authz-key <file>}
+if [ -s "$f" ]; then
+	echo exists
+	exit 0
+fi
+mkdir -p "$(dirname "$f")"
+tmp="$f.tmp.$$"
+trap 'rm -f "$tmp"' EXIT
+(
+	umask 077
+	od -An -N32 -tx1 /dev/urandom | tr -d ' \n' > "$tmp"
+	echo >> "$tmp"
+)
+grep -qxE '[0-9a-f]{64}' "$tmp" || { echo "hbbs-authz-key: could not generate a secret" >&2; exit 1; }
+chmod 0600 "$tmp"
+mv -f "$tmp" "$f"
+trap - EXIT
+echo generated

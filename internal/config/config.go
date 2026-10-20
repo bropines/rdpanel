@@ -9,6 +9,7 @@ package config
 import (
 	"bytes"
 	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -87,6 +88,23 @@ type WebClientConfig struct {
 	// /ws/id and /ws/relay.
 	IDURL    string `yaml:"id_url"`
 	RelayURL string `yaml:"relay_url"`
+	// Servers are other RustDesk-compatible servers offered in the web
+	// client next to this one (their WebSocket origins are allowed by CSP).
+	Servers []WebClientServer `yaml:"servers"`
+	// CustomServers lets users enter any server (CSP then allows every wss:
+	// origin for WebSocket connections).
+	CustomServers bool `yaml:"custom_servers"`
+}
+
+// WebClientServer is an additional server offered in the web client.
+type WebClientServer struct {
+	Name string `yaml:"name" json:"name"`
+	// IDURL is hbbs' WebSocket URL as browsers reach it (wss://host/ws/id).
+	IDURL string `yaml:"id_url" json:"id_url"`
+	// RelayURL is hbbr's WebSocket URL; empty: IDURL with /ws/relay.
+	RelayURL string `yaml:"relay_url" json:"relay_url"`
+	// Key is the server's public key (id_ed25519.pub, base64).
+	Key string `yaml:"key" json:"key"`
 }
 
 // MinFederationTokenLen is the shortest accepted federation token.
@@ -236,6 +254,15 @@ type HBBSConfig struct {
 	WSIDServer string `yaml:"ws_id_server"`
 	// WSRelayServer is an explicit override for hbbr WebSocket address (default: RelayServer port + 2).
 	WSRelayServer string `yaml:"ws_relay_server"`
+	// Authz serves POST /internal/hbbs/authorize, where hbbs (AUTHZ_URL)
+	// asks the panel whether a connection may start and which control
+	// permissions it gets (connection rules and control roles). Loopback
+	// callers presenting the secret in AuthzSecretFile only. Default: true.
+	Authz bool `yaml:"authz"`
+	// AuthzSecretFile holds the bearer secret hbbs presents to the
+	// authorization endpoint; generated (32 random bytes, hex, mode 0600)
+	// when missing. Default: <DataDir>/hbbs-authz.key.
+	AuthzSecretFile string `yaml:"authz_secret_file"`
 }
 
 // WSIDAddr returns the hbbs WebSocket address (WSIDServer if set, else IDServer port + 2).
@@ -319,6 +346,7 @@ func Defaults() *Config {
 			RelayServer:       "127.0.0.1:21117",
 			Enabled:           true,
 			WebProxy:          true,
+			Authz:             true,
 			PollInterval:      5 * time.Second,
 			ReconcileInterval: 15 * time.Second,
 		},
@@ -458,6 +486,8 @@ func (c *Config) envVars() []envVar {
 		{"RDPANEL_HBBS_POLL_INTERVAL", dur(&c.HBBS.PollInterval)},
 		{"RDPANEL_HBBS_RECONCILE_INTERVAL", dur(&c.HBBS.ReconcileInterval)},
 		{"RDPANEL_HBBS_LIST_DIR", str(&c.HBBS.ListDir)},
+		{"RDPANEL_HBBS_AUTHZ", boolean(&c.HBBS.Authz)},
+		{"RDPANEL_HBBS_AUTHZ_SECRET_FILE", str(&c.HBBS.AuthzSecretFile)},
 		{"RDPANEL_LOG_LEVEL", str(&c.Log.Level)},
 		{"RDPANEL_LOG_FORMAT", str(&c.Log.Format)},
 		{"RDPANEL_LOGS_BUFFER", integer(&c.Logs.Buffer)},
@@ -478,6 +508,19 @@ func (c *Config) envVars() []envVar {
 		{"RDPANEL_WEBCLIENT_ADMIN_ONLY", boolean(&c.WebClient.AdminOnly)},
 		{"RDPANEL_WEBCLIENT_ID_URL", str(&c.WebClient.IDURL)},
 		{"RDPANEL_WEBCLIENT_RELAY_URL", str(&c.WebClient.RelayURL)},
+		{"RDPANEL_WEBCLIENT_SERVERS", func(v string) error {
+			var servers []WebClientServer
+			if strings.TrimSpace(v) == "" {
+				c.WebClient.Servers = nil
+				return nil
+			}
+			if err := json.Unmarshal([]byte(v), &servers); err != nil {
+				return fmt.Errorf("JSON array of {name,id_url,relay_url,key}: %w", err)
+			}
+			c.WebClient.Servers = servers
+			return nil
+		}},
+		{"RDPANEL_WEBCLIENT_CUSTOM_SERVERS", boolean(&c.WebClient.CustomServers)},
 		{"RDPANEL_FEDERATION_ENABLED", boolean(&c.Federation.Enabled)},
 		{"RDPANEL_FEDERATION_TOKEN", sec(&c.Federation.Token)},
 	}
@@ -548,6 +591,9 @@ func (c *Config) fillDerived() {
 	}
 	if c.HBBS.PublicKeyFile == "" {
 		c.HBBS.PublicKeyFile = filepath.Join(c.DataDir, "id_ed25519.pub")
+	}
+	if c.HBBS.AuthzSecretFile == "" {
+		c.HBBS.AuthzSecretFile = filepath.Join(c.DataDir, "hbbs-authz.key")
 	}
 	if c.Auth.JWTLifetime == 0 {
 		c.Auth.JWTLifetime = c.Auth.TokenLifetime
@@ -708,6 +754,23 @@ func (c *Config) Validate() error {
 		if tok := c.Federation.Token.Reveal(); strings.TrimSpace(tok) != tok || len(tok) < MinFederationTokenLen {
 			add("federation.token (RDPANEL_FEDERATION_TOKEN) must be at least %d characters without surrounding spaces when federation is enabled",
 				MinFederationTokenLen)
+		}
+	}
+	for i, ws := range c.WebClient.Servers {
+		if strings.TrimSpace(ws.Name) == "" {
+			add("webclient.servers[%d]: name is required", i)
+		}
+		for _, u := range []struct{ name, v string }{{"id_url", ws.IDURL}, {"relay_url", ws.RelayURL}} {
+			if u.v == "" && u.name == "relay_url" {
+				continue
+			}
+			pu, err := url.Parse(u.v)
+			if err != nil || pu.Scheme != "wss" || pu.Host == "" {
+				add("webclient.servers[%d].%s %q: must be a wss:// URL", i, u.name, u.v)
+			}
+		}
+		if raw, err := base64.StdEncoding.DecodeString(strings.TrimSpace(ws.Key)); err != nil || len(raw) != 32 {
+			add("webclient.servers[%d].key: must be the base64 server public key (32 bytes)", i)
 		}
 	}
 	if len(errs) > 0 {

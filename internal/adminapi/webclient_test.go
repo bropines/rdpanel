@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/bropines/rdpanel/internal/config"
 	"github.com/bropines/rdpanel/internal/store"
 )
 
@@ -19,6 +20,8 @@ func TestWebClientConfig(t *testing.T) {
 	cfg := e.deps.Config
 	cfg.HBBS.PublicKeyFile = keyFile
 	cfg.WebClient.RelayURL = "wss://relay.test/ws/relay"
+	cfg.WebClient.Servers = []config.WebClientServer{{Name: "Other", IDURL: "wss://other.test/ws/id", Key: " b3RoZXI= "}}
+	cfg.WebClient.CustomServers = true
 
 	code, _, _ := e.client().do(http.MethodGet, "/webclient/config", nil)
 	if code != http.StatusUnauthorized {
@@ -33,6 +36,9 @@ func TestWebClientConfig(t *testing.T) {
 	if m["enabled"] != true || m["public_key"] != "c2VydmVyLWtleQ==" || m["relay_url"] != "wss://relay.test/ws/relay" ||
 		m["rendezvous_url"] != "" || m["display_name"] != "bob" {
 		t.Fatalf("config: %v", m)
+	}
+	if srv, _ := m["servers"].([]any); len(srv) != 1 || srv[0].(map[string]any)["key"] != "b3RoZXI=" || m["custom_servers"] != true {
+		t.Fatalf("servers: %v %v", m["servers"], m["custom_servers"])
 	}
 	tok, _ := m["token"].(string)
 	claims, err := e.deps.JWT.Verify(tok)
