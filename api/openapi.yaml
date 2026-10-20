@@ -4755,6 +4755,12 @@ components:
         os_family: { $ref: "#/components/schemas/OsFamily" }
         online: { type: boolean, description: "Live presence (hbbs OnlineRequest, heartbeat fallback)." }
         online_since: { type: [string, "null"], format: date-time, description: Start of the current online/offline streak. }
+        not_registered:
+          type: boolean
+          description: >-
+            The client's heartbeat to this API is recent but hbbs reports the device offline: it is not
+            registered on the ID server (typically blocked UDP/TCP 21116 or the client's WebSocket mode), so
+            nobody can connect to it. Always false without hbbs presence.
         last_seen_at: { type: [string, "null"], format: date-time }
         last_seen_ip: { type: [string, "null"] }
         last_heartbeat_at: { type: [string, "null"], format: date-time }

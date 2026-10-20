@@ -385,7 +385,9 @@
     "emptyHint": "Devices appear here after a RustDesk client with this server's API address logs in or sends system info.",
     "emptyFiltered": "No devices match the filters",
     "webFiles": "Files only",
-    "webTerminal": "Terminal"
+    "webTerminal": "Terminal",
+    "notRegistered": "Not on the ID server",
+    "notRegisteredHint": "The client reaches this panel (heartbeat) but is not registered on the ID server, so nobody can connect to it. Usually UDP/TCP port 21116 is blocked on its network, or “Use WebSocket” is on in the client's network settings: turn it off or open the port."
   },
   "users": {
     "description": "Accounts, roles, 2FA and sessions.",

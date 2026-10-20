@@ -107,7 +107,7 @@ function DevicesView({ my }: { my: boolean }) {
         enableHiding: false,
         cell: ({ row: { original: d } }) => (
           <div className="flex items-center gap-2.5">
-            <OnlineDot online={d.online} />
+            <OnlineDot online={d.online} notRegistered={d.not_registered} />
             <div className="min-w-0">
               <div className="truncate font-medium">{deviceName(d)}</div>
               {d.alias && d.hostname && <div className="truncate text-xs text-muted-foreground">{d.hostname}</div>}
@@ -176,6 +176,10 @@ function DevicesView({ my }: { my: boolean }) {
         cell: ({ row: { original: d } }) =>
           d.online ? (
             <span className="whitespace-nowrap text-emerald-600 dark:text-emerald-400">{t("devices.onlineNow")}</span>
+          ) : d.not_registered ? (
+            <span className="whitespace-nowrap text-amber-600 dark:text-amber-400" title={t("devices.notRegisteredHint")}>
+              {t("devices.notRegistered")}
+            </span>
           ) : (
             <RelativeTime iso={d.last_seen_at} className="text-muted-foreground" />
           ),

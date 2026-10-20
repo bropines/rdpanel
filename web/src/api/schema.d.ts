@@ -3458,6 +3458,8 @@ export interface components {
              * @description Start of the current online/offline streak.
              */
             online_since?: string | null;
+            /** @description The client's heartbeat to this API is recent but hbbs reports the device offline: it is not registered on the ID server (typically blocked UDP/TCP 21116 or the client's WebSocket mode), so nobody can connect to it. Always false without hbbs presence. */
+            not_registered?: boolean;
             /** Format: date-time */
             last_seen_at?: string | null;
             last_seen_ip?: string | null;
