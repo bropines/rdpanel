@@ -196,23 +196,25 @@ export interface RelayResponseData {
   refuseReason?: string;
 }
 
-export function encodeRequestRelay(id: string, uuid: string, relayServer?: string): Uint8Array {
+export function encodeRequestRelay(id: string, uuid: string, relayServer?: string, licenceKey?: string): Uint8Array {
   const wReq = new ProtoWriter();
   wReq.writeString(1, id);
   wReq.writeString(2, uuid);
   if (relayServer) wReq.writeString(4, relayServer);
   wReq.writeBool(5, true); // secure = true
+  if (licenceKey) wReq.writeString(6, licenceKey);
 
   const wMsg = new ProtoWriter();
   wMsg.writeMessage(18, wReq.finish()); // field 18 = request_relay
   return wMsg.finish();
 }
 
-export function encodeRelayRequest(uuid: string, id: string): Uint8Array {
+export function encodeRelayRequest(uuid: string, id: string, licenceKey?: string): Uint8Array {
   const wReq = new ProtoWriter();
   wReq.writeString(1, id);
   wReq.writeString(2, uuid);
   wReq.writeBool(5, true); // secure = true
+  if (licenceKey) wReq.writeString(6, licenceKey);
 
   const wMsg = new ProtoWriter();
   wMsg.writeMessage(18, wReq.finish()); // field 18 = request_relay in RendezvousMessage
@@ -238,8 +240,9 @@ export function decodeRelayResponse(buf: Uint8Array): RelayResponseData | null {
         if (t.field === 1) socketAddr = rInner.readBytes();
         else if (t.field === 2) uuid = rInner.readString();
         else if (t.field === 3) relayServer = rInner.readString();
-        else if (t.field === 4) pk = rInner.readBytes();
-        else if (t.field === 5) refuseReason = rInner.readString();
+        else if (t.field === 4) rInner.readString(); // remote peer id (string)
+        else if (t.field === 5) pk = rInner.readBytes(); // remote peer pk (bytes)
+        else if (t.field === 6) refuseReason = rInner.readString(); // refuse_reason (string)
         else rInner.skip(t.wireType);
       }
       return { socketAddr, uuid, relayServer, pk, refuseReason };

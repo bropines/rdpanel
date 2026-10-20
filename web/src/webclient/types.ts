@@ -21,6 +21,7 @@ export interface WebClientConfig {
   peerId: string;
   password?: string;
   serverKeyB64?: string;
+  relayServer?: string;
   wsIdUrl: string;
   wsRelayUrl: string;
   myId?: string;

@@ -136,13 +136,29 @@ export class WebClientSession {
           }
         }, 8000);
 
+        let relayTimeout: ReturnType<typeof setTimeout> | null = null;
+
         ws.onopen = () => {
           clearTimeout(timeout);
           this.requestRelay();
+          relayTimeout = setTimeout(() => {
+            if (this.state === 'requesting_relay') {
+              try {
+                ws.close();
+              } catch {
+                // ignore
+              }
+              reject(new Error('Relay request timed out: remote device did not respond. Is RustDesk running on the device?'));
+            }
+          }, 15000);
         };
 
         ws.onmessage = async (evt: MessageEvent) => {
           try {
+            if (relayTimeout) {
+              clearTimeout(relayTimeout);
+              relayTimeout = null;
+            }
             const buf = new Uint8Array(evt.data as ArrayBuffer);
             const resp = decodeRelayResponse(buf);
 
@@ -156,7 +172,7 @@ export class WebClientSession {
                 return;
               }
 
-              const relayServer = resp.relayServer || '';
+              const relayServer = resp.relayServer || this.config.relayServer || '';
               const uuid = resp.uuid || this.sessionUuid;
               await this.connectRelay(relayServer, uuid);
               resolve();
@@ -168,6 +184,10 @@ export class WebClientSession {
 
         ws.onerror = () => {
           clearTimeout(timeout);
+          if (relayTimeout) {
+            clearTimeout(relayTimeout);
+            relayTimeout = null;
+          }
           if (fallbackUrl) {
             tryConnect(fallbackUrl);
             return;
@@ -177,6 +197,10 @@ export class WebClientSession {
 
         ws.onclose = () => {
           clearTimeout(timeout);
+          if (relayTimeout) {
+            clearTimeout(relayTimeout);
+            relayTimeout = null;
+          }
         };
       };
 
@@ -198,7 +222,12 @@ export class WebClientSession {
     this.emit({ type: 'state', state: 'requesting_relay' });
 
     this.sessionUuid = crypto.randomUUID ? crypto.randomUUID() : String(Date.now());
-    const req = encodeRequestRelay(this.config.peerId, this.sessionUuid);
+    const req = encodeRequestRelay(
+      this.config.peerId,
+      this.sessionUuid,
+      this.config.relayServer,
+      this.config.serverKeyB64,
+    );
     this.wsId.send(req);
   }
 
@@ -243,7 +272,7 @@ export class WebClientSession {
         ws.onopen = () => {
           clearTimeout(timeout);
           this.emit({ type: 'state', state: 'pairing_relay' });
-          const req = encodeRelayRequest(uuid, this.config.peerId);
+          const req = encodeRelayRequest(uuid, this.config.peerId, this.config.serverKeyB64);
           ws.send(req);
         };
 

@@ -109,8 +109,8 @@ const connectRoute = createRoute({
   path: "/connect",
   beforeLoad: async ({ context, location }) => ({ me: await requireSession(context.queryClient, location) }),
   validateSearch: (s: Record<string, unknown>): { id?: string; pwd?: string } => ({
-    id: typeof s.id === "string" ? s.id : undefined,
-    pwd: typeof s.pwd === "string" ? s.pwd : undefined,
+    id: s.id !== undefined && s.id !== null && String(s.id).trim() !== "" ? String(s.id).trim() : undefined,
+    pwd: s.pwd !== undefined && s.pwd !== null && String(s.pwd) !== "" ? String(s.pwd) : undefined,
   }),
   component: lazyRouteComponent(() => import("@/pages/webclient/WebClientPage"), "WebClientPage"),
 });

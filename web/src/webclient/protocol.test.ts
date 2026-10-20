@@ -32,7 +32,7 @@ describe('WebClient Protocol', () => {
   });
 
   it('encodes relay request matching RustDesk rendezvous spec', () => {
-    const buf = encodeRelayRequest('test-uuid-1234', '103146982');
+    const buf = encodeRelayRequest('test-uuid-1234', '103146982', 'test-key-b64');
     const r = new ProtoReader(buf);
     const tag = r.readTag();
     expect(tag?.field).toBe(18); // request_relay field in RendezvousMessage
@@ -44,6 +44,8 @@ describe('WebClient Protocol', () => {
     expect(rInner.readString()).toBe('test-uuid-1234');
     expect(rInner.readTag()?.field).toBe(5); // secure
     expect(rInner.readBool()).toBe(true);
+    expect(rInner.readTag()?.field).toBe(6); // licence_key
+    expect(rInner.readString()).toBe('test-key-b64');
   });
 
   it('decodes relay response', () => {

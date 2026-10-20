@@ -7,6 +7,8 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"net/http/httputil"
+	"net/url"
 	"sync"
 	"time"
 
@@ -136,8 +138,40 @@ func (a *App) Handler() http.Handler {
 		r.Method(http.MethodHead, relays.InstallScriptPath, http.HandlerFunc(a.Relays.HandleInstallScript))
 	}
 
+	// Web client WebSocket reverse proxy (/ws/id and /ws/relay) to local hbbs/hbbr.
+	if cfg.HBBS.WebProxy {
+		r.Handle("/ws/id", a.webWSProxy(cfg.HBBS.WSIDAddr()))
+		r.Handle("/ws/relay", a.webWSProxy(cfg.HBBS.WSRelayAddr()))
+	}
+
 	r.Handle("/*", a.SPA)
 	return r
+}
+
+func (a *App) webWSProxy(targetAddr string) http.Handler {
+	targetURL := &url.URL{
+		Scheme: "http",
+		Host:   targetAddr,
+	}
+	proxy := &httputil.ReverseProxy{
+		Rewrite: func(pr *httputil.ProxyRequest) {
+			pr.SetURL(targetURL)
+			pr.Out.Header["X-Forwarded-For"] = pr.In.Header["X-Forwarded-For"]
+			pr.SetXForwarded()
+			if ip := httpx.ClientIP(pr.In); ip.IsValid() {
+				pr.Out.Header.Set("X-Real-IP", ip.String())
+			}
+		},
+		ErrorHandler: func(w http.ResponseWriter, r *http.Request, err error) {
+			a.Log.WarnContext(r.Context(), "web ws proxy error",
+				slog.String("target", targetAddr),
+				slog.String("path", r.URL.Path),
+				slog.Any("err", err),
+			)
+			http.Error(w, "Bad Gateway", http.StatusBadGateway)
+		},
+	}
+	return proxy
 }
 
 func (a *App) handleHealthz(w http.ResponseWriter, r *http.Request) {

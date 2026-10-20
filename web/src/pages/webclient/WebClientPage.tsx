@@ -29,7 +29,7 @@ import type { SessionState, VideoStats, WebClientEvent } from '@/webclient/types
 
 export function WebClientPage() {
   const { t } = useTranslation();
-  const search = useSearch({ strict: false }) as { id?: string; pwd?: string };
+  const search = useSearch({ strict: false }) as { id?: string | number; pwd?: string };
   const navigate = useNavigate();
 
   const getUrlParam = (k: string) => {
@@ -40,8 +40,8 @@ export function WebClientPage() {
     return '';
   };
 
-  const initialPeerId = (search.id || getUrlParam('id') || '').trim();
-  const initialPassword = search.pwd || getUrlParam('pwd') || '';
+  const initialPeerId = String(search.id ?? getUrlParam('id') ?? '').trim();
+  const initialPassword = String(search.pwd ?? getUrlParam('pwd') ?? '').trim();
 
   const [peerId, setPeerId] = useState(initialPeerId);
   const [password, setPassword] = useState(initialPassword);
@@ -85,7 +85,8 @@ export function WebClientPage() {
     return {
       wsIdUrl,
       wsRelayUrl,
-      serverKeyB64: data?.public_key,
+      relayServer: data?.relay_server || 'desk-ru.bropines.ru:21117',
+      serverKeyB64: data?.public_key || '',
     };
   }, [serverConfigQuery.data]);
 
@@ -97,7 +98,7 @@ export function WebClientPage() {
       sessionRef.current = null;
     }
 
-    const { wsIdUrl, wsRelayUrl, serverKeyB64 } = getWsUrls();
+    const { wsIdUrl, wsRelayUrl, relayServer, serverKeyB64 } = getWsUrls();
 
     const session = new WebClientSession(
       {
@@ -105,6 +106,7 @@ export function WebClientPage() {
         password: pwd || password,
         wsIdUrl,
         wsRelayUrl,
+        relayServer,
         serverKeyB64,
         myId: 'web-' + Math.random().toString(36).substring(2, 8),
         myName: 'RD Panel Web',
@@ -142,18 +144,19 @@ export function WebClientPage() {
   }, [password, getWsUrls, t]);
 
   useEffect(() => {
-    const rawId = (search.id || getUrlParam('id') || '').trim();
-    if (rawId && rawId !== peerId) {
-      setPeerId(rawId);
+    const rawId = String(search.id ?? getUrlParam('id') ?? '').trim();
+    if (rawId) {
+      setPeerId((current) => (current !== rawId ? rawId : current));
     }
-  }, [search.id, peerId]);
+  }, [search.id]);
 
   useEffect(() => {
-    const target = (peerId || search.id || getUrlParam('id') || '').trim();
+    if (serverConfigQuery.isLoading) return;
+    const target = (peerId || initialPeerId).trim();
     if (target && isWebCodecsSupported && state === 'idle') {
       startConnection(target, password || initialPassword);
     }
-  }, [peerId, isWebCodecsSupported, startConnection, state, password, initialPassword, search.id]);
+  }, [serverConfigQuery.isLoading, peerId, initialPeerId, isWebCodecsSupported, startConnection, state, password, initialPassword]);
 
   useEffect(() => {
     return () => {

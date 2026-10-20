@@ -193,6 +193,45 @@ type HBBSConfig struct {
 	// blacklist.txt / blocklist.txt there in sync with the desired lists
 	// (/data in the s6 image). Empty disables writing the files.
 	ListDir string `yaml:"list_dir"`
+	// WebProxy controls whether RD Panel proxies browser WebSocket connections
+	// (/ws/id and /ws/relay) to local hbbs/hbbr WebSocket listeners. Default: true.
+	WebProxy bool `yaml:"web_proxy"`
+	// WSIDServer is an explicit override for hbbs WebSocket address (default: IDServer port + 2).
+	WSIDServer string `yaml:"ws_id_server"`
+	// WSRelayServer is an explicit override for hbbr WebSocket address (default: RelayServer port + 2).
+	WSRelayServer string `yaml:"ws_relay_server"`
+}
+
+// WSIDAddr returns the hbbs WebSocket address (WSIDServer if set, else IDServer port + 2).
+func (h HBBSConfig) WSIDAddr() string {
+	if h.WSIDServer != "" {
+		return h.WSIDServer
+	}
+	host, portStr, err := net.SplitHostPort(h.IDServer)
+	if err != nil {
+		return "127.0.0.1:21118"
+	}
+	port, err := strconv.Atoi(portStr)
+	if err != nil {
+		return "127.0.0.1:21118"
+	}
+	return net.JoinHostPort(host, strconv.Itoa(port+2))
+}
+
+// WSRelayAddr returns the hbbr WebSocket address (WSRelayServer if set, else RelayServer port + 2).
+func (h HBBSConfig) WSRelayAddr() string {
+	if h.WSRelayServer != "" {
+		return h.WSRelayServer
+	}
+	host, portStr, err := net.SplitHostPort(h.RelayServer)
+	if err != nil {
+		return "127.0.0.1:21119"
+	}
+	port, err := strconv.Atoi(portStr)
+	if err != nil {
+		return "127.0.0.1:21119"
+	}
+	return net.JoinHostPort(host, strconv.Itoa(port+2))
 }
 
 // LogConfig controls slog output.
@@ -242,6 +281,7 @@ func Defaults() *Config {
 			IDServer:          "127.0.0.1:21116",
 			RelayServer:       "127.0.0.1:21117",
 			Enabled:           true,
+			WebProxy:          true,
 			PollInterval:      5 * time.Second,
 			ReconcileInterval: 15 * time.Second,
 		},
@@ -374,6 +414,9 @@ func (c *Config) envVars() []envVar {
 		{"RDPANEL_HBBS_RELAY_PUBLIC_HOST", str(&c.HBBS.RelayPublicHost)},
 		{"RDPANEL_HBBS_PUBLIC_KEY_FILE", str(&c.HBBS.PublicKeyFile)},
 		{"RDPANEL_HBBS_ENABLED", boolean(&c.HBBS.Enabled)},
+		{"RDPANEL_HBBS_WEB_PROXY", boolean(&c.HBBS.WebProxy)},
+		{"RDPANEL_HBBS_WS_ID_SERVER", str(&c.HBBS.WSIDServer)},
+		{"RDPANEL_HBBS_WS_RELAY_SERVER", str(&c.HBBS.WSRelayServer)},
 		{"RDPANEL_HBBS_POLL_INTERVAL", dur(&c.HBBS.PollInterval)},
 		{"RDPANEL_HBBS_RECONCILE_INTERVAL", dur(&c.HBBS.ReconcileInterval)},
 		{"RDPANEL_HBBS_LIST_DIR", str(&c.HBBS.ListDir)},
