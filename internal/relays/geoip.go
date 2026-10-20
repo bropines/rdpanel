@@ -177,38 +177,85 @@ func (e *GeoIPEngine) SupportedCountries() []CountryPrefixInfo {
 	return res
 }
 
-// RefreshFromURL downloads updated country IP ranges and parses CSV/text lines into the engine.
+// DefaultGeoIPSource is the dataset RefreshFromURL downloads by default.
+const DefaultGeoIPSource = "https://raw.githubusercontent.com/sapics/ip-location-db/main/dbip-country/dbip-country-ipv4.csv"
+
+// GeoIP refresh limits: the download is read through a size cap and parsing
+// stops at MaxGeoIPPrefixes (the default DB-IP IPv4 file is ~10 MB).
+const (
+	MaxGeoIPBytes    = 64 << 20
+	MaxGeoIPPrefixes = 1_000_000
+)
+
+// ErrGeoIPDownload wraps transport and HTTP failures of RefreshFromURL; the
+// wrapped detail (URL, dial error) is for logs, not for API responses.
+var ErrGeoIPDownload = errors.New("could not download the GeoIP database")
+
+// errGeoIPTooLarge is returned when a dataset exceeds MaxGeoIPBytes.
+var errGeoIPTooLarge = fmt.Errorf("GeoIP database exceeds %d MiB", MaxGeoIPBytes>>20)
+
+// RefreshFromURL downloads updated country IP ranges and parses CSV/text
+// lines into the engine. On any error the loaded dataset is kept.
 func (e *GeoIPEngine) RefreshFromURL(ctx context.Context, sourceURL string) (GeoIPStatus, error) {
 	if strings.TrimSpace(sourceURL) == "" {
-		sourceURL = "https://raw.githubusercontent.com/sapics/ip-location-db/main/dbip-country/dbip-country-ipv4.csv"
+		sourceURL = DefaultGeoIPSource
 	}
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, sourceURL, nil)
 	if err != nil {
-		return e.Status(), err
+		return e.Status(), fmt.Errorf("%w: %v", ErrGeoIPDownload, err)
 	}
 
 	client := &http.Client{Timeout: 30 * time.Second}
 	resp, err := client.Do(req)
 	if err != nil {
-		return e.Status(), err
+		return e.Status(), fmt.Errorf("%w: %v", ErrGeoIPDownload, err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return e.Status(), fmt.Errorf("HTTP error %d fetching geoip database", resp.StatusCode)
+		return e.Status(), fmt.Errorf("%w: HTTP %d", ErrGeoIPDownload, resp.StatusCode)
 	}
 
-	return e.ParseAndLoad(resp.Body, sourceURL)
+	return e.ParseAndLoad(&capReader{r: resp.Body, n: MaxGeoIPBytes}, sourceURL)
 }
 
-// ParseAndLoad reads CSV format `<start_ip>,<end_ip>,<country_code>` or `<cidr>,<country_code>` and loads into memory.
+// capReader fails with errGeoIPTooLarge after n bytes (io.LimitReader would
+// silently truncate the dataset instead).
+type capReader struct {
+	r io.Reader
+	n int64
+}
+
+func (c *capReader) Read(p []byte) (int, error) {
+	if c.n <= 0 {
+		var one [1]byte
+		if n, _ := c.r.Read(one[:]); n > 0 {
+			return 0, errGeoIPTooLarge
+		}
+		return 0, io.EOF
+	}
+	if int64(len(p)) > c.n {
+		p = p[:c.n]
+	}
+	n, err := c.r.Read(p)
+	c.n -= int64(n)
+	return n, err
+}
+
+// ParseAndLoad reads CSV format `<start_ip>,<end_ip>,<country_code>` or
+// `<cidr>,<country_code>` and loads into memory. On error (including more
+// than MaxGeoIPPrefixes prefixes) the loaded dataset is kept.
 func (e *GeoIPEngine) ParseAndLoad(r io.Reader, sourceName string) (GeoIPStatus, error) {
 	scanner := bufio.NewScanner(r)
 	newPrefixes := make([]prefixEntry, 0, 1000)
 	newByCountry := make(map[string][]string)
+	tooMany := fmt.Errorf("GeoIP database has more than %d prefixes", MaxGeoIPPrefixes)
 
 	for scanner.Scan() {
+		if len(newPrefixes) > MaxGeoIPPrefixes {
+			return e.Status(), tooMany
+		}
 		line := strings.TrimSpace(scanner.Text())
 		if line == "" || strings.HasPrefix(line, "#") {
 			continue
@@ -254,6 +301,9 @@ func (e *GeoIPEngine) ParseAndLoad(r io.Reader, sourceName string) (GeoIPStatus,
 		return e.Status(), err
 	}
 
+	if len(newPrefixes) > MaxGeoIPPrefixes {
+		return e.Status(), tooMany
+	}
 	if len(newPrefixes) == 0 {
 		return e.Status(), errors.New("no valid CIDR prefixes parsed from data source")
 	}

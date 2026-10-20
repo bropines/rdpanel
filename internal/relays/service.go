@@ -104,6 +104,9 @@ type Config struct {
 	Now           func() time.Time
 	// ListDir is hbbs/hbbr's working directory (where relay_map.txt lives).
 	ListDir string
+	// GeoIP resolves country prefixes for ImportCountryRules (nil: the
+	// process-wide GetGeoIPEngine, which Server -> Relays refreshes).
+	GeoIP *GeoIPEngine
 }
 
 // Service is the relay manager and agent hub.
@@ -116,7 +119,8 @@ type Service struct {
 	kick chan struct{}
 	rate *ipRate
 
-	cfgMu sync.Mutex // serialises desired-version bumps
+	cfgMu    sync.Mutex // serialises desired-version bumps
+	prefixMu sync.Mutex // serialises prefix-rule imports and relay_map.txt rewrites
 
 	mu        sync.Mutex
 	fails     map[int64]int
@@ -168,6 +172,9 @@ func New(cfg Config) (*Service, error) {
 	}
 	if cfg.Image == "" {
 		cfg.Image = "ghcr.io/bropines/rdpanel:latest"
+	}
+	if cfg.GeoIP == nil {
+		cfg.GeoIP = GetGeoIPEngine()
 	}
 	m, err := newMetrics(cfg.Registerer)
 	if err != nil {
@@ -1313,6 +1320,9 @@ func (s *Service) sampleTraffic(ctx context.Context, rs []Relay) {
 	}
 }
 
+// GeoIP returns the engine behind country imports and the GeoIP endpoints.
+func (s *Service) GeoIP() *GeoIPEngine { return s.cfg.GeoIP }
+
 // ListPrefixRules returns all prefix routing rules ordered by id.
 func (s *Service) ListPrefixRules(ctx context.Context) ([]PrefixRule, error) {
 	return s.st.ListPrefixRules(ctx)
@@ -1340,8 +1350,16 @@ func (s *Service) DeletePrefixRule(ctx context.Context, id int64) error {
 	return nil
 }
 
-// SyncPrefixRules writes relay_map.txt to ListDir and sends reload-geo to hbbs if reachable.
+// SyncPrefixRules writes relay_map.txt to ListDir and sends reload-geo to hbbs
+// if reachable. Concurrent calls are serialised, so the file always reflects
+// the rules as of the last call (the write itself is atomic: temp + rename).
 func (s *Service) SyncPrefixRules(ctx context.Context) error {
+	s.prefixMu.Lock()
+	defer s.prefixMu.Unlock()
+	return s.syncPrefixRulesLocked(ctx)
+}
+
+func (s *Service) syncPrefixRulesLocked(ctx context.Context) error {
 	rules, err := s.st.ListPrefixRules(ctx)
 	if err != nil {
 		return err

@@ -3245,8 +3245,16 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/RelayGeoIPStatus" }
+        "400": { $ref: "#/components/responses/ValidationFailed" }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "403": { $ref: "#/components/responses/Forbidden" }
+        "502":
+          description: >-
+            Download or parsing failed (error code geoip_refresh_failed); the
+            previously loaded dataset stays in place.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
   /relays/geoip/lookup:
     get:
       tags: [relays]
@@ -5434,8 +5442,8 @@ components:
       type: object
       required: [country_code, relay_host]
       properties:
-        country_code: { type: string }
-        relay_host: { type: string }
+        country_code: { type: string, description: "ISO 3166-1 alpha-2; prefixes come from the loaded GeoIP dataset, else the built-in list (at most 5000 per import)." }
+        relay_host: { type: string, description: "host[:port], several separated by commas; no whitespace." }
         comment: { type: string }
     ImportCountryPrefixRulesResult:
       type: object
@@ -5459,8 +5467,8 @@ components:
       type: object
       required: [cidr, relay_host]
       properties:
-        cidr: { type: string }
-        relay_host: { type: string }
+        cidr: { type: string, description: "CIDR or bare IP; stored masked (10.1.2.3/8 becomes 10.0.0.0/8)." }
+        relay_host: { type: string, description: "host[:port], several separated by commas; no whitespace." }
         comment: { type: string }
     ServerSettingKey:
       type: string

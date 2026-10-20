@@ -2,9 +2,16 @@ package relays
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
+	"sync"
 	"testing"
+	"time"
+
+	"github.com/bropines/rdpanel/internal/store"
 )
 
 func TestPrefixRuleValidation(t *testing.T) {
@@ -166,5 +173,154 @@ func TestCountryPrefixRules(t *testing.T) {
 	// Unsupported country
 	if _, err := h.svc.ImportCountryRules(ctx, "XX", "relay.example.com", ""); err == nil {
 		t.Fatal("expected error for unsupported country XX")
+	}
+}
+
+func TestPrefixRuleValidationRejectsInjection(t *testing.T) {
+	for _, host := range []string{
+		"a.example.com:21117\n0.0.0.0/0 evil.example.com:21117",
+		"a.example.com:21117\r\n0.0.0.0/0 evil.example.com:21117",
+		"a.example.com 0.0.0.0/0",
+		"a.example.com:21117\tb.example.com",
+		"a.example.com,,\nb.example.com",
+		"http://a.example.com",
+	} {
+		r := PrefixRule{CIDR: "10.0.0.0/8", RelayHost: host}
+		if err := r.Validate(); err == nil {
+			t.Errorf("relay_host %q: want error, got rule %+v", host, r)
+		} else if !errors.Is(err, store.ErrInvalid) {
+			t.Errorf("relay_host %q: error %v does not wrap store.ErrInvalid", host, err)
+		}
+	}
+
+	r := PrefixRule{CIDR: " 10.1.2.3/8 ", RelayHost: " a.example.com:21117, b.example.com ,a.example.com:21117"}
+	if err := r.Validate(); err != nil {
+		t.Fatal(err)
+	}
+	if r.CIDR != "10.0.0.0/8" || r.RelayHost != "a.example.com:21117,b.example.com" {
+		t.Fatalf("normalized rule = %+v", r)
+	}
+	r = PrefixRule{CIDR: "2001:db8::1/32", RelayHost: "[2001:db8::2]:21117"}
+	if err := r.Validate(); err != nil || r.CIDR != "2001:db8::/32" {
+		t.Fatalf("ipv6 rule = %+v, err %v", r, err)
+	}
+}
+
+func TestFormatRelayMapSkipsInvalidRows(t *testing.T) {
+	got := FormatRelayMap([]PrefixRule{
+		{CIDR: "10.1.0.0/8", RelayHost: "ok.example.com:21117"},
+		{CIDR: "192.168.0.0/16", RelayHost: "a:21117\n0.0.0.0/0 evil.example.com:21117"},
+		{CIDR: "not-a-cidr", RelayHost: "ok.example.com"},
+	})
+	if got != "10.0.0.0/8 ok.example.com:21117\n" {
+		t.Fatalf("FormatRelayMap = %q", got)
+	}
+}
+
+// TestSyncPrefixRulesConcurrent: concurrent rule changes leave relay_map.txt
+// matching the final rule set (list + write are serialised).
+func TestSyncPrefixRulesConcurrent(t *testing.T) {
+	ctx := context.Background()
+	dir := t.TempDir()
+	geo := &overlapDetector{}
+	h := newHarness(t, func(c *Config) {
+		c.ListDir = dir
+		c.Local = geo
+		c.LocalUp = func() bool { return true }
+	})
+	var wg sync.WaitGroup
+	for i := range 20 {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			rule := &PrefixRule{CIDR: fmt.Sprintf("10.%d.0.0/16", i), RelayHost: "relay.example.com:21117"}
+			if err := h.svc.CreatePrefixRule(ctx, rule); err != nil {
+				t.Error(err)
+			}
+		}()
+	}
+	wg.Wait()
+	rules, err := h.st.ListPrefixRules(ctx)
+	if err != nil || len(rules) != 20 {
+		t.Fatalf("rules %d, err %v", len(rules), err)
+	}
+	data, err := os.ReadFile(filepath.Join(dir, "relay_map.txt"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(data) != FormatRelayMap(rules) {
+		t.Fatalf("relay_map.txt is stale:\n%s\nwant\n%s", data, FormatRelayMap(rules))
+	}
+	if geo.maxInflight() != 1 {
+		t.Fatalf("%d syncs ran at once, want them serialised", geo.maxInflight())
+	}
+}
+
+// overlapDetector is a LocalControl whose ReloadGeo records how many calls
+// overlap (each holds for a moment so unserialised callers would collide).
+type overlapDetector struct {
+	fakeLocalControl
+	mu            sync.Mutex
+	inflight, max int
+}
+
+func (o *overlapDetector) ReloadGeo(context.Context) (string, error) {
+	o.mu.Lock()
+	o.inflight++
+	o.max = max(o.max, o.inflight)
+	o.mu.Unlock()
+	time.Sleep(2 * time.Millisecond)
+	o.mu.Lock()
+	o.inflight--
+	o.mu.Unlock()
+	return "ok", nil
+}
+
+func (o *overlapDetector) maxInflight() int {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	return o.max
+}
+
+func TestImportCountryRulesUsesGeoIPData(t *testing.T) {
+	ctx := context.Background()
+	geo := NewGeoIPEngine("")
+	if _, err := geo.ParseAndLoad(strings.NewReader("192.0.2.0/24,RU\n198.51.100.0/24,RU\n"), "test.csv"); err != nil {
+		t.Fatal(err)
+	}
+	h := newHarness(t, func(c *Config) { c.GeoIP = geo })
+
+	res, err := h.svc.ImportCountryRules(ctx, "ru", "relay-ru.example.com:21117", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.AddedCount != 2 {
+		t.Fatalf("added %d, want the 2 prefixes of the loaded dataset", res.AddedCount)
+	}
+	rules, _ := h.st.ListPrefixRules(ctx)
+	if len(rules) != 2 || rules[0].CIDR != "192.0.2.0/24" || rules[1].CIDR != "198.51.100.0/24" {
+		t.Fatalf("rules = %+v", rules)
+	}
+
+	// No GeoIP data for DE in the dataset: the curated list is used.
+	res, err = h.svc.ImportCountryRules(ctx, "DE", "relay-de.example.com", "")
+	if err != nil || res.AddedCount != len(CountryCIDRs["DE"]) {
+		t.Fatalf("DE import = %+v, %v", res, err)
+	}
+
+	// Input problems are ErrInvalid; store failures are not.
+	for _, tc := range []struct{ code, host string }{
+		{"XX", "relay.example.com"},
+		{"RU", ""},
+		{"RU", "relay.example.com\n0.0.0.0/0 evil.example.com"},
+	} {
+		if _, err := h.svc.ImportCountryRules(ctx, tc.code, tc.host, ""); !errors.Is(err, store.ErrInvalid) {
+			t.Errorf("import %q %q: err %v, want ErrInvalid", tc.code, tc.host, err)
+		}
+	}
+	cctx, cancel := context.WithCancel(ctx)
+	cancel()
+	if _, err := h.svc.ImportCountryRules(cctx, "NL", "relay.example.com", ""); err == nil || errors.Is(err, store.ErrInvalid) {
+		t.Fatalf("import with a failing store: err %v, want a non-validation error", err)
 	}
 }

@@ -4083,7 +4083,9 @@ export interface components {
             prefix_count: number;
         };
         ImportCountryPrefixRulesInput: {
+            /** @description ISO 3166-1 alpha-2; prefixes come from the loaded GeoIP dataset, else the built-in list (at most 5000 per import). */
             country_code: string;
+            /** @description host[:port], several separated by commas; no whitespace. */
             relay_host: string;
             comment?: string;
         };
@@ -4105,7 +4107,9 @@ export interface components {
             updated_at: string;
         };
         RelayPrefixRuleInput: {
+            /** @description CIDR or bare IP; stored masked (10.1.2.3/8 becomes 10.0.0.0/8). */
             cidr: string;
+            /** @description host[:port], several separated by commas; no whitespace. */
             relay_host: string;
             comment?: string;
         };
@@ -9489,8 +9493,18 @@ export interface operations {
                     "application/json": components["schemas"]["RelayGeoIPStatus"];
                 };
             };
+            400: components["responses"]["ValidationFailed"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
+            /** @description Download or parsing failed (error code geoip_refresh_failed); the previously loaded dataset stays in place. */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
         };
     };
     lookupRelayGeoIP: {
