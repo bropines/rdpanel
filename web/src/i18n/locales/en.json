@@ -1766,7 +1766,7 @@
     "waitingForApproval": "Waiting for the remote user to accept the connection. You can also enter the password.",
     "passwordPlaceholder": "Remote device password",
     "wrongPassword": "Wrong password, try again.",
-    "rememberPassword": "Remember on this browser",
+    "rememberPassword": "Remember in my account",
     "twoFactorTitle": "Two-factor code",
     "twoFactorDesc": "The remote device requires a 2FA code from its authenticator.",
     "twoFactorWrong": "Wrong code, try again.",
@@ -1858,6 +1858,77 @@
       "handshake": "The device could not be verified, so the connection was refused ({{detail}}).",
       "unverified-peer": "The server did not vouch for this device's key, so the connection was refused.",
       "refused": "The connection was refused: {{detail}}"
-    }
+    },
+    "toolbar": {
+      "show": "Show toolbar",
+      "drag": "Drag to move",
+      "more": "More",
+      "customize": "Customize toolbar",
+      "customizeDesc": "Pick the buttons to keep on the toolbar; everything else stays in the More menu.",
+      "pin": "Keep toolbar open",
+      "unpin": "Auto-hide toolbar",
+      "back": "Back to the panel",
+      "reset": "Reset",
+      "nextDisplay": "Next monitor ({{n}} of {{total}})"
+    },
+    "files": {
+      "title": "Files",
+      "up": "Up",
+      "home": "Home folder",
+      "drives": "Drives",
+      "path": "Path",
+      "showHidden": "Show hidden files",
+      "newFolder": "New folder",
+      "uploadFiles": "Upload files",
+      "uploadFolder": "Upload folder",
+      "selected_one": "{{count}} selected",
+      "selected_other": "{{count}} selected",
+      "download": "Download",
+      "rename": "Rename",
+      "name": "Name",
+      "nameHint": "Enter a name without slashes.",
+      "empty": "This folder is empty. Drop files here to upload them.",
+      "transfers": "Transfers",
+      "clearFinished": "Clear finished",
+      "status": {
+        "done": "Done",
+        "failed": "Failed",
+        "cancelled": "Cancelled"
+      },
+      "deleteTitle_one": "Delete {{count}} item?",
+      "deleteTitle_other": "Delete {{count}} items?",
+      "conflictTitle": "File already exists",
+      "conflictDesc": "{{name}} already exists on the device ({{remote}}; uploading {{local}}).",
+      "conflict": {
+        "skip": "Skip",
+        "skipAll": "Skip all",
+        "overwrite": "Replace",
+        "overwriteAll": "Replace all"
+      },
+      "passwordDesc": "File transfer opens a separate connection; enter the device password.",
+      "nFiles_one": "{{count}} file",
+      "nFiles_other": "{{count}} files",
+      "state": {
+        "idle": "Not connected",
+        "connecting": "Connecting…",
+        "password": "Password required",
+        "twoFactor": "Two-factor code required",
+        "waiting": "Waiting for the remote user to accept",
+        "ready": "Connected",
+        "error": "Could not open file transfer"
+      },
+      "errors": {
+        "not-found": "Not found on the device.",
+        "permission-denied": "File access is not allowed on this device.",
+        "exists": "A file or folder with this name already exists.",
+        "not-empty": "The folder is not empty.",
+        "invalid-name": "This name is not allowed.",
+        "overflow": "The download was faster than it could be saved and was stopped.",
+        "too-large": "The file is too large to download this way; use a browser that can save into a folder (Chrome, Edge).",
+        "timeout": "The device did not answer in time."
+      }
+    },
+    "rememberHint": "Works in any browser and in RustDesk apps signed in to this account.",
+    "rememberAccountFailed": "Could not update the password saved in your account"
   }
 }

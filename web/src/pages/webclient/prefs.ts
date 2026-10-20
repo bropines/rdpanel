@@ -9,10 +9,22 @@ export interface ViewPrefs {
   showStats: boolean;
 }
 
+export interface ToolbarPrefs {
+  /** Pinned quick actions (null = defaults for the device). */
+  pinned: string[] | null;
+  /** Keep the floating bar open instead of collapsing it. */
+  keepOpen: boolean;
+  /** Horizontal centre of the bar, 0..1. */
+  position: number;
+}
+
 export interface WebClientPrefs {
   settings: SessionSettings;
   view: ViewPrefs;
+  toolbar: ToolbarPrefs;
 }
+
+export const DEFAULT_TOOLBAR: ToolbarPrefs = { pinned: null, keepOpen: false, position: 0.5 };
 
 const PREFS_KEY = "rdpanel.webclient.prefs";
 const PW_PREFIX = "rdpanel.webclient.pw.";
@@ -44,6 +56,7 @@ export function loadPrefs(): WebClientPrefs {
     // view-only is a per-session choice, never restored
     settings: { ...DEFAULT_SETTINGS, ...(p?.settings ?? {}), viewOnly: false },
     view: { ...DEFAULT_VIEW, ...(p?.view ?? {}) },
+    toolbar: { ...DEFAULT_TOOLBAR, ...(p?.toolbar ?? {}) },
   };
 }
 
