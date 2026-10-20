@@ -127,7 +127,8 @@ func (a *App) Handler() http.Handler {
 			Log: a.Log.With("component", "clientapi"), Config: cfg, Store: a.Store, AEAD: a.AEAD,
 			JWT: a.JWT, Hasher: a.Hasher, Limiter: a.Limiter, Metrics: a.Registry, Kicks: a.Kicks,
 			TOTP: clientTOTP{a.TOTP}, Email: a.Mail, LDAP: a.LDAP, Telemetry: a.Telemetry,
-			Strategies: a.ClientOptions,
+			WebSessions: a.WebSessions,
+			Strategies:  a.ClientOptions,
 		})
 	})
 

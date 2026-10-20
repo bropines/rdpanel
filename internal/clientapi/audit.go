@@ -8,11 +8,13 @@ import (
 	"log/slog"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 	"unicode/utf8"
 
 	"github.com/bropines/rdpanel/internal/metrics"
 	"github.com/bropines/rdpanel/internal/store"
+	"github.com/bropines/rdpanel/internal/websessions"
 )
 
 // openAuditMaxAge bounds how far back an "authorized"/"close" event looks for
@@ -235,6 +237,17 @@ func (h *handler) checkConnACL(ctx context.Context, tx *store.Store, targetID, c
 		return
 	}
 	var user *store.User
+	if uid, ok := h.webSessionUser(controllerID); ok {
+		// A browser session started from the panel: the id was issued to
+		// this user by /api/v1/admin/webclient/config.
+		user, err = tx.Users.GetByID(ctx, uid)
+		if err != nil && !errors.Is(err, store.ErrNotFound) {
+			fail(err)
+			return
+		}
+		h.applyConnACL(ctx, tx, user, target, targetID, controllerID, connID)
+		return
+	}
 	ctrl, err := tx.Devices.GetByRustdeskID(ctx, controllerID)
 	switch {
 	case errors.Is(err, store.ErrNotFound):
@@ -250,6 +263,21 @@ func (h *handler) checkConnACL(ctx context.Context, tx *store.Store, targetID, c
 		}
 	}
 
+	h.applyConnACL(ctx, tx, user, target, targetID, controllerID, connID)
+}
+
+func (h *handler) webSessionUser(controllerID string) (int64, bool) {
+	if h.WebSessions == nil || !strings.HasPrefix(controllerID, websessions.Prefix) {
+		return 0, false
+	}
+	return h.WebSessions.User(controllerID)
+}
+
+// applyConnACL decides for a resolved (or unresolved: nil) controller user.
+func (h *handler) applyConnACL(ctx context.Context, tx *store.Store, user *store.User, target *store.Device, targetID, controllerID string, connID int64) {
+	fail := func(err error) {
+		h.log.WarnContext(ctx, "audit: connection ACL check", slog.Any("err", err))
+	}
 	reason := "unknown controller user"
 	if user != nil {
 		if user.IsAdmin() {
