@@ -434,7 +434,7 @@ func (s *Store) Delete(ctx context.Context, id int64) error {
 func (s *Store) SetHealth(ctx context.Context, id int64, h Health, changed bool, probeAt time.Time, probeMs *float64, probeErr string, publicReachable *bool) error {
 	now := ms(s.now())
 	_, err := s.DB.ExecContext(ctx, `UPDATE relays SET health = ?,
-		health_since = CASE WHEN ? THEN ? ELSE coalesce(health_since, ?) END,
+		health_since = CASE WHEN ? = 1 THEN ? ELSE coalesce(health_since, ?) END,
 		last_probe_at = ?, last_probe_ms = ?, last_probe_error = ?, public_reachable = ? WHERE id = ?`,
 		string(h), changed, now, now, ms(probeAt), probeMs, nullStr(probeErr), publicReachable, id)
 	return err
@@ -734,9 +734,10 @@ func (s *Store) RecordTraffic(ctx context.Context, relayID int64, at time.Time, 
 	_, err := s.DB.ExecContext(ctx, `INSERT INTO relay_traffic_samples (relay_id, hour_start, bytes, sessions, max_active)
 		VALUES (?, ?, ?, ?, ?)
 		ON CONFLICT (relay_id, hour_start) DO UPDATE SET
-			bytes = bytes + excluded.bytes,
-			sessions = sessions + excluded.sessions,
-			max_active = max(max_active, excluded.max_active)`,
+			bytes = relay_traffic_samples.bytes + excluded.bytes,
+			sessions = relay_traffic_samples.sessions + excluded.sessions,
+			max_active = CASE WHEN excluded.max_active > relay_traffic_samples.max_active
+				THEN excluded.max_active ELSE relay_traffic_samples.max_active END`,
 		relayID, hs, bytesDelta, sessionsDelta, activeSessions)
 	return mapErr(err)
 }

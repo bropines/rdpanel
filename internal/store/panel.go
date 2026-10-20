@@ -111,7 +111,8 @@ func (s *Store) PresenceSamples() *PresenceSamples { return &PresenceSamples{q: 
 // Record raises the sample of the hour containing at to online if higher.
 func (r *PresenceSamples) Record(ctx context.Context, at time.Time, online int) error {
 	_, err := r.q.ExecContext(ctx, `INSERT INTO presence_samples (hour_start, max_online, updated_at) VALUES (?, ?, ?)
-		ON CONFLICT (hour_start) DO UPDATE SET max_online = max(max_online, excluded.max_online),
+		ON CONFLICT (hour_start) DO UPDATE SET max_online = CASE WHEN excluded.max_online > presence_samples.max_online
+			THEN excluded.max_online ELSE presence_samples.max_online END,
 		updated_at = excluded.updated_at`, toMs(HourStart(at)), max(online, 0), toMs(r.now()))
 	return mapErr(err)
 }

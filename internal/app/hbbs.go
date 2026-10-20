@@ -41,7 +41,7 @@ func (a *App) initHBBS() error {
 		return nil
 	}
 	log := a.Log.With("component", "hbbs")
-	devs := presence.SQLDevices{DB: a.DB.DB}
+	devs := presence.SQLDevices{DB: a.DB}
 	p, err := presence.New(presence.Config{
 		Addr: cfg.IDServer, Devices: devs, LastSeen: devs, Bus: a.Events,
 		Log: log, Registerer: a.Registry, Interval: cfg.PollInterval,

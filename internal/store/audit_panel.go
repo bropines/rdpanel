@@ -156,7 +156,7 @@ func (r *ConnectionAudits) ListPanel(ctx context.Context, f ConnAuditQuery) ([]C
 	}
 	col := "a.started_at"
 	if f.SortEnded {
-		col = "a.ended_at"
+		col = "coalesce(a.ended_at, 0)" // open sessions sort as oldest on both engines
 	}
 	rows, err := r.q.QueryContext(ctx, `SELECT a.id, a.guid, a.device_rustdesk_id, a.device_uuid, a.conn_id,
 		a.session_id, a.conn_type, a.primary_auth, a.two_factor, a.conn_audit_ref, a.controller_rustdesk_id,

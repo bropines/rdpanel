@@ -100,16 +100,12 @@ func (r *IdentityProviders) Create(ctx context.Context, p *IdentityProvider) err
 	if err != nil {
 		return err
 	}
-	var id sql.NullInt64
-	if p.ID != 0 {
-		id = sql.NullInt64{Int64: p.ID, Valid: true}
-	}
-	return mapErr(r.q.QueryRowContext(ctx, `INSERT INTO identity_providers (id, slug, kind, display_name, client_id,
+	return insertWithID(ctx, r.q, "identity_providers", `slug, kind, display_name, client_id,
 		client_secret_enc, issuer, scopes, pkce_enabled, pkce_method, auto_register, link_by_verified_email, enabled,
-		sort_order, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`,
-		id, p.Slug, p.Kind, p.DisplayName, p.ClientID, p.ClientSecretEnc, nullStr(p.Issuer), scopes,
+		sort_order, created_at, updated_at`, &p.ID,
+		p.Slug, p.Kind, p.DisplayName, p.ClientID, p.ClientSecretEnc, nullStr(p.Issuer), scopes,
 		boolInt(p.PKCEEnabled), p.PKCEMethod, boolInt(p.AutoRegister), boolInt(p.LinkByVerifiedEmail),
-		boolInt(p.Enabled), p.SortOrder, toMs(p.CreatedAt), toMs(p.UpdatedAt)).Scan(&p.ID))
+		boolInt(p.Enabled), p.SortOrder, toMs(p.CreatedAt), toMs(p.UpdatedAt))
 }
 
 // Get returns a provider by id.

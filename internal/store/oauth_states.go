@@ -31,8 +31,10 @@ const (
 
 // OAuthStateProcessing is the result_error sentinel written while a callback
 // is exchanging the code (claims the state so a second callback cannot run).
-// Pollers treat it as "still pending"; it is never shown to users.
-const OAuthStateProcessing = "\x00processing"
+// Pollers treat it as "still pending"; it is never shown to users. The
+// control-character prefix cannot occur in a real message (it is not NUL:
+// PostgreSQL text cannot hold NUL bytes).
+const OAuthStateProcessing = "\x01processing"
 
 // OAuthState is a row of oauth_states. The plain state is never stored.
 type OAuthState struct {

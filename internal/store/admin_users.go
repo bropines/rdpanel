@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"strings"
 	"time"
+
+	"github.com/bropines/rdpanel/internal/db"
 )
 
 // UserRef is the minimal user identity used by pickers and embeds.
@@ -37,7 +39,7 @@ func (r *Users) Refs(ctx context.Context, ids []int64) (map[int64]UserRef, error
 		return out, nil
 	}
 	rows, err := r.q.QueryContext(ctx, `SELECT id, username, display_name FROM users
-		WHERE id IN (SELECT value FROM json_each(?))`, idsJSON(ids))
+		WHERE `+db.DialectOf(r.q).InJSONArray("id", "bigint"), idsJSON(ids))
 	if err != nil {
 		return nil, mapErr(err)
 	}
@@ -334,7 +336,8 @@ func (r *LoginEvents) LoginStats(ctx context.Context, since time.Time, userID *i
 	if userID != nil {
 		cond, args = cond+` AND user_id = ?`, append(args, *userID)
 	}
-	if err = r.q.QueryRowContext(ctx, `SELECT coalesce(sum(result = 'success'), 0), coalesce(sum(result = 'failure'), 0)
+	if err = r.q.QueryRowContext(ctx, `SELECT coalesce(sum(CASE WHEN result = 'success' THEN 1 ELSE 0 END), 0),
+		coalesce(sum(CASE WHEN result = 'failure' THEN 1 ELSE 0 END), 0)
 		FROM login_events`+cond, args...).Scan(&ok, &failed); err != nil {
 		return 0, 0, nil, mapErr(err)
 	}
@@ -351,7 +354,7 @@ func (r *ConnectionAudits) ConnectionStats(ctx context.Context, since time.Time,
 		cond += ` AND device_rustdesk_id IN (SELECT rustdesk_id FROM devices WHERE owner_user_id = ?)`
 		args = append(args, *ownerID)
 	}
-	if err = r.q.QueryRowContext(ctx, `SELECT count(*), coalesce(sum(ended_at IS NULL), 0) FROM connection_audits`+cond,
+	if err = r.q.QueryRowContext(ctx, `SELECT count(*), coalesce(sum(CASE WHEN ended_at IS NULL THEN 1 ELSE 0 END), 0) FROM connection_audits`+cond,
 		args...).Scan(&total, &active); err != nil {
 		return 0, 0, nil, mapErr(err)
 	}
