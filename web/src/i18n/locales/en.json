@@ -1738,6 +1738,13 @@
     "serverKey": "Public Key",
     "serverKeyPlaceholder": "Server public key (base64)",
     "resetDefaults": "Reset to Defaults",
+    "view_fit": "Fit",
+    "view_original": "1:1",
+    "view_stretch": "Stretch",
+    "fullscreen": "Fullscreen",
+    "exitFullscreen": "Exit Fullscreen",
+    "sendCtrlAltDel": "Send Ctrl+Alt+Del",
+    "ctrlAltDelSent": "Ctrl+Alt+Del sent",
     "state": {
       "idle": "Idle",
       "connecting_rendezvous": "Connecting to server…",

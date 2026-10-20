@@ -36,7 +36,7 @@ env:
   SERVER_REPO: bropines/rustdesk-server
   # Pinned hbbs/hbbr source for push/tag builds; bump deliberately after
   # testing a newer commit of the bropines/rustdesk-server `rdpanel` branch.
-  SERVER_REF: ${{ inputs.server_ref || '2b6c952e1626988c5a4116af3cb062cc9f752164' }}
+  SERVER_REF: ${{ inputs.server_ref || '5994ffcba4757901eb0f7147e5055e90261b9de9' }}
 
 jobs:
   hbb:

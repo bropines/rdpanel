@@ -12,6 +12,7 @@ import {
   Minimize2,
   PowerOff,
   RefreshCw,
+  Scaling,
   Settings,
   ShieldAlert,
 } from 'lucide-react';
@@ -19,6 +20,7 @@ import { useEffect, useRef, useState, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 
+import { auth, meQueryKey } from '@/api/auth';
 import { serverApi } from '@/api/system';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -86,6 +88,7 @@ export function WebClientPage() {
   const [stateDetail, setStateDetail] = useState<string>('');
   const [stats, setStats] = useState<VideoStats | null>(null);
   const [resolution, setResolution] = useState<{ width: number; height: number }>({ width: 1920, height: 1080 });
+  const [viewMode, setViewMode] = useState<'fit' | 'original' | 'stretch'>('fit');
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [clipboardDialogOpen, setClipboardDialogOpen] = useState(false);
   const [clipboardText, setClipboardText] = useState('');
@@ -93,6 +96,12 @@ export function WebClientPage() {
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const sessionRef = useRef<WebClientSession | null>(null);
+
+  const meQuery = useQuery({
+    queryKey: meQueryKey,
+    queryFn: auth.me,
+    retry: false,
+  });
 
   // Attempt to fetch server config if available (admin mode)
   const serverConfigQuery = useQuery({
@@ -147,7 +156,7 @@ export function WebClientPage() {
         relayServer,
         serverKeyB64,
         myId: 'web-' + Math.random().toString(36).substring(2, 8),
-        myName: 'RD Panel Web',
+        myName: meQuery.data?.user?.username ? `${meQuery.data.user.username} (Web)` : 'RD Panel Web',
       },
       canvasRef.current,
     );
@@ -179,7 +188,7 @@ export function WebClientPage() {
     });
 
     void session.connect();
-  }, [password, getWsUrls, t]);
+  }, [password, getWsUrls, t, meQuery.data?.user?.username]);
 
   useEffect(() => {
     const rawId = String(search.id ?? getUrlParam('id') ?? '').trim();
@@ -224,6 +233,19 @@ export function WebClientPage() {
     } else {
       void document.exitFullscreen();
       setIsFullscreen(false);
+    }
+  };
+
+  useEffect(() => {
+    const onFsChange = () => setIsFullscreen(!!document.fullscreenElement);
+    document.addEventListener('fullscreenchange', onFsChange);
+    return () => document.removeEventListener('fullscreenchange', onFsChange);
+  }, []);
+
+  const handleSendCtrlAltDel = () => {
+    if (sessionRef.current) {
+      sessionRef.current.sendCtrlAltDel();
+      toast.success(t('webclient.ctrlAltDelSent', 'Ctrl+Alt+Del sent'));
     }
   };
 
@@ -388,7 +410,70 @@ export function WebClientPage() {
       </header>
 
       {/* Main Video Viewport */}
-      <main className="relative flex-1 flex items-center justify-center bg-black overflow-hidden">
+      <main className={`relative flex-1 flex items-center justify-center bg-black ${viewMode === 'original' ? 'overflow-auto' : 'overflow-hidden'}`}>
+        {state === 'streaming' && (
+          <div className="absolute top-3 left-1/2 -translate-x-1/2 z-40 flex items-center gap-1.5 bg-neutral-900/90 hover:bg-neutral-900 backdrop-blur border border-neutral-700/80 rounded-full px-3 py-1 shadow-2xl transition-all select-none">
+            <div className="flex items-center gap-1.5 text-xs text-neutral-300 pr-2 border-r border-neutral-700/80">
+              <span className="font-mono font-medium">{peerId}</span>
+              {resolution && (
+                <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 bg-neutral-800 text-neutral-300 border-neutral-700">
+                  {resolution.width}×{resolution.height}
+                </Badge>
+              )}
+              {stats && stats.fps > 0 && (
+                <span className="text-[10px] text-neutral-400 font-mono">
+                  {stats.fps} fps
+                </span>
+              )}
+            </div>
+
+            {/* Scaling View Mode */}
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-6 px-2 text-xs text-neutral-300 hover:text-white hover:bg-neutral-800"
+              onClick={() => setViewMode((m) => (m === 'fit' ? 'original' : m === 'original' ? 'stretch' : 'fit'))}
+              title={t(`webclient.view_${viewMode}`, viewMode)}
+            >
+              <Scaling className="h-3 w-3 mr-1 text-primary" />
+              <span>{t(`webclient.view_${viewMode}`, viewMode)}</span>
+            </Button>
+
+            {/* Ctrl+Alt+Del */}
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-6 px-2 text-xs text-neutral-300 hover:text-white hover:bg-neutral-800"
+              onClick={handleSendCtrlAltDel}
+              title={t('webclient.sendCtrlAltDel', 'Send Ctrl+Alt+Del')}
+            >
+              <span>Ctrl+Alt+Del</span>
+            </Button>
+
+            {/* Fullscreen */}
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-6 w-6 text-neutral-300 hover:text-white hover:bg-neutral-800"
+              onClick={toggleFullscreen}
+              title={isFullscreen ? t('webclient.exitFullscreen', 'Exit Fullscreen') : t('webclient.fullscreen', 'Fullscreen')}
+            >
+              {isFullscreen ? <Minimize2 className="h-3 w-3" /> : <Maximize2 className="h-3 w-3" />}
+            </Button>
+
+            {/* Disconnect */}
+            <Button
+              variant="destructive"
+              size="sm"
+              className="h-6 px-2 text-xs"
+              onClick={() => sessionRef.current?.disconnect()}
+            >
+              <PowerOff className="h-3 w-3 mr-1" />
+              {t('webclient.disconnect', 'Disconnect')}
+            </Button>
+          </div>
+        )}
+
         {!isWebCodecsSupported ? (
           <div className="max-w-md p-6 text-center bg-neutral-900 border border-neutral-800 rounded-lg">
             <ShieldAlert className="h-12 w-12 text-destructive mx-auto mb-4" />
@@ -470,7 +555,13 @@ export function WebClientPage() {
         <canvas
           ref={canvasRef}
           tabIndex={0}
-          className={`max-w-full max-h-full object-contain cursor-crosshair focus:outline-none ${
+          className={`${
+            viewMode === 'fit'
+              ? 'max-w-full max-h-full object-contain'
+              : viewMode === 'stretch'
+                ? 'w-full h-full object-fill'
+                : 'w-auto h-auto max-w-none'
+          } cursor-crosshair focus:outline-none ${
             state === 'streaming' ? 'block' : 'hidden'
           }`}
           onMouseMove={(e) => sessionRef.current?.sendMouseMove(e.clientX, e.clientY)}
@@ -478,7 +569,10 @@ export function WebClientPage() {
             const btn = e.button === 0 ? 'left' : e.button === 2 ? 'right' : 'middle';
             sessionRef.current?.sendMouseDown(btn, e.clientX, e.clientY);
           }}
-          onMouseUp={(e) => sessionRef.current?.sendMouseUp(e.clientX, e.clientY)}
+          onMouseUp={(e) => {
+            const btn = e.button === 0 ? 'left' : e.button === 2 ? 'right' : 'middle';
+            sessionRef.current?.sendMouseUp(btn, e.clientX, e.clientY);
+          }}
           onWheel={(e) => sessionRef.current?.sendMouseWheel(e.deltaY, e.clientX, e.clientY)}
           onContextMenu={(e) => e.preventDefault()}
         />

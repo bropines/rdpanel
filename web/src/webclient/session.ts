@@ -16,6 +16,7 @@ import {
   encodeVideoReceivedAck,
   encodeMouseEvent,
   encodeKeyEvent,
+  encodeCtrlAltDel,
   decodePeerMessage,
   decodeIdPk,
 } from './protocol';
@@ -460,6 +461,7 @@ export class WebClientSession {
     const x = Math.round(normX * this.remoteWidth);
     const y = Math.round(normY * this.remoteHeight);
 
+    // MOUSE_TYPE_MOVE = 0, no button
     const msg = encodeMouseEvent(0, x, y);
     this.sendEncrypted(msg);
   }
@@ -473,12 +475,15 @@ export class WebClientSession {
     const x = Math.round(normX * this.remoteWidth);
     const y = Math.round(normY * this.remoteHeight);
 
-    const mask = button === 'left' ? 1 : button === 'right' ? 2 : 4;
+    // RustDesk: mask = (button << 3) | MOUSE_TYPE_DOWN (1)
+    // Buttons: left = 1, right = 2, wheel/middle = 4
+    const btnBit = button === 'left' ? 1 : button === 'right' ? 2 : 4;
+    const mask = (btnBit << 3) | 1;
     const msg = encodeMouseEvent(mask, x, y);
     this.sendEncrypted(msg);
   }
 
-  sendMouseUp(clientX: number, clientY: number): void {
+  sendMouseUp(button: 'left' | 'right' | 'middle', clientX: number, clientY: number): void {
     if (this.state !== 'streaming') return;
     const rect = this.canvas.getBoundingClientRect();
     const normX = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
@@ -487,21 +492,25 @@ export class WebClientSession {
     const x = Math.round(normX * this.remoteWidth);
     const y = Math.round(normY * this.remoteHeight);
 
-    const msg = encodeMouseEvent(0, x, y);
+    // RustDesk: mask = (button << 3) | MOUSE_TYPE_UP (2)
+    const btnBit = button === 'left' ? 1 : button === 'right' ? 2 : 4;
+    const mask = (btnBit << 3) | 2;
+    const msg = encodeMouseEvent(mask, x, y);
     this.sendEncrypted(msg);
   }
 
-  sendMouseWheel(deltaY: number, clientX: number, clientY: number): void {
+  sendMouseWheel(deltaY: number, _clientX: number, _clientY: number): void {
     if (this.state !== 'streaming') return;
-    const rect = this.canvas.getBoundingClientRect();
-    const normX = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
-    const normY = Math.max(0, Math.min(1, (clientY - rect.top) / rect.height));
-
-    const x = Math.round(normX * this.remoteWidth);
-    const y = Math.round(normY * this.remoteHeight);
-
+    // RustDesk: mask = MOUSE_TYPE_WHEEL (3), x = 0, y = wheelDelta (positive/negative scroll delta)
     const wheelDelta = deltaY > 0 ? -120 : 120;
-    const msg = encodeMouseEvent(0, x, y, wheelDelta);
+    const mask = 3;
+    const msg = encodeMouseEvent(mask, 0, wheelDelta);
+    this.sendEncrypted(msg);
+  }
+
+  sendCtrlAltDel(): void {
+    if (this.state !== 'streaming') return;
+    const msg = encodeCtrlAltDel();
     this.sendEncrypted(msg);
   }
 

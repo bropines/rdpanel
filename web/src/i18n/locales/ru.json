@@ -1808,6 +1808,13 @@
     "serverKey": "Публичный ключ (Key)",
     "serverKeyPlaceholder": "Открытый ключ сервера (base64)",
     "resetDefaults": "По умолчанию",
+    "view_fit": "По окну",
+    "view_original": "1:1",
+    "view_stretch": "Растянуть",
+    "fullscreen": "Во весь экран",
+    "exitFullscreen": "Обычный экран",
+    "sendCtrlAltDel": "Отправить Ctrl+Alt+Del",
+    "ctrlAltDelSent": "Комбинация Ctrl+Alt+Del отправлена",
     "state": {
       "idle": "Ожидание",
       "connecting_rendezvous": "Подключение к серверу…",

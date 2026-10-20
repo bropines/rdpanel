@@ -284,15 +284,24 @@ export function encodeVideoReceivedAck(): Uint8Array {
   return wMsg.finish();
 }
 
-export function encodeMouseEvent(mask: number, x: number, y: number, wheelDelta = 0): Uint8Array {
+export function encodeMouseEvent(mask: number, x: number, y: number): Uint8Array {
   const wEv = new ProtoWriter();
   wEv.writeInt32(1, mask);
   wEv.writeSint32(2, x); // sint32 x = 2
   wEv.writeSint32(3, y); // sint32 y = 3
-  if (wheelDelta !== 0) wEv.writeInt32(4, wheelDelta);
 
   const wMsg = new ProtoWriter();
   wMsg.writeMessage(10, wEv.finish()); // field 10 = mouse_event in Message
+  return wMsg.finish();
+}
+
+export function encodeCtrlAltDel(): Uint8Array {
+  const wKey = new ProtoWriter();
+  wKey.writeInt32(1, 100); // field 1 = control_key (enum ControlKey: CtrlAltDel = 100)
+  wKey.writeBool(2, true); // field 2 = press = true
+
+  const wMsg = new ProtoWriter();
+  wMsg.writeMessage(15, wKey.finish()); // field 15 = key_event in Message
   return wMsg.finish();
 }
 
