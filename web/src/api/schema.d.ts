@@ -3598,6 +3598,19 @@ export interface components {
             display_name: string;
             /** @description Session id announced to the device (web-…); lets connection rules apply to this user. Valid 12 h. */
             my_id: string;
+            /** @description Other servers the admin offers (RDPANEL_WEBCLIENT_SERVERS). Their sessions get no panel token or web id. */
+            servers: components["schemas"]["WebClientServer"][];
+            /** @description Users may enter their own servers (RDPANEL_WEBCLIENT_CUSTOM_SERVERS) */
+            custom_servers: boolean;
+        };
+        WebClientServer: {
+            name: string;
+            /** @description hbbs WebSocket URL (wss://host/ws/id) */
+            id_url: string;
+            /** @description hbbr WebSocket URL; empty = id_url with /ws/relay */
+            relay_url: string;
+            /** @description Server public key (base64) */
+            key: string;
         };
         About: {
             /** @description Product name (RD Panel). */

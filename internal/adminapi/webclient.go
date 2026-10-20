@@ -28,6 +28,18 @@ type webClientConfigDTO struct {
 	TokenExpiresAt *time.Time `json:"token_expires_at"`
 	DisplayName    string     `json:"display_name"`
 	MyID           string     `json:"my_id"`
+	// Servers are other servers the admin offers in the web client.
+	Servers []webClientServerDTO `json:"servers"`
+	// CustomServers: users may enter their own servers.
+	CustomServers bool `json:"custom_servers"`
+}
+
+// webClientServerDTO is components.schemas.WebClientServer.
+type webClientServerDTO struct {
+	Name     string `json:"name"`
+	IDURL    string `json:"id_url"`
+	RelayURL string `json:"relay_url"`
+	Key      string `json:"key"`
 }
 
 func (c *b2bCore) registerWebClient(r chi.Router) {
@@ -202,9 +214,14 @@ func (c *b2bCore) handleWebClientConfig(w http.ResponseWriter, r *http.Request) 
 	if user.DisplayName != "" {
 		out.DisplayName = user.DisplayName
 	}
+	out.Servers = []webClientServerDTO{}
 	if cfg != nil {
 		out.RendezvousURL = cfg.WebClient.IDURL
 		out.RelayURL = cfg.WebClient.RelayURL
+		out.CustomServers = cfg.WebClient.CustomServers
+		for _, s := range cfg.WebClient.Servers {
+			out.Servers = append(out.Servers, webClientServerDTO{Name: s.Name, IDURL: s.IDURL, RelayURL: s.RelayURL, Key: strings.TrimSpace(s.Key)})
+		}
 	}
 	if c.d.WebSessions != nil {
 		if id, err := c.d.WebSessions.Issue(user.ID); err == nil {

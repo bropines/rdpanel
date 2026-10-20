@@ -433,3 +433,24 @@ func TestDBConfig(t *testing.T) {
 		}
 	})
 }
+
+func TestWebClientServersEnv(t *testing.T) {
+	cfg, err := Load(env(map[string]string{
+		"RDPANEL_WEBCLIENT_SERVERS":        `[{"name":"Other","id_url":"wss://o.example/ws/id","key":"MEbIUN8NZFq0Vu80BjNNIGDbQKdXxcg8QTbo69qrH+A="}]`,
+		"RDPANEL_WEBCLIENT_CUSTOM_SERVERS": "true",
+	}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(cfg.WebClient.Servers) != 1 || cfg.WebClient.Servers[0].IDURL != "wss://o.example/ws/id" || !cfg.WebClient.CustomServers {
+		t.Fatalf("%+v", cfg.WebClient)
+	}
+	if _, err := Load(env(map[string]string{
+		"RDPANEL_WEBCLIENT_SERVERS": `[{"name":"Bad","id_url":"ws://o.example/ws/id","key":"short"}]`,
+	})); err == nil {
+		t.Fatal("insecure URL and bad key must be rejected")
+	}
+	if _, err := Load(env(map[string]string{"RDPANEL_WEBCLIENT_SERVERS": "not json"})); err == nil {
+		t.Fatal("bad JSON must be rejected")
+	}
+}

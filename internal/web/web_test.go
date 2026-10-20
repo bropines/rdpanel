@@ -71,7 +71,7 @@ func TestSPAPlaceholder(t *testing.T) {
 }
 
 func TestSecurityHeaders(t *testing.T) {
-	h := SecurityHeaders(true)(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
+	h := SecurityHeaders(true, ConnectSources{})(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
 	rec := serve(h, http.MethodGet, "/")
 	want := map[string]string{
 		"X-Content-Type-Options":    "nosniff",
@@ -93,9 +93,13 @@ func TestSecurityHeaders(t *testing.T) {
 	if strings.Contains(csp, " ws: ") || strings.Contains(csp, " wss:;") {
 		t.Errorf("connect-src must not allow every WebSocket host: %q", csp)
 	}
-	rec = serve(SecurityHeaders(false, "wss://rd.example.com/ws/id", "javascript:alert(1)", "wss://bad host/x")(http.NotFoundHandler()), http.MethodGet, "/")
+	rec = serve(SecurityHeaders(false, ConnectSources{Origins: []string{"wss://rd.example.com/ws/id", "javascript:alert(1)", "wss://bad host/x", "wss://rd.example.com/ws/relay"}})(http.NotFoundHandler()), http.MethodGet, "/")
 	if c := rec.Header().Get("Content-Security-Policy"); !strings.Contains(c, "connect-src 'self' ws://example.com wss://rd.example.com;") {
 		t.Errorf("connect-src = %q", c)
+	}
+	rec = serve(SecurityHeaders(false, ConnectSources{AnyWSS: true})(http.NotFoundHandler()), http.MethodGet, "/")
+	if c := rec.Header().Get("Content-Security-Policy"); !strings.Contains(c, " wss:;") || strings.Contains(c, " ws:;") {
+		t.Errorf("custom servers connect-src = %q", c)
 	}
 	if rec.Header().Get("Strict-Transport-Security") != "" {
 		t.Error("HSTS must be off for http")

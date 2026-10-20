@@ -48,15 +48,27 @@ func safeHost(h string) bool {
 	return true
 }
 
+// ConnectSources are the extra places the web client may open WebSockets to.
+type ConnectSources struct {
+	// Origins are WebSocket URLs (only their ws(s)://host[:port] is used).
+	Origins []string
+	// AnyWSS allows every wss: origin (users may enter their own servers).
+	AnyWSS bool
+}
+
 // SecurityHeaders sets defensive headers on every response. HSTS is only sent
-// when the panel is served over https (public URL scheme). wsOrigins are
-// extra WebSocket origins the web client may connect to.
-func SecurityHeaders(hsts bool, wsOrigins ...string) func(http.Handler) http.Handler {
+// when the panel is served over https (public URL scheme).
+func SecurityHeaders(hsts bool, connect ConnectSources) func(http.Handler) http.Handler {
 	var extra strings.Builder
-	for _, o := range wsOrigins {
-		if o = WSOrigin(o); o != "" {
+	seen := map[string]bool{}
+	for _, o := range connect.Origins {
+		if o = WSOrigin(o); o != "" && !seen[o] {
+			seen[o] = true
 			extra.WriteString(" " + o)
 		}
+	}
+	if connect.AnyWSS {
+		extra.WriteString(" wss:")
 	}
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

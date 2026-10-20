@@ -100,6 +100,8 @@ See [deploy.md → Passkeys](deploy.md#passkeys) for how the RP id and origins a
 | `RDPANEL_WEBCLIENT_ADMIN_ONLY` (`webclient.admin_only`) | `false` | offer the web client to panel admins only |
 | `RDPANEL_WEBCLIENT_ID_URL` (`webclient.id_url`) | same origin `/ws/id` | WebSocket URL of hbbs (port 21118) as browsers reach it, e.g. `wss://rd.example.com/ws/id` |
 | `RDPANEL_WEBCLIENT_RELAY_URL` (`webclient.relay_url`) | same origin `/ws/relay` | WebSocket URL of hbbr (port 21119) as browsers reach it |
+| `RDPANEL_WEBCLIENT_SERVERS` (`webclient.servers`) | none | other servers offered in the web client: JSON array (env) / YAML list of `{name, id_url, relay_url, key}`; `id_url`/`relay_url` must be `wss://` (relay defaults to `id_url` with `/ws/relay`), `key` is that server's `id_ed25519.pub`. Their origins are added to the CSP ([web-client.md → Other servers](web-client.md#other-servers)) |
+| `RDPANEL_WEBCLIENT_CUSTOM_SERVERS` (`webclient.custom_servers`) | `false` | let users enter any server (host + key, or a RustDesk config string); the CSP then allows WebSocket connections to every `wss:` origin |
 | `RDPANEL_WEBHOOK_URL` (`webhook.url`) | empty | HTTP/HTTPS endpoint for critical alerts (relay degraded/offline, hbbs down); empty = disabled. Logs show only its scheme and host ([webhooks](#webhooks)) |
 | `RDPANEL_WEBHOOK_SECRET` (`webhook.secret`) | empty | optional HMAC-SHA256 secret: requests are signed over timestamp and body (`X-RDPanel-Timestamp`, `X-Signature-256`; [verifying](#webhooks)) |
 

@@ -20,6 +20,7 @@ import (
 	"github.com/bropines/rdpanel/internal/adminapi"
 	"github.com/bropines/rdpanel/internal/authz"
 	"github.com/bropines/rdpanel/internal/clientapi"
+	"github.com/bropines/rdpanel/internal/config"
 	"github.com/bropines/rdpanel/internal/events"
 	"github.com/bropines/rdpanel/internal/httpx"
 	"github.com/bropines/rdpanel/internal/oidc"
@@ -51,7 +52,7 @@ func (a *App) Handler() http.Handler {
 		httpx.Logger(a.Log),
 		httpx.Recoverer(a.Log),
 		a.httpMetrics.Middleware,
-		web.SecurityHeaders(cfg.HTTPS(), cfg.WebClient.IDURL, cfg.WebClient.RelayURL),
+		web.SecurityHeaders(cfg.HTTPS(), webClientConnectSources(cfg)),
 	)
 
 	r.Get("/healthz", a.handleHealthz)
@@ -247,4 +248,20 @@ func (a *App) ServeListener(ctx context.Context, ln net.Listener) error {
 	}
 	a.Log.Info("server stopped")
 	return nil
+}
+
+// webClientConnectSources lists the WebSocket origins the web client may use:
+// the configured hbbs/hbbr URLs, the extra servers, and any wss: origin when
+// users may enter their own servers.
+func webClientConnectSources(cfg *config.Config) web.ConnectSources {
+	wc := cfg.WebClient
+	cs := web.ConnectSources{Origins: []string{wc.IDURL, wc.RelayURL}}
+	if !wc.Enabled {
+		return cs
+	}
+	for _, s := range wc.Servers {
+		cs.Origins = append(cs.Origins, s.IDURL, s.RelayURL)
+	}
+	cs.AnyWSS = wc.CustomServers
+	return cs
 }
