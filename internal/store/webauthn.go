@@ -139,7 +139,8 @@ func (r *WebAuthnCredentials) DeleteForUser(ctx context.Context, userID, id int6
 func (r *WebAuthnCredentials) RecordUse(ctx context.Context, id int64, prev, signCount uint32, backupState, userVerified bool) error {
 	now := toMs(r.now())
 	return expectOne(r.q.ExecContext(ctx, `UPDATE webauthn_credentials SET sign_count = ?, backup_state = ?,
-		user_verified = MAX(user_verified, ?), last_used_at = ?, updated_at = ? WHERE id = ? AND sign_count = ?`,
+		user_verified = CASE WHEN ? = 1 THEN 1 ELSE user_verified END, last_used_at = ?, updated_at = ?
+		WHERE id = ? AND sign_count = ?`,
 		int64(signCount), boolInt(backupState), boolInt(userVerified), now, now, id, int64(prev)))
 }
 

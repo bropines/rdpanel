@@ -145,7 +145,7 @@ func (r *Devices) UpdateSysinfo(ctx context.Context, id int64, s Sysinfo) error 
 func (r *Devices) TouchHeartbeat(ctx context.Context, id int64, ip string, minInterval time.Duration) (bool, error) {
 	now := r.now()
 	res, err := r.q.ExecContext(ctx, `UPDATE devices SET last_heartbeat_at = ?, last_seen_at = ?, last_seen_ip = ?
-		WHERE id = ? AND (last_heartbeat_at IS NULL OR last_heartbeat_at <= ? OR last_seen_ip IS NOT ?)`,
+		WHERE id = ? AND (last_heartbeat_at IS NULL OR last_heartbeat_at <= ? OR last_seen_ip IS DISTINCT FROM ?)`,
 		toMs(now), toMs(now), nullStr(ip), id, toMs(now.Add(-minInterval)), nullStr(ip))
 	if err != nil {
 		return false, mapErr(err)
@@ -157,8 +157,10 @@ func (r *Devices) TouchHeartbeat(ctx context.Context, id int64, ip string, minIn
 // TouchSeen records a presence observation (hbbs online poll) without
 // touching the heartbeat timestamp.
 func (r *Devices) TouchSeen(ctx context.Context, id int64, at time.Time) error {
-	return expectOne(r.q.ExecContext(ctx, `UPDATE devices SET last_seen_at = max(coalesce(last_seen_at, 0), ?)
-		WHERE id = ?`, toMs(at), id))
+	ms := toMs(at)
+	return expectOne(r.q.ExecContext(ctx, `UPDATE devices SET last_seen_at = CASE
+		WHEN coalesce(last_seen_at, 0) > ? THEN coalesce(last_seen_at, 0) ELSE ? END
+		WHERE id = ?`, ms, ms, id))
 }
 
 // RequestSysinfo asks the device to re-upload sysinfo on its next heartbeat.
@@ -192,7 +194,7 @@ func (r *Devices) BindOwner(ctx context.Context, rustdeskID, uuid string, userID
 		return false, nil
 	}
 	res, err := r.q.ExecContext(ctx, `UPDATE devices SET owner_user_id = ?, updated_at = ?
-		WHERE rustdesk_id = ? AND uuid = ? AND owner_user_id IS NOT ?`, userID, toMs(r.now()), rustdeskID, uuid, userID)
+		WHERE rustdesk_id = ? AND uuid = ? AND owner_user_id IS DISTINCT FROM ?`, userID, toMs(r.now()), rustdeskID, uuid, userID)
 	if err != nil {
 		return false, mapErr(err)
 	}
@@ -348,13 +350,8 @@ func (r *DeviceGroups) Create(ctx context.Context, g *DeviceGroup) error {
 		g.CreatedAt = now
 	}
 	g.UpdatedAt = now
-	var id sql.NullInt64
-	if g.ID != 0 {
-		id = sql.NullInt64{Int64: g.ID, Valid: true}
-	}
-	return mapErr(r.q.QueryRowContext(ctx, `INSERT INTO device_groups (id, name, note, strategy_id, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?) RETURNING id`, id, strings.TrimSpace(g.Name), g.Note, nullID(g.StrategyID), toMs(g.CreatedAt),
-		toMs(g.UpdatedAt)).Scan(&g.ID))
+	return insertWithID(ctx, r.q, "device_groups", "name, note, strategy_id, created_at, updated_at", &g.ID,
+		strings.TrimSpace(g.Name), g.Note, nullID(g.StrategyID), toMs(g.CreatedAt), toMs(g.UpdatedAt))
 }
 
 // Get returns the group with id.

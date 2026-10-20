@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"net"
-	"path/filepath"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -16,7 +15,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/testutil"
 
-	"github.com/bropines/rdpanel/internal/db"
+	"github.com/bropines/rdpanel/internal/db/dbtest"
 	"github.com/bropines/rdpanel/internal/events"
 	"github.com/bropines/rdpanel/internal/hbbs/wire"
 	"github.com/bropines/rdpanel/internal/store"
@@ -414,14 +413,7 @@ func TestManyIDsBitmapOrder(t *testing.T) {
 
 func TestSQLDevices(t *testing.T) {
 	ctx := context.Background()
-	d, err := db.Open(ctx, filepath.Join(t.TempDir(), "panel.db"), db.Options{})
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer d.Close()
-	if _, err := d.Migrate(ctx); err != nil {
-		t.Fatal(err)
-	}
+	d := dbtest.Open(t)
 	st := store.New(d)
 	u := &store.User{Username: "alice"}
 	if err := st.Users.Create(ctx, u); err != nil {
@@ -438,7 +430,7 @@ func TestSQLDevices(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	s := SQLDevices{DB: d.DB}
+	s := SQLDevices{DB: d}
 	ids, err := s.ListRustdeskIDs(ctx)
 	if err != nil || len(ids) != 2 || ids[0] != "100000001" {
 		t.Fatalf("%v %v", ids, err)

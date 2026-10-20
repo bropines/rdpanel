@@ -18,6 +18,8 @@ import (
 	"time"
 
 	"github.com/bropines/rdpanel/internal/config"
+	"github.com/bropines/rdpanel/internal/crypto"
+	"github.com/bropines/rdpanel/internal/db/dbtest"
 	"github.com/bropines/rdpanel/internal/store"
 )
 
@@ -30,6 +32,13 @@ func testEnv(t *testing.T, extra map[string]string) (config.LookupFunc, string) 
 	}
 	for k, v := range extra {
 		m[k] = v
+	}
+	// With RDPANEL_TEST_PG_DSN the app runs on a fresh PostgreSQL database,
+	// unless the test picks the database itself.
+	_, dbType := m["RDPANEL_DB_TYPE"]
+	_, dbURL := m["RDPANEL_DATABASE_URL"]
+	if dbtest.Postgres() && !dbType && !dbURL {
+		m["RDPANEL_DATABASE_URL"] = dbtest.PostgresURL(t)
 	}
 	return func(k string) (string, bool) { v, ok := m[k]; return v, ok }, dir
 }
@@ -126,7 +135,11 @@ func TestRoutes(t *testing.T) {
 func TestKeysGenerated(t *testing.T) {
 	a := newTestApp(t, nil)
 	dir := a.Config.DataDir
-	for _, f := range []string{"secret.key", "jwt.key", "panel.db"} {
+	files := []string{"secret.key", "jwt.key"}
+	if a.Config.DBType == "sqlite" {
+		files = append(files, "panel.db")
+	}
+	for _, f := range files {
 		if _, err := os.Stat(filepath.Join(dir, f)); err != nil {
 			t.Errorf("%s not created: %v", f, err)
 		}
@@ -166,13 +179,14 @@ func TestJanitorPass(t *testing.T) {
 	if err := a.Store.Users.Create(ctx, u); err != nil {
 		t.Fatal(err)
 	}
+	rnd := func() []byte { b, _ := crypto.RandomBytes(32); return b }
 	stmts := []struct {
 		q    string
 		args []any
 	}{
-		{`INSERT INTO auth_tokens (user_id, kind, token_sha256, expires_at, created_at) VALUES (?, 'client', randomblob(32), ?, ?)`, []any{u.ID, old, old}},
-		{`INSERT INTO auth_tokens (user_id, kind, token_sha256, expires_at, created_at) VALUES (?, 'client', randomblob(32), ?, ?)`, []any{u.ID, fresh, old}},
-		{`INSERT INTO oauth_states (state_sha256, action, flow, created_at, expires_at) VALUES (randomblob(32), 'webauth', 'client', ?, ?)`, []any{old, old}},
+		{`INSERT INTO auth_tokens (user_id, kind, token_sha256, expires_at, created_at) VALUES (?, 'client', ?, ?, ?)`, []any{u.ID, rnd(), old, old}},
+		{`INSERT INTO auth_tokens (user_id, kind, token_sha256, expires_at, created_at) VALUES (?, 'client', ?, ?, ?)`, []any{u.ID, rnd(), fresh, old}},
+		{`INSERT INTO oauth_states (state_sha256, action, flow, created_at, expires_at) VALUES (?, 'webauth', 'client', ?, ?)`, []any{rnd(), old, old}},
 		{`INSERT INTO audit_nonces (nonce, created_at) VALUES ('n-old', ?)`, []any{old}},
 		{`INSERT INTO audit_nonces (nonce, created_at) VALUES ('n-new', ?)`, []any{time.Now().UnixMilli()}},
 	}

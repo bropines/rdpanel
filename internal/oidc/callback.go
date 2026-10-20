@@ -16,6 +16,7 @@ import (
 
 	"github.com/bropines/rdpanel/internal/auth"
 	"github.com/bropines/rdpanel/internal/crypto"
+	"github.com/bropines/rdpanel/internal/db"
 	"github.com/bropines/rdpanel/internal/httpx"
 	"github.com/bropines/rdpanel/internal/loginlog"
 	"github.com/bropines/rdpanel/internal/metrics"
@@ -360,7 +361,8 @@ func (s *Service) register(ctx context.Context, tx *store.Store, p *Profile) (*s
 			}
 			u.Username = fmt.Sprintf("%s-%d", base, int(sfx[0])<<16|int(sfx[1])<<8|int(sfx[2]))
 		}
-		err := tx.Users.Create(ctx, u)
+		// A taken username is retried in the same transaction.
+		err := db.Savepoint(ctx, tx.Querier(), func() error { return tx.Users.Create(ctx, u) })
 		if err == nil {
 			_ = tx.AdminAudit.Record(ctx, &store.AuditEntry{ActorName: "oidc", Action: "user.auto_register",
 				TargetType: "user", TargetID: strconv.FormatInt(u.ID, 10), Details: map[string]any{"username": u.Username}})

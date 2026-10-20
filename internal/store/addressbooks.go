@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"math"
 	"strconv"
 	"strings"
 	"time"
@@ -221,16 +222,12 @@ func (r *AddressBooks) Create(ctx context.Context, b *AddressBook) error {
 		if b.GUID == "" {
 			b.GUID = r.newID()
 		}
-		var id sql.NullInt64
-		if b.ID != 0 {
-			id = sql.NullInt64{Int64: b.ID, Valid: true}
-		}
-		err := r.q.QueryRowContext(ctx, `INSERT INTO address_books (id, guid, owner_user_id, name, note, is_personal,
-			legacy_collection_id, legacy_guid, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`,
-			id, b.GUID, b.OwnerUserID, b.Name, b.Note, boolInt(b.IsPersonal), nullID(b.LegacyCollectionID),
-			nullStr(b.LegacyGUID), toMs(b.CreatedAt), toMs(b.UpdatedAt)).Scan(&b.ID)
+		err := insertWithID(ctx, r.q, "address_books", `guid, owner_user_id, name, note, is_personal,
+			legacy_collection_id, legacy_guid, created_at, updated_at`, &b.ID,
+			b.GUID, b.OwnerUserID, b.Name, b.Note, boolInt(b.IsPersonal), nullID(b.LegacyCollectionID),
+			nullStr(b.LegacyGUID), toMs(b.CreatedAt), toMs(b.UpdatedAt))
 		if err != nil {
-			return mapErr(err)
+			return err
 		}
 		return r.setDefaultPassword(ctx, b.ID, b.DefaultPassword)
 	})
@@ -309,7 +306,7 @@ func (r *AddressBooks) EnsurePersonal(ctx context.Context, userID int64) (*Addre
 		return b, err
 	}
 	nb := &AddressBook{OwnerUserID: userID, IsPersonal: true}
-	if err := r.Create(ctx, nb); err != nil {
+	if err := db.Savepoint(ctx, r.q, func() error { return r.Create(ctx, nb) }); err != nil {
 		if errors.Is(err, ErrConflict) { // created concurrently
 			return r.GetPersonal(ctx, userID)
 		}
@@ -485,7 +482,7 @@ func (r *AddressBooks) ListEntries(ctx context.Context, bookID int64, limit, off
 		return nil, 0, err
 	}
 	if limit <= 0 {
-		limit = -1
+		limit = math.MaxInt64 // no bound; PostgreSQL rejects SQLite's LIMIT -1
 	}
 	rows, err := r.q.QueryContext(ctx, `SELECT `+entryColumns+entryFrom+`
 		WHERE e.address_book_id = ? ORDER BY e.id LIMIT ? OFFSET ?`, bookID, limit, max(offset, 0))

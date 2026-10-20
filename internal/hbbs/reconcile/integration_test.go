@@ -4,12 +4,11 @@ import (
 	"context"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"slices"
 	"testing"
 	"time"
 
-	"github.com/bropines/rdpanel/internal/db"
+	"github.com/bropines/rdpanel/internal/db/dbtest"
 	"github.com/bropines/rdpanel/internal/events"
 	"github.com/bropines/rdpanel/internal/hbbs/control"
 )
@@ -24,14 +23,7 @@ func TestIntegrationReconcileRealServers(t *testing.T) {
 		t.Skip("RDPANEL_IT_HBBS_ADMIN / RDPANEL_IT_HBBR_ADMIN not set")
 	}
 	ctx := context.Background()
-	d, err := db.Open(ctx, filepath.Join(t.TempDir(), "panel.db"), db.Options{})
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer d.Close()
-	if _, err := d.Migrate(ctx); err != nil {
-		t.Fatal(err)
-	}
+	d := dbtest.Open(t)
 	ctl, err := control.New(control.Config{HBBSAddr: hs, HBBRAddr: hr})
 	if err != nil {
 		t.Fatal(err)

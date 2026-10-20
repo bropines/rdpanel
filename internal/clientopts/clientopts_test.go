@@ -4,27 +4,18 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/bropines/rdpanel/internal/crypto"
-	"github.com/bropines/rdpanel/internal/db"
+	"github.com/bropines/rdpanel/internal/db/dbtest"
 	"github.com/bropines/rdpanel/internal/store"
 )
 
 func newService(t *testing.T) (*Service, *store.Store, *crypto.AEAD, *time.Time) {
 	t.Helper()
-	ctx := context.Background()
-	d, err := db.Open(ctx, filepath.Join(t.TempDir(), "panel.db"), db.Options{})
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = d.Close() })
-	if _, err := d.Migrate(ctx); err != nil {
-		t.Fatal(err)
-	}
+	d := dbtest.Open(t)
 	key, _ := crypto.RandomBytes(32)
 	aead, err := crypto.NewAEAD(key)
 	if err != nil {

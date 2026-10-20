@@ -171,7 +171,7 @@ func openDB(ctx context.Context, cfg *config.Config, log *slog.Logger) (*db.DB, 
 		err error
 	)
 	if cfg.DBType == "postgres" {
-		d, err = db.OpenPostgres(ctx, cfg.DatabaseURL, db.PostgresOptions{})
+		d, err = db.OpenPostgres(ctx, cfg.DatabaseURL.Reveal(), db.PostgresOptions{})
 	} else {
 		d, err = db.Open(ctx, cfg.DBPath, db.Options{})
 	}

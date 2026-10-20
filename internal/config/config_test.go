@@ -332,8 +332,16 @@ func TestDBConfig(t *testing.T) {
 		if cfg.DBType != "postgres" {
 			t.Errorf("DBType = %q, want postgres", cfg.DBType)
 		}
-		if cfg.DatabaseURL != "postgres://user:pass@localhost:5432/rdpanel?sslmode=disable" {
-			t.Errorf("DatabaseURL = %q", cfg.DatabaseURL)
+		if cfg.DatabaseURL.Reveal() != "postgres://user:pass@localhost:5432/rdpanel?sslmode=disable" {
+			t.Errorf("DatabaseURL = %q", cfg.DatabaseURL.Reveal())
+		}
+		// The DSN carries the password: never printed.
+		out, err := cfg.Redacted()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if s := string(out) + fmt.Sprintf("%v %+v %#v", cfg, cfg, cfg); strings.Contains(s, "pass@") {
+			t.Fatalf("database url leaked: %s", s)
 		}
 	})
 
@@ -347,6 +355,28 @@ func TestDBConfig(t *testing.T) {
 		}
 		if cfg.DBType != "postgres" {
 			t.Errorf("DBType = %q, want postgres", cfg.DBType)
+		}
+	})
+
+	t.Run("postgres database url from file", func(t *testing.T) {
+		path := filepath.Join(t.TempDir(), "dsn")
+		if err := os.WriteFile(path, []byte("postgres://u:p@db:5432/rdpanel\n"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		cfg, err := Load(env(map[string]string{"RDPANEL_DATABASE_URL_FILE": path}))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if cfg.DBType != "postgres" || cfg.DatabaseURL.Reveal() != "postgres://u:p@db:5432/rdpanel" {
+			t.Fatalf("DBType %q, DatabaseURL %q", cfg.DBType, cfg.DatabaseURL.Reveal())
+		}
+		// The variable wins over the file.
+		cfg, err = Load(env(map[string]string{"RDPANEL_DATABASE_URL": "postgres://x@y/z", "RDPANEL_DATABASE_URL_FILE": path}))
+		if err != nil || cfg.DatabaseURL.Reveal() != "postgres://x@y/z" {
+			t.Fatalf("precedence: %v %q", err, cfg.DatabaseURL.Reveal())
+		}
+		if _, err := Load(env(map[string]string{"RDPANEL_DATABASE_URL_FILE": path + ".missing"})); err == nil {
+			t.Fatal("missing file accepted")
 		}
 	})
 

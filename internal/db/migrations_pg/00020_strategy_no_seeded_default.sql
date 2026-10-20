@@ -1,3 +1,6 @@
+-- PostgreSQL mirror of migrations/00020_strategy_no_seeded_default.sql (the
+-- same statements; conventions in 00001).
+
 -- +goose Up
 
 -- 00017 seeded "Standard Office" as the default strategy, so every device

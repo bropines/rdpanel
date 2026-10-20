@@ -7,13 +7,12 @@ import (
 	"errors"
 	"net"
 	"net/netip"
-	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 
-	"github.com/bropines/rdpanel/internal/db"
+	"github.com/bropines/rdpanel/internal/db/dbtest"
 	"github.com/bropines/rdpanel/internal/events"
 	"github.com/bropines/rdpanel/internal/hbbs/control"
 	"github.com/bropines/rdpanel/internal/hbbs/hbbstest"
@@ -70,14 +69,7 @@ type harness struct {
 func newHarness(t *testing.T, mut func(*Config)) *harness {
 	t.Helper()
 	ctx := context.Background()
-	d, err := db.Open(ctx, filepath.Join(t.TempDir(), "panel.db"), db.Options{})
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { d.Close() })
-	if _, err := d.Migrate(ctx); err != nil {
-		t.Fatal(err)
-	}
+	d := dbtest.Open(t)
 	clk := &clock{t: time.Now()}
 	h := &harness{st: &Store{DB: d, Now: clk.now}, panel: store.New(d), push: &fakePusher{}, bus: events.NewBus(nil), clk: clk}
 	cfg := Config{Store: h.st, Panel: h.panel, Bus: h.bus, Pusher: h.push, Global: h.push, Now: clk.now,
@@ -86,6 +78,7 @@ func newHarness(t *testing.T, mut func(*Config)) *harness {
 	if mut != nil {
 		mut(&cfg)
 	}
+	var err error
 	if h.svc, err = New(cfg); err != nil {
 		t.Fatal(err)
 	}

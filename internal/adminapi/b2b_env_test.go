@@ -7,7 +7,6 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
@@ -19,7 +18,7 @@ import (
 	"github.com/bropines/rdpanel/internal/auth"
 	"github.com/bropines/rdpanel/internal/config"
 	"github.com/bropines/rdpanel/internal/crypto"
-	"github.com/bropines/rdpanel/internal/db"
+	"github.com/bropines/rdpanel/internal/db/dbtest"
 	"github.com/bropines/rdpanel/internal/events"
 	"github.com/bropines/rdpanel/internal/federation"
 	"github.com/bropines/rdpanel/internal/hbbs/control"
@@ -83,14 +82,7 @@ const testPassword = "correct horse battery"
 func newB2Env(t *testing.T, o b2opts) *b2env {
 	t.Helper()
 	ctx := context.Background()
-	d, err := db.Open(ctx, filepath.Join(t.TempDir(), "panel.db"), db.Options{})
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = d.Close() })
-	if _, err := d.Migrate(ctx); err != nil {
-		t.Fatal(err)
-	}
+	d := dbtest.Open(t)
 	clk := &testClock{t: time.Date(2026, 10, 15, 12, 0, 0, 0, time.UTC)}
 	key, _ := crypto.RandomBytes(32)
 	aead, _ := crypto.NewAEAD(key)
@@ -113,6 +105,7 @@ func newB2Env(t *testing.T, o b2opts) *b2env {
 	deps.PresenceSrc = e.pres
 	if o.hbbs {
 		e.fake = hbbstest.NewFakeAdmin(t)
+		var err error
 		e.ctl, err = control.New(control.Config{HBBSAddr: e.fake.Addr(), HBBRAddr: e.fake.Addr(), Timeout: 2 * time.Second})
 		if err != nil {
 			t.Fatal(err)

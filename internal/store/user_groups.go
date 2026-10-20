@@ -2,7 +2,6 @@ package store
 
 import (
 	"context"
-	"database/sql"
 	"strings"
 	"time"
 
@@ -60,13 +59,8 @@ func (r *UserGroups) Create(ctx context.Context, g *UserGroup) error {
 		g.CreatedAt = now
 	}
 	g.UpdatedAt = now
-	var id sql.NullInt64
-	if g.ID != 0 {
-		id = sql.NullInt64{Int64: g.ID, Valid: true}
-	}
-	return mapErr(r.q.QueryRowContext(ctx, `INSERT INTO user_groups (id, name, visibility, note, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?) RETURNING id`,
-		id, strings.TrimSpace(g.Name), g.Visibility, g.Note, toMs(g.CreatedAt), toMs(g.UpdatedAt)).Scan(&g.ID))
+	return insertWithID(ctx, r.q, "user_groups", "name, visibility, note, created_at, updated_at", &g.ID,
+		strings.TrimSpace(g.Name), g.Visibility, g.Note, toMs(g.CreatedAt), toMs(g.UpdatedAt))
 }
 
 // Get returns the group with id.

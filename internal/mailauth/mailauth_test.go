@@ -3,7 +3,6 @@ package mailauth_test
 import (
 	"context"
 	"errors"
-	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
@@ -11,7 +10,7 @@ import (
 
 	"github.com/bropines/rdpanel/internal/config"
 	"github.com/bropines/rdpanel/internal/crypto"
-	"github.com/bropines/rdpanel/internal/db"
+	"github.com/bropines/rdpanel/internal/db/dbtest"
 	"github.com/bropines/rdpanel/internal/mail"
 	"github.com/bropines/rdpanel/internal/mailauth"
 	"github.com/bropines/rdpanel/internal/store"
@@ -60,14 +59,7 @@ func (f *fixture) advance(d time.Duration) {
 func newFixture(t *testing.T) *fixture {
 	t.Helper()
 	ctx := context.Background()
-	d, err := db.Open(ctx, filepath.Join(t.TempDir(), "p.db"), db.Options{})
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = d.Close() })
-	if _, err := d.Migrate(ctx); err != nil {
-		t.Fatal(err)
-	}
+	d := dbtest.Open(t)
 	f := &fixture{out: &outbox{}, now: time.Date(2026, 10, 15, 12, 0, 0, 0, time.UTC)}
 	f.st = store.New(d).WithClock(f.clock)
 	key, _ := crypto.RandomBytes(32)

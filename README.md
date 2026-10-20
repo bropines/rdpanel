@@ -206,6 +206,8 @@ dashboard options: [`docs/monitoring.md`](docs/monitoring.md).
 make test     # go vet + go test -race + web tests
 make lint     # go vet + staticcheck + web typecheck/lint
 make gen      # regenerate web/src/api/schema.d.ts from api/openapi.yaml
+# the database-backed Go suites on PostgreSQL (the role needs CREATEDB):
+RDPANEL_TEST_PG_DSN='postgres://postgres:pw@127.0.0.1:5432/postgres?sslmode=disable' go test ./...
 ```
 
 Layout: `cmd/rdpanel` (entry point), `internal/{app,config,db,store,auth,crypto,httpx,web,...}`,

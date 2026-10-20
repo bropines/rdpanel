@@ -12,7 +12,7 @@ import (
 
 	"github.com/prometheus/client_golang/prometheus"
 
-	"github.com/bropines/rdpanel/internal/db"
+	"github.com/bropines/rdpanel/internal/db/dbtest"
 	"github.com/bropines/rdpanel/internal/events"
 	"github.com/bropines/rdpanel/internal/hbbs/control"
 	"github.com/bropines/rdpanel/internal/hbbs/hbbstest"
@@ -29,16 +29,8 @@ type rig struct {
 
 func newRig(t *testing.T) *rig {
 	t.Helper()
-	ctx := context.Background()
 	dir := t.TempDir()
-	d, err := db.Open(ctx, filepath.Join(dir, "panel.db"), db.Options{})
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { d.Close() })
-	if _, err := d.Migrate(ctx); err != nil {
-		t.Fatal(err)
-	}
+	d := dbtest.Open(t)
 	hs, hr := hbbstest.NewFakeAdmin(t), hbbstest.NewFakeAdmin(t)
 	ctl, err := control.New(control.Config{HBBSAddr: hs.Addr(), HBBRAddr: hr.Addr(), Timeout: time.Second})
 	if err != nil {

@@ -9,7 +9,6 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"testing"
@@ -20,7 +19,7 @@ import (
 	"github.com/bropines/rdpanel/internal/auth"
 	"github.com/bropines/rdpanel/internal/config"
 	"github.com/bropines/rdpanel/internal/crypto"
-	"github.com/bropines/rdpanel/internal/db"
+	"github.com/bropines/rdpanel/internal/db/dbtest"
 	"github.com/bropines/rdpanel/internal/events"
 	"github.com/bropines/rdpanel/internal/hbbs/control"
 	"github.com/bropines/rdpanel/internal/hbbs/hbbstest"
@@ -40,14 +39,7 @@ type relayEnv struct {
 func newRelayEnv(t *testing.T) *relayEnv {
 	t.Helper()
 	ctx := context.Background()
-	d, err := db.Open(ctx, filepath.Join(t.TempDir(), "panel.db"), db.Options{})
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = d.Close() })
-	if _, err := d.Migrate(ctx); err != nil {
-		t.Fatal(err)
-	}
+	d := dbtest.Open(t)
 	clk := &testClock{t: time.Now().UTC()}
 	key, _ := crypto.RandomBytes(32)
 	aead, _ := crypto.NewAEAD(key)
@@ -58,6 +50,7 @@ func newRelayEnv(t *testing.T) *relayEnv {
 	log := slog.New(slog.NewTextHandler(io.Discard, nil))
 	e := &relayEnv{b2env: &b2env{ctx: ctx, pres: &b2bFakePresence{online: map[string]bool{}}}}
 	e.rstore = &relays.Store{DB: d}
+	var err error
 	geo := relays.NewGeoIPEngine("") // per test: refreshes must not leak into other tests
 	geo.LoadBuiltin()
 	e.svc, err = relays.New(relays.Config{Store: e.rstore, Panel: st, Log: log,
@@ -213,7 +206,16 @@ func TestRelaysAPI(t *testing.T) {
 
 	// Audit trail of admin actions.
 	var actions string
-	_ = e.rstore.DB.QueryRow(`SELECT group_concat(action, ',') FROM (SELECT action FROM admin_audit ORDER BY id)`).Scan(&actions)
+	rows, err := e.rstore.DB.Query(`SELECT action FROM admin_audit ORDER BY id`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for rows.Next() {
+		var a string
+		_ = rows.Scan(&a)
+		actions += a + ","
+	}
+	rows.Close()
 	for _, a := range []string{"relay.options.update", "relay.create", "relay.update", "relay.approve", "relay.settings.update",
 		"relay.enroll_token", "relay.revoke", "relay.delete"} {
 		if !strings.Contains(actions, a) {

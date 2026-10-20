@@ -5,13 +5,15 @@ import (
 	"database/sql"
 	"fmt"
 	"time"
+
+	"github.com/bropines/rdpanel/internal/db"
 )
 
 // SQLDevices is a minimal DeviceLister / DeviceRefLister / LastSeenWriter on
 // the panel's devices table. (The full devices repository lives in
 // internal/store; this adapter only needs three columns.)
 type SQLDevices struct {
-	DB *sql.DB
+	DB *db.DB
 }
 
 var (
@@ -72,21 +74,16 @@ func (s SQLDevices) ListDeviceRefs(ctx context.Context) ([]DeviceRef, error) {
 // (heartbeats may write it too); updated_at is not touched because presence
 // is not an edit of the device.
 func (s SQLDevices) TouchLastSeen(ctx context.Context, seen map[string]time.Time) error {
-	tx, err := s.DB.BeginTx(ctx, nil)
-	if err != nil {
-		return err
-	}
-	defer func() { _ = tx.Rollback() }()
-	stmt, err := tx.PrepareContext(ctx,
-		`UPDATE devices SET last_seen_at = max(coalesce(last_seen_at, 0), ?) WHERE rustdesk_id = ?`)
-	if err != nil {
-		return err
-	}
-	defer stmt.Close()
-	for id, ts := range seen {
-		if _, err := stmt.ExecContext(ctx, ts.UnixMilli(), id); err != nil {
-			return fmt.Errorf("presence: touch %s: %w", id, err)
+	return s.DB.WithTx(ctx, func(tx *sql.Tx) error {
+		q := s.DB.Wrap(tx)
+		for id, ts := range seen {
+			ms := ts.UnixMilli()
+			if _, err := q.ExecContext(ctx, `UPDATE devices SET last_seen_at = CASE
+				WHEN coalesce(last_seen_at, 0) > ? THEN coalesce(last_seen_at, 0) ELSE ? END
+				WHERE rustdesk_id = ?`, ms, ms, id); err != nil {
+				return fmt.Errorf("presence: touch %s: %w", id, err)
+			}
 		}
-	}
-	return tx.Commit()
+		return nil
+	})
 }
