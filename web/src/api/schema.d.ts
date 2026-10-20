@@ -1953,6 +1953,8 @@ export interface paths {
          * Fetch and probe public STUN servers
          * @description Fetches open STUN servers from a public community list,
          *     probes candidates concurrently, and returns working servers sorted by lowest latency.
+         *     Candidates resolving to private, loopback or link-local addresses are never probed
+         *     (the list is third-party data; the relays "allow private hosts" option does not apply).
          */
         post: operations["fetchPublicStunServers"];
         delete?: never;
@@ -2430,7 +2432,10 @@ export interface paths {
         /** List all registered peer RD Panels. */
         get: operations["listFederationPeers"];
         put?: never;
-        /** Register a new peer RD Panel. */
+        /**
+         * Register a new peer RD Panel.
+         * @description Stores the peer and the token this panel presents to it (AEAD-encrypted, never returned), then starts a first sync in the background. Unless Relays -> Options -> allow private hosts is on, api_url must not point at a private, loopback or link-local address.
+         */
         post: operations["createFederationPeer"];
         delete?: never;
         options?: never;
@@ -2483,7 +2488,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** List all relays announced by peered panels. */
+        /**
+         * List all relays announced by peered panels.
+         * @description Relays announced by active peers, imported for visibility only: they are not added to this panel's hbbs relay rotation.
+         */
         get: operations["listFederatedRelays"];
         put?: never;
         post?: never;
@@ -4136,7 +4144,9 @@ export interface components {
             prefix_count: number;
         };
         ImportCountryPrefixRulesInput: {
+            /** @description ISO 3166-1 alpha-2; prefixes come from the loaded GeoIP dataset, else the built-in list (at most 5000 per import). */
             country_code: string;
+            /** @description host[:port], several separated by commas; no whitespace. */
             relay_host: string;
             comment?: string;
         };
@@ -4158,7 +4168,9 @@ export interface components {
             updated_at: string;
         };
         RelayPrefixRuleInput: {
+            /** @description CIDR or bare IP; stored masked (10.1.2.3/8 becomes 10.0.0.0/8). */
             cidr: string;
+            /** @description host[:port], several separated by commas; no whitespace. */
             relay_host: string;
             comment?: string;
         };
@@ -4379,6 +4391,7 @@ export interface components {
             /** @description Optional host[:port] used by the panel for reachability probes (defaults to public_host). */
             mgmt_host?: string | null;
             region?: string | null;
+            /** @description Configured weight (what PATCH sets). With auto weights on, the load-balanced value is rotation_weight. */
             weight: number;
             in_rotation: boolean;
             admin_state: components["schemas"]["RelayAdminState"];
@@ -4391,7 +4404,7 @@ export interface components {
             last_probe_error?: string | null;
             /** @description Whether the lightweight TCP connect to public_host succeeded during the last probe (when mgmt_host is configured). */
             public_reachable?: boolean | null;
-            /** @description Entries in hbbs' computed list (0 = not in rotation). */
+            /** @description Entries in hbbs' computed list (0 = not in rotation): the configured weight, or the auto-balanced one, scaled down when the list must fit hbbs' command. */
             rotation_weight: number;
             /** Format: date-time */
             created_at: string;
@@ -4634,10 +4647,14 @@ export interface components {
             name: string;
             api_url: string;
             sync_relays: boolean;
-            /** @enum {string} */
+            /**
+             * @description unreachable: the last sync failed (unreachable, token rejected or invalid answer); see last_error.
+             * @enum {string}
+             */
             status: "unknown" | "active" | "unreachable";
             /** Format: date-time */
             last_sync_at?: string | null;
+            /** @description Short reason of the last failed sync (no URLs or network errors). */
             last_error?: string | null;
             /** Format: date-time */
             created_at: string;
@@ -4647,8 +4664,12 @@ export interface components {
         CreateFederationPeerInput: {
             name: string;
             api_url: string;
+            /** @description The peer panel's RDPANEL_FEDERATION_TOKEN (not an admin API token). Stored encrypted and sent as a Bearer token on every sync. */
             auth_token: string;
-            /** @default true */
+            /**
+             * @description Import the relays the peer announces (listed for visibility only).
+             * @default true
+             */
             sync_relays: boolean;
         };
         FederatedRelay: {
@@ -4863,6 +4884,15 @@ export interface components {
     responses: {
         /** @description hbbs/hbbr unreachable (error code `server_unavailable`). */
         Unavailable: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["Error"];
+            };
+        };
+        /** @description Federation is off (error code federation_disabled); enable it with RDPANEL_FEDERATION_ENABLED=true and RDPANEL_FEDERATION_TOKEN. */
+        FederationDisabled: {
             headers: {
                 [name: string]: unknown;
             };
@@ -9572,8 +9602,18 @@ export interface operations {
                     "application/json": components["schemas"]["RelayGeoIPStatus"];
                 };
             };
+            400: components["responses"]["ValidationFailed"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
+            /** @description Download or parsing failed (error code geoip_refresh_failed); the previously loaded dataset stays in place. */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
         };
     };
     lookupRelayGeoIP: {
@@ -9647,6 +9687,7 @@ export interface operations {
             };
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
+            503: components["responses"]["FederationDisabled"];
         };
     };
     createFederationPeer: {
@@ -9678,6 +9719,7 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             409: components["responses"]["Conflict"];
+            503: components["responses"]["FederationDisabled"];
         };
     };
     deleteFederationPeer: {
@@ -9704,6 +9746,7 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
+            503: components["responses"]["FederationDisabled"];
         };
     };
     syncFederationPeer: {
@@ -9732,7 +9775,16 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
-            502: components["responses"]["BadGateway"];
+            /** @description Sync failed (error code sync_failed); the message is the short reason also stored as the peer's last_error. */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            503: components["responses"]["FederationDisabled"];
         };
     };
     listFederatedRelays: {
@@ -9756,6 +9808,7 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
+            503: components["responses"]["FederationDisabled"];
         };
     };
     getRelay: {

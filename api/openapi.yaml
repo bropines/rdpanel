@@ -95,6 +95,7 @@ tags:
   - name: audit
   - name: server
   - name: relays
+  - name: federation
   - name: strategies
   - name: settings
   - name: lookup
@@ -2769,6 +2770,8 @@ paths:
       description: |
         Fetches open STUN servers from a public community list,
         probes candidates concurrently, and returns working servers sorted by lowest latency.
+        Candidates resolving to private, loopback or link-local addresses are never probed
+        (the list is third-party data; the relays "allow private hosts" option does not apply).
       parameters:
         - $ref: "#/components/parameters/CsrfHeader"
       requestBody:
@@ -3272,8 +3275,16 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/RelayGeoIPStatus" }
+        "400": { $ref: "#/components/responses/ValidationFailed" }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "403": { $ref: "#/components/responses/Forbidden" }
+        "502":
+          description: >-
+            Download or parsing failed (error code geoip_refresh_failed); the
+            previously loaded dataset stays in place.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
   /relays/geoip/lookup:
     get:
       tags: [relays]
@@ -3326,10 +3337,16 @@ paths:
                 items: { $ref: "#/components/schemas/FederationPeer" }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "403": { $ref: "#/components/responses/Forbidden" }
+        "503": { $ref: "#/components/responses/FederationDisabled" }
     post:
       tags: [federation]
       operationId: createFederationPeer
       summary: Register a new peer RD Panel.
+      description: >-
+        Stores the peer and the token this panel presents to it (AEAD-encrypted,
+        never returned), then starts a first sync in the background. Unless
+        Relays -> Options -> allow private hosts is on, api_url must not point at a
+        private, loopback or link-local address.
       parameters:
         - $ref: "#/components/parameters/CsrfHeader"
       requestBody:
@@ -3346,6 +3363,7 @@ paths:
         "400": { $ref: "#/components/responses/ValidationFailed" }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "403": { $ref: "#/components/responses/Forbidden" }
+        "503": { $ref: "#/components/responses/FederationDisabled" }
         "409": { $ref: "#/components/responses/Conflict" }
   /federation/peers/{id}:
     parameters:
@@ -3364,6 +3382,7 @@ paths:
           description: Peer deleted.
         "401": { $ref: "#/components/responses/Unauthorized" }
         "403": { $ref: "#/components/responses/Forbidden" }
+        "503": { $ref: "#/components/responses/FederationDisabled" }
         "404": { $ref: "#/components/responses/NotFound" }
   /federation/peers/{id}/sync:
     parameters:
@@ -3385,13 +3404,23 @@ paths:
               schema: { $ref: "#/components/schemas/FederationPeer" }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "403": { $ref: "#/components/responses/Forbidden" }
+        "503": { $ref: "#/components/responses/FederationDisabled" }
         "404": { $ref: "#/components/responses/NotFound" }
-        "502": { $ref: "#/components/responses/BadGateway" }
+        "502":
+          description: >-
+            Sync failed (error code sync_failed); the message is the short reason
+            also stored as the peer's last_error.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
   /federation/relays:
     get:
       tags: [federation]
       operationId: listFederatedRelays
       summary: List all relays announced by peered panels.
+      description: >-
+        Relays announced by active peers, imported for visibility only: they are
+        not added to this panel's hbbs relay rotation.
       responses:
         "200":
           description: List of announced relays.
@@ -3402,6 +3431,7 @@ paths:
                 items: { $ref: "#/components/schemas/FederatedRelay" }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "403": { $ref: "#/components/responses/Forbidden" }
+        "503": { $ref: "#/components/responses/FederationDisabled" }
         "404": { $ref: "#/components/responses/NotFound" }
   /relays/{id}:
     parameters:
@@ -4034,6 +4064,13 @@ components:
   responses:
     Unavailable:
       description: hbbs/hbbr unreachable (error code `server_unavailable`).
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    FederationDisabled:
+      description: >-
+        Federation is off (error code federation_disabled); enable it with
+        RDPANEL_FEDERATION_ENABLED=true and RDPANEL_FEDERATION_TOKEN.
       content:
         application/json:
           schema: { $ref: "#/components/schemas/Error" }
@@ -5482,8 +5519,8 @@ components:
       type: object
       required: [country_code, relay_host]
       properties:
-        country_code: { type: string }
-        relay_host: { type: string }
+        country_code: { type: string, description: "ISO 3166-1 alpha-2; prefixes come from the loaded GeoIP dataset, else the built-in list (at most 5000 per import)." }
+        relay_host: { type: string, description: "host[:port], several separated by commas; no whitespace." }
         comment: { type: string }
     ImportCountryPrefixRulesResult:
       type: object
@@ -5507,8 +5544,8 @@ components:
       type: object
       required: [cidr, relay_host]
       properties:
-        cidr: { type: string }
-        relay_host: { type: string }
+        cidr: { type: string, description: "CIDR or bare IP; stored masked (10.1.2.3/8 becomes 10.0.0.0/8)." }
+        relay_host: { type: string, description: "host[:port], several separated by commas; no whitespace." }
         comment: { type: string }
     ServerSettingKey:
       type: string
@@ -5723,7 +5760,7 @@ components:
         public_host: { type: string, description: "host[:port] handed to clients (default port 21117)." }
         mgmt_host: { type: [string, "null"], description: "Optional host[:port] used by the panel for reachability probes (defaults to public_host)." }
         region: { type: [string, "null"] }
-        weight: { type: integer, minimum: 0, maximum: 5 }
+        weight: { type: integer, minimum: 0, maximum: 5, description: "Configured weight (what PATCH sets). With auto weights on, the load-balanced value is rotation_weight." }
         in_rotation: { type: boolean }
         admin_state: { $ref: "#/components/schemas/RelayAdminState" }
         health: { $ref: "#/components/schemas/RelayHealthState" }
@@ -5732,7 +5769,7 @@ components:
         last_probe_ms: { type: [number, "null"] }
         last_probe_error: { type: [string, "null"] }
         public_reachable: { type: [boolean, "null"], description: "Whether the lightweight TCP connect to public_host succeeded during the last probe (when mgmt_host is configured)." }
-        rotation_weight: { type: integer, description: Entries in hbbs' computed list (0 = not in rotation). }
+        rotation_weight: { type: integer, description: "Entries in hbbs' computed list (0 = not in rotation): the configured weight, or the auto-balanced one, scaled down when the list must fit hbbs' command." }
         created_at: { type: string, format: date-time }
         updated_at: { type: string, format: date-time }
         agent:
@@ -6018,8 +6055,9 @@ components:
         status:
           type: string
           enum: [unknown, active, unreachable]
+          description: "unreachable: the last sync failed (unreachable, token rejected or invalid answer); see last_error."
         last_sync_at: { type: string, format: date-time, nullable: true }
-        last_error: { type: string, nullable: true }
+        last_error: { type: string, nullable: true, description: Short reason of the last failed sync (no URLs or network errors). }
         created_at: { type: string, format: date-time }
         updated_at: { type: string, format: date-time }
     CreateFederationPeerInput:
@@ -6028,8 +6066,13 @@ components:
       properties:
         name: { type: string }
         api_url: { type: string }
-        auth_token: { type: string }
-        sync_relays: { type: boolean, default: true }
+        auth_token:
+          type: string
+          minLength: 16
+          description: >-
+            The peer panel's RDPANEL_FEDERATION_TOKEN (not an admin API token).
+            Stored encrypted and sent as a Bearer token on every sync.
+        sync_relays: { type: boolean, default: true, description: Import the relays the peer announces (listed for visibility only). }
     FederatedRelay:
       type: object
       required: [id, peer_id, remote_name, public_host, health, last_sync_at]

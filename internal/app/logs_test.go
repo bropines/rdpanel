@@ -56,6 +56,39 @@ func TestPanelLinesTeedWithoutLogsDir(t *testing.T) {
 	}
 }
 
+// TestWebhookSecretsRedacted: the webhook URL (token in path/query) and the
+// signing secret never reach Server -> Logs.
+func TestWebhookSecretsRedacted(t *testing.T) {
+	const (
+		hook   = "https://hooks.example.com/services/T0/B0/pathtoken123?token=querytoken456"
+		secret = "whsec-signing-secret-789"
+	)
+	env, _ := testEnv(t, map[string]string{"RDPANEL_HBBS_ENABLED": "false",
+		"RDPANEL_WEBHOOK_URL": hook, "RDPANEL_WEBHOOK_SECRET": secret})
+	cfg, err := config.Load(env)
+	if err != nil {
+		t.Fatal(err)
+	}
+	a, err := New(context.Background(), cfg, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer a.Close()
+	a.Logs.Write(logs.SourcePanel, `{"level":"WARN","msg":"webhook: send error","err":"Post \"`+hook+`\": refused","secret":"`+secret+`"}`)
+	a.Logs.Write(logs.SourcePanel, `{"level":"WARN","msg":"proxy saw query token=querytoken456"}`)
+	items := a.Logs.Query(logs.Filter{}).Items
+	if len(items) == 0 {
+		t.Fatal("nothing buffered")
+	}
+	for _, e := range items {
+		for _, leak := range []string{"pathtoken123", "querytoken456", secret} {
+			if strings.Contains(e.Raw, leak) {
+				t.Fatalf("%q leaked: %s", leak, e.Raw)
+			}
+		}
+	}
+}
+
 func TestAppTailsLogsDirAndRedactsKeys(t *testing.T) {
 	logsDir := t.TempDir()
 	env, dataDir := testEnv(t, map[string]string{"RDPANEL_LOGS_DIR": logsDir, "RDPANEL_HBBS_ENABLED": "false"})

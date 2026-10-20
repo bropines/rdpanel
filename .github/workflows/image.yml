@@ -16,9 +16,11 @@ on:
   workflow_dispatch:
     inputs:
       server_ref:
-        description: bropines/rustdesk-server ref (branch, tag or sha) for hbbs/hbbr; maintained branch is rdpanel
-        default: 2b6c952e1626988c5a4116af3cb062cc9f752164 # rdpanel branch @ 2b6c952 (hbbr stats, hbbs prefix routing & reload-geo)
-        required: true
+        description: >-
+          bropines/rustdesk-server ref (branch, tag or sha) for hbbs/hbbr; empty =
+          the pinned SERVER_REF below (maintained branch is rdpanel)
+        default: ''
+        required: false
       push:
         description: push the image to ghcr.io
         type: boolean
@@ -34,8 +36,11 @@ concurrency:
 env:
   IMAGE: ghcr.io/bropines/rdpanel
   SERVER_REPO: bropines/rustdesk-server
-  # Pinned hbbs/hbbr source for push/tag builds; bump deliberately after
-  # testing a newer commit of the bropines/rustdesk-server `rdpanel` branch.
+  # The single pinned hbbs/hbbr source (push, tag and manual builds unless
+  # server_ref overrides it); bump deliberately after testing a newer commit of
+  # the bropines/rustdesk-server `rdpanel` branch.
+  # 5994ffc: rdpanel branch head (hbbr stats, hbbs prefix routing & reload-geo,
+  # RequestRelay forwarded to WebSocket peers); the v0.10.7 image uses it.
   SERVER_REF: ${{ inputs.server_ref || '5994ffcba4757901eb0f7147e5055e90261b9de9' }}
 
 jobs:

@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/ed25519"
 	"crypto/rand"
+	"encoding/json"
 	"io"
 	"log/slog"
 	"net/http"
@@ -57,9 +58,11 @@ func newRelayEnv(t *testing.T) *relayEnv {
 	log := slog.New(slog.NewTextHandler(io.Discard, nil))
 	e := &relayEnv{b2env: &b2env{ctx: ctx, pres: &b2bFakePresence{online: map[string]bool{}}}}
 	e.rstore = &relays.Store{DB: d}
+	geo := relays.NewGeoIPEngine("") // per test: refreshes must not leak into other tests
+	geo.LoadBuiltin()
 	e.svc, err = relays.New(relays.Config{Store: e.rstore, Panel: st, Log: log,
 		PublicKey: func() (string, error) { return "OeVuKk5nlHiXp+APNn0Y3pC1Iwpwn44JGqrQCsWqmBw=", nil },
-		PublicURL: cfg.PublicURL, Prober: &relays.Prober{Timeout: time.Second}})
+		PublicURL: cfg.PublicURL, Prober: &relays.Prober{Timeout: time.Second}, GeoIP: geo})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -377,10 +380,55 @@ func TestRelayGeoIPAPI(t *testing.T) {
 		t.Fatalf("expected found=false for 10.0.0.1, got %+v", m)
 	}
 
-	// 4. Refresh endpoint
-	code, m, _ = admin.do(http.MethodPost, "/relays/geoip/refresh", map[string]any{})
+	// 4. Refresh endpoint (hermetic source)
+	src := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/geo.csv" {
+			http.Error(w, "gone", http.StatusInternalServerError)
+			return
+		}
+		_, _ = io.WriteString(w, "192.0.2.0/24,US\n198.51.100.0,198.51.100.255,NL\n")
+	}))
+	t.Cleanup(src.Close)
+	code, m, _ = admin.do(http.MethodPost, "/relays/geoip/refresh", map[string]any{"source_url": src.URL + "/geo.csv"})
 	want(t, "refresh geoip", code, 200, m)
-	if m["loaded"] != true {
-		t.Fatalf("expected loaded=true after refresh, got %+v", m)
+	if m["loaded"] != true || m["prefix_count"].(float64) != 2 {
+		t.Fatalf("expected the 2 prefixes of the source after refresh, got %+v", m)
+	}
+
+	// 5. A failed download keeps that dataset and does not echo the URL or
+	// the dial error.
+	code, m, _ = admin.do(http.MethodPost, "/relays/geoip/refresh", map[string]any{"source_url": "http://127.0.0.1:1/geo.csv"})
+	wantErr(t, "refresh unreachable", code, 502, m, "geoip_refresh_failed")
+	if raw, _ := json.Marshal(m); strings.Contains(string(raw), "127.0.0.1") || strings.Contains(string(raw), "refused") {
+		t.Fatalf("refresh error leaks the dial error: %s", raw)
+	}
+	code, m, _ = admin.do(http.MethodPost, "/relays/geoip/refresh", map[string]any{"source_url": src.URL + "/missing.csv"})
+	wantErr(t, "refresh HTTP 500", code, 502, m, "geoip_refresh_failed")
+	code, m, _ = admin.do(http.MethodGet, "/relays/geoip/status", nil)
+	want(t, "status after failures", code, 200, m)
+	if m["prefix_count"].(float64) != 2 || !strings.HasSuffix(m["source"].(string), "/geo.csv") {
+		t.Fatalf("dataset was replaced after failed refreshes: %+v", m)
+	}
+
+	// 6. Bad input: one 400 response, nothing fetched.
+	code, m, _ = admin.do(http.MethodPost, "/relays/geoip/refresh", map[string]any{"source_url": "ftp://example.com/x", "extra": 1})
+	wantErr(t, "refresh unknown field", code, 400, m, "validation_failed")
+	code, m, _ = admin.do(http.MethodPost, "/relays/geoip/refresh", map[string]any{"source_url": "file:///etc/passwd"})
+	wantErr(t, "refresh bad scheme", code, 400, m, "validation_failed")
+}
+
+func TestRelayPrefixRulesRejectInjection(t *testing.T) {
+	e := newRelayEnv(t)
+	admin, _ := e.as("root", store.RoleAdmin)
+	code, m, _ := admin.do(http.MethodPost, "/relays/prefix-rules", map[string]any{
+		"cidr": "10.0.0.0/8", "relay_host": "a.example.com:21117\n0.0.0.0/0 evil.example.com:21117"})
+	wantErr(t, "injected relay_host", code, 400, m, "validation_failed")
+	code, m, _ = admin.do(http.MethodPost, "/relays/prefix-rules/import-country", map[string]any{
+		"country_code": "RU", "relay_host": "a.example.com\n0.0.0.0/0 evil.example.com"})
+	wantErr(t, "injected import relay_host", code, 400, m, "validation_failed")
+	code, m, _ = admin.do(http.MethodPost, "/relays/prefix-rules", map[string]any{"cidr": "10.1.2.3/8", "relay_host": "a.example.com"})
+	want(t, "masked cidr", code, 201, m)
+	if m["cidr"] != "10.0.0.0/8" {
+		t.Fatalf("cidr not normalized: %v", m)
 	}
 }

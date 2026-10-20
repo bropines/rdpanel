@@ -4,7 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"log/slog"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -44,6 +46,7 @@ type RelayManager interface {
 	CreatePrefixRule(ctx context.Context, rule *relays.PrefixRule) error
 	DeletePrefixRule(ctx context.Context, id int64) error
 	ImportCountryRules(ctx context.Context, countryCode, relayHost, customComment string) (*relays.ImportCountryRulesResult, error)
+	GeoIP() *relays.GeoIPEngine
 }
 
 func (c *b2bCore) registerRelays(r chi.Router) {
@@ -740,7 +743,7 @@ func (c *b2bCore) handleCreatePrefixRule(w http.ResponseWriter, r *http.Request)
 		Comment:   in.Comment,
 	}
 	if err := rule.Validate(); err != nil {
-		validationFailed(w, "invalid prefix rule", map[string]string{"cidr": err.Error()})
+		prefixRuleInvalid(w, "invalid prefix rule", err)
 		return
 	}
 	if err := c.d.Relays.CreatePrefixRule(r.Context(), &rule); err != nil {
@@ -750,6 +753,20 @@ func (c *b2bCore) handleCreatePrefixRule(w http.ResponseWriter, r *http.Request)
 	c.audit(r, "relays.prefix_rule.create", "relay_prefix_rule", rule.ID,
 		map[string]any{"cidr": rule.CIDR, "relay_host": rule.RelayHost})
 	httpx.WriteJSON(w, http.StatusCreated, newRelayPrefixRuleDTO(rule))
+}
+
+// prefixRuleInvalid answers 400 for a store.ErrInvalid prefix-rule error,
+// attributing it to the relay_host or cidr field.
+func prefixRuleInvalid(w http.ResponseWriter, msg string, err error) {
+	text := strings.TrimPrefix(err.Error(), store.ErrInvalid.Error()+": ")
+	field := "cidr"
+	switch {
+	case strings.Contains(text, "relay_host"):
+		field = "relay_host"
+	case strings.Contains(text, "country"):
+		field = "country_code"
+	}
+	validationFailed(w, msg, map[string]string{field: text})
 }
 
 func (c *b2bCore) handleDeletePrefixRule(w http.ResponseWriter, r *http.Request) {
@@ -775,7 +792,7 @@ func (c *b2bCore) handleListPrefixRuleCountries(w http.ResponseWriter, r *http.R
 	if !c.needRelays(w) {
 		return
 	}
-	httpx.WriteJSON(w, http.StatusOK, relays.ListCountryPrefixInfo())
+	httpx.WriteJSON(w, http.StatusOK, c.d.Relays.GeoIP().SupportedCountries())
 }
 
 func (c *b2bCore) handleImportCountryPrefixRules(w http.ResponseWriter, r *http.Request) {
@@ -788,7 +805,11 @@ func (c *b2bCore) handleImportCountryPrefixRules(w http.ResponseWriter, r *http.
 	}
 	res, err := c.d.Relays.ImportCountryRules(r.Context(), in.CountryCode, in.RelayHost, in.Comment)
 	if err != nil {
-		validationFailed(w, "invalid country import", map[string]string{"country_code": err.Error()})
+		if errors.Is(err, store.ErrInvalid) {
+			prefixRuleInvalid(w, "invalid country import", err)
+			return
+		}
+		c.fail(w, r, "import country prefix rules", err)
 		return
 	}
 	c.audit(r, "relays.prefix_rule.import_country", "relay_prefix_rule", 0,
@@ -800,8 +821,7 @@ func (c *b2bCore) handleGetGeoIPStatus(w http.ResponseWriter, r *http.Request) {
 	if !c.needRelays(w) {
 		return
 	}
-	engine := relays.GetGeoIPEngine()
-	httpx.WriteJSON(w, http.StatusOK, engine.Status())
+	httpx.WriteJSON(w, http.StatusOK, c.d.Relays.GeoIP().Status())
 }
 
 func (c *b2bCore) handlePostGeoIPRefresh(w http.ResponseWriter, r *http.Request) {
@@ -811,13 +831,25 @@ func (c *b2bCore) handlePostGeoIPRefresh(w http.ResponseWriter, r *http.Request)
 	var body struct {
 		SourceURL string `json:"source_url"`
 	}
-	_ = decodeBody(w, r, &body, 4<<10)
-	engine := relays.GetGeoIPEngine()
-	st, err := engine.RefreshFromURL(r.Context(), body.SourceURL)
+	if !decodeBody(w, r, &body, 4<<10) {
+		return
+	}
+	if src := strings.TrimSpace(body.SourceURL); src != "" {
+		if u, err := url.Parse(src); err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
+			validationFailed(w, "invalid GeoIP source", map[string]string{"source_url": "must be an http(s) URL"})
+			return
+		}
+	}
+	// The previously loaded dataset stays in place on any error.
+	st, err := c.d.Relays.GeoIP().RefreshFromURL(r.Context(), body.SourceURL)
 	if err != nil {
-		engine.LoadBuiltin()
-		st = engine.Status()
-		st.Source = "builtin (fallback after error: " + err.Error() + ")"
+		c.log.WarnContext(r.Context(), "geoip refresh failed", slog.Any("err", err))
+		msg := relays.ErrGeoIPDownload.Error()
+		if !errors.Is(err, relays.ErrGeoIPDownload) {
+			msg = "invalid GeoIP database: " + err.Error()
+		}
+		httpx.WriteError(w, http.StatusBadGateway, "geoip_refresh_failed", msg)
+		return
 	}
 	recordAudit(r.Context(), c.d, r, "relay.geoip.refresh", "settings", "relays",
 		map[string]any{"source": st.Source, "prefixes": st.PrefixCount, "countries": st.CountryCount})
@@ -833,7 +865,6 @@ func (c *b2bCore) handleGetGeoIPLookup(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteError(w, http.StatusBadRequest, "invalid_parameter", "ip query parameter is required")
 		return
 	}
-	engine := relays.GetGeoIPEngine()
-	res := engine.Lookup(ip)
+	res := c.d.Relays.GeoIP().Lookup(ip)
 	httpx.WriteJSON(w, http.StatusOK, res)
 }

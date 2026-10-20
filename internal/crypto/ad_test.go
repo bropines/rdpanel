@@ -13,6 +13,7 @@ func TestADFormat(t *testing.T) {
 		ShareLinkPasswordAD(9):            "share_link.password:9",
 		OAuthStatePKCEVerifierAD(11):      "oauth_state.pkce_verifier:11",
 		TOTPSecretAD(1):                   "totp:1",
+		FederationPeerTokenAD(4):          "settings.federation_peer_token:4",
 	}
 	for got, want := range cases {
 		if got != want {

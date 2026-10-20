@@ -57,6 +57,9 @@ func (a *App) startWorkers(ctx context.Context, wg *sync.WaitGroup) {
 	if a.LDAP != nil {
 		run("ldap-sync", a.LDAP.Run)
 	}
+	if a.Federation != nil {
+		run("federation-sync", a.Federation.Run)
+	}
 }
 
 func (a *App) runJanitor(ctx context.Context) {
