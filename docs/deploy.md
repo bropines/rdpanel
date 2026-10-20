@@ -280,6 +280,7 @@ Summary:
 | `ALWAYS_USE_RELAY` | hbbs | `N` | `Y` disables P2P |
 | `MUST_LOGIN` | hbbs | `N` | `Y` requires a panel login token for connections |
 | `TCP_KEEPALIVE` | hbbs | `N` | `Y` keeps TCP/WebSocket-mode clients online (see [WebSocket and TCP-mode clients](#websocket-and-tcp-mode-clients)) |
+| `WS_RELAY_SERVERS` | hbbs | first `RELAY` entry | relays offered to browser (WebSocket) clients such as the [web client](web-client.md); they must be reachable as `wss://<host>/ws/relay`, so by default only the local hbbr behind the panel. Set empty to use the normal rotation |
 | `WEBRTC` | hbbs | `N` | `Y` forwards WebRTC signaling for RustDesk 1.5+ clients (see [WebRTC](webrtc.md)) |
 | `RUSTDESK_API_JWT_KEY` | panel, hbbs | generated `jwt.key` | HS256 key of client tokens (raw string) |
 | `KEY_PRIV`, `KEY_PUB` | key-secret | — | initial key pair (also docker secrets `key_priv`/`key_pub`) |

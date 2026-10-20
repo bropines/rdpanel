@@ -5,6 +5,11 @@
 # Env: RELAY          -> -r <relay servers>, comma separated host[:port]
 #      ENCRYPTED_ONLY -> 1 adds `-k _` (only clients that know the key)
 #      KEY            -> read by hbbs itself when ENCRYPTED_ONLY is not 1
+#      WS_RELAY_SERVERS
+#                     -> relays offered to WebSocket (browser) clients; defaults
+#                        to the first RELAY entry: browsers reach the local hbbr
+#                        through the panel's reverse proxy (/ws/relay), not
+#                        remote relay agents in the rotation
 #      ALWAYS_USE_RELAY, MUST_LOGIN, TCP_KEEPALIVE, WEBRTC, RUSTDESK_API_JWT_KEY,
 #      RUST_LOG
 #                     -> read by hbbs itself from the environment (with-contenv
@@ -17,6 +22,10 @@ cd /data || exit 1
 
 set --
 if [ -n "${RELAY:-}" ]; then set -- "$@" -r "$RELAY"; fi
+if [ -z "${WS_RELAY_SERVERS+x}" ] && [ -n "${RELAY:-}" ]; then
+	WS_RELAY_SERVERS=${RELAY%%,*}
+	export WS_RELAY_SERVERS
+fi
 if [ "${ENCRYPTED_ONLY:-0}" = 1 ]; then set -- "$@" -k _; fi
 
 # MUST_LOGIN tokens are verified with RUSTDESK_API_JWT_KEY. When it is not set
