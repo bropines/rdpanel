@@ -24,6 +24,17 @@ export const webClientApi = {
   forget: (peer: string) => api.request<void>(`/webclient/credentials/${encodeURIComponent(peer)}`, { method: "DELETE" }),
 };
 
+/* ── Install client ───────────────────────────────────────────────────── */
+
+export type ClientDownloads = Schemas["ClientDownloads"];
+export type ClientAsset = Schemas["ClientAsset"];
+
+export const clientsApi = {
+  get: () => api.request<ClientDownloads>("/clients"),
+  /** Plain link (cookie session): the browser downloads it under the server's file name. */
+  windowsUrl: (arch: "x64" | "arm64") => `${API_BASE}/clients/windows/${arch}`,
+};
+
 /* ── About ────────────────────────────────────────────────────────────── */
 
 export type About = Schemas["About"];

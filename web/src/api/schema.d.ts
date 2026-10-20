@@ -951,6 +951,50 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/clients": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Official RustDesk clients set up for this server ("Install client" page).
+         * @description Any signed-in user. The server settings and config string are always returned. With client downloads
+         *     enabled (`RDPANEL_CLIENT_DOWNLOADS_ENABLED`, default true) the panel also looks up a RustDesk release on
+         *     GitHub (cached for 6 h; `error` reports a failed lookup while an earlier answer is kept) and lists its
+         *     assets; `windows_file_name` is the name under which the official Windows client applies these settings.
+         */
+        get: operations["getClientDownloads"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/clients/windows/{arch}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The official RustDesk Windows installer, named so that it uses this server.
+         * @description Any signed-in user. The panel downloads the installer from GitHub once per version (size and SHA-256
+         *     checked against GitHub's listing) and serves it as `windows_file_name`; supports Range requests.
+         */
+        get: operations["downloadWindowsClient"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/lookup/users": {
         parameters: {
             query?: never;
@@ -3602,6 +3646,39 @@ export interface components {
             servers: components["schemas"]["WebClientServer"][];
             /** @description Users may enter their own servers (RDPANEL_WEBCLIENT_CUSTOM_SERVERS) */
             custom_servers: boolean;
+        };
+        ClientDownloads: {
+            /** @description Client downloads are on (RDPANEL_CLIENT_DOWNLOADS_ENABLED) */
+            enabled: boolean;
+            /** @description RustDesk release offered, e.g. 1.5.0 */
+            version?: string;
+            /** @description GitHub release page */
+            release_url?: string;
+            /** Format: date-time */
+            published_at?: string;
+            /** @description Last failed release lookup (an earlier answer may still be listed) */
+            error?: string;
+            id_server: string;
+            relay_server: string;
+            api_server: string;
+            /** @description Server public key; empty when unreadable */
+            public_key: string;
+            /** @description RustDesk config string (--config, import, QR code as config=…) */
+            config_string: string;
+            /** @description Installer name carrying the settings; absent when they do not fit */
+            windows_file_name?: string;
+            assets: components["schemas"]["ClientAsset"][];
+        };
+        ClientAsset: {
+            /** @description Platform, e.g. windows-x64, macos-arm64, linux-deb-x64, android-universal. */
+            id: string;
+            name: string;
+            /** Format: int64 */
+            size: number;
+            /** @description GitHub download URL */
+            url: string;
+            /** @description GitHub's digest (hex), when published */
+            sha256?: string;
         };
         WebClientServer: {
             name: string;
@@ -6523,6 +6600,53 @@ export interface operations {
             };
             401: components["responses"]["Unauthorized"];
             404: components["responses"]["NotFound"];
+        };
+    };
+    getClientDownloads: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Client downloads and server settings. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ClientDownloads"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+        };
+    };
+    downloadWindowsClient: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                arch: "x64" | "arm64";
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The installer. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/vnd.microsoft.portable-executable": string;
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            502: components["responses"]["BadGateway"];
         };
     };
     lookupUsers: {

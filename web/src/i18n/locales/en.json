@@ -24,7 +24,8 @@
     "settings": "Settings",
     "openMenu": "Open navigation",
     "closeMenu": "Close navigation",
-    "about": "About"
+    "about": "About",
+    "installClient": "Install client"
   },
   "theme": {
     "toggle": "Toggle theme",
@@ -805,7 +806,8 @@
       "idServer": "ID server",
       "relayServer": "Relay server",
       "apiServer": "API server",
-      "publicKey": "Public key"
+      "publicKey": "Public key",
+      "installPage": "Install page for users"
     },
     "clientOptions": {
       "title": "Client options (WebRTC)",
@@ -1764,6 +1766,74 @@
       "relayPlaceholder": "same as the server",
       "key": "Public key",
       "requirements": "The server needs wss://<host>/ws/id → hbbs (21118) and wss://<host>/ws/relay → hbbr (21119) behind a TLS reverse proxy. The key is its id_ed25519.pub."
+    }
+  },
+  "install": {
+    "title": "Install client",
+    "description": "The official RustDesk client, set up for {{host}}.",
+    "platform": "Platform",
+    "thisDevice": "this device",
+    "platforms": {
+      "windows": "Windows",
+      "macos": "macOS",
+      "linux": "Linux",
+      "android": "Android",
+      "ios": "iPhone / iPad"
+    },
+    "noKey": "The server key is not available yet, so clients cannot be set up. Check that hbbs is running.",
+    "lookupFailed": "RustDesk releases could not be loaded from GitHub; download links will appear once the panel reaches it. Manual setup below works anyway.",
+    "versionNote": "RustDesk {{version}} from the official GitHub releases.",
+    "releaseNotes": "Release notes",
+    "orTerminal": "Or in Terminal",
+    "windows": {
+      "desc": "The installer is the official one; its file name carries this server's settings.",
+      "download": "Download for Windows",
+      "arm": "ARM64",
+      "step1": "Run the downloaded file.",
+      "step2": "Click “Install” (or just use it without installing).",
+      "step3": "Done: the client already uses this server. Sign in with your panel account under Settings → Account if you want your address book.",
+      "keepName": "Do not rename the file: the settings are in its name.",
+      "silentTitle": "Silent install for administrators (PowerShell)",
+      "silentHint": "Run as administrator, e.g. through GPO, Intune or an RMM. Downloads from GitHub and checks the SHA-256."
+    },
+    "macos": {
+      "arm": "Apple silicon",
+      "intel": "Intel",
+      "step1": "Open the DMG and drag RustDesk to Applications.",
+      "step2": "Start RustDesk and allow the permissions it asks for (Screen Recording, Accessibility)."
+    },
+    "linux": {
+      "deb": "Debian, Ubuntu, Mint",
+      "rpm": "Fedora, RHEL, Rocky, Alma",
+      "manual": "Other distributions: install the AppImage, then import the settings as described below."
+    },
+    "mobile": {
+      "iosNote": "On iPhone and iPad RustDesk can connect to other devices but cannot be controlled.",
+      "step1": {
+        "android": "Install RustDesk from the APK above (or Google Play / F-Droid).",
+        "ios": "Install RustDesk from the App Store."
+      },
+      "step2": "In RustDesk open Settings and tap the QR scanner icon (top right).",
+      "step3": "Scan this code and confirm.",
+      "noCamera": "On this phone? Copy the settings below, then in RustDesk: Settings → ID/Relay Server → paste icon."
+    },
+    "import": {
+      "title": "Then apply the settings",
+      "titleWindows": "Already installed? Apply the settings:",
+      "step1": "Copy the settings (button in “Manual setup” below).",
+      "step2": "In RustDesk open Settings → Network → ID/Relay Server (unlock the settings first if asked).",
+      "step3": "Click “Import server config” (clipboard icon) and OK."
+    },
+    "manual": {
+      "title": "Manual setup",
+      "desc": "The settings for any RustDesk client: the config string (import or --config) or the individual fields.",
+      "copyConfig": "Copy settings"
+    },
+    "checksum": {
+      "hint": "The file is byte for byte the official one (only the Windows file name differs), so this matches the digest on the GitHub release page.",
+      "github": "Compare on GitHub",
+      "verify": "Check the downloaded file",
+      "linux": "The commands above check the SHA-256 against GitHub's before installing."
     }
   }
 }

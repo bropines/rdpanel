@@ -20,6 +20,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -75,6 +76,20 @@ type Config struct {
 	Federation FederationConfig `yaml:"federation"`
 	// WebClient configures the browser remote desktop client (/connect).
 	WebClient WebClientConfig `yaml:"webclient"`
+	// ClientDownloads configures the "Install client" page.
+	ClientDownloads ClientDownloadsConfig `yaml:"client_downloads"`
+}
+
+// ClientDownloadsConfig configures the "Install client" page: the official
+// RustDesk clients, set up for this server.
+type ClientDownloadsConfig struct {
+	// Enabled looks up RustDesk releases on GitHub (cached for 6 h) and serves
+	// the Windows installer under a file name that carries this server's
+	// settings. false: the page offers only the settings (config string, QR
+	// code) and no outbound request is made. Default: true.
+	Enabled bool `yaml:"enabled"`
+	// Version pins a RustDesk release ("1.4.2"); empty: the latest one.
+	Version string `yaml:"version"`
 }
 
 // WebClientConfig configures the browser remote desktop client.
@@ -323,14 +338,18 @@ const (
 	APIDocsOff    = "off"
 )
 
+// clientVersionRe matches RustDesk release tags (client_downloads.version).
+var clientVersionRe = regexp.MustCompile(`^\d{1,3}\.\d{1,3}\.\d{1,3}$`)
+
 // Defaults returns the built-in configuration before files and env are applied.
 func Defaults() *Config {
 	return &Config{
-		Listen:      ":21114",
-		DataDir:     "/data",
-		UpdateCheck: true,
-		APIDocs:     APIDocsAuth,
-		WebClient:   WebClientConfig{Enabled: true},
+		Listen:          ":21114",
+		DataDir:         "/data",
+		UpdateCheck:     true,
+		APIDocs:         APIDocsAuth,
+		WebClient:       WebClientConfig{Enabled: true},
+		ClientDownloads: ClientDownloadsConfig{Enabled: true},
 		Auth: AuthConfig{
 			TokenLifetime:   4380 * time.Hour,
 			SessionIdle:     12 * time.Hour,
@@ -521,6 +540,8 @@ func (c *Config) envVars() []envVar {
 			return nil
 		}},
 		{"RDPANEL_WEBCLIENT_CUSTOM_SERVERS", boolean(&c.WebClient.CustomServers)},
+		{"RDPANEL_CLIENT_DOWNLOADS_ENABLED", boolean(&c.ClientDownloads.Enabled)},
+		{"RDPANEL_CLIENT_DOWNLOADS_VERSION", str(&c.ClientDownloads.Version)},
 		{"RDPANEL_FEDERATION_ENABLED", boolean(&c.Federation.Enabled)},
 		{"RDPANEL_FEDERATION_TOKEN", sec(&c.Federation.Token)},
 	}
@@ -772,6 +793,9 @@ func (c *Config) Validate() error {
 		if raw, err := base64.StdEncoding.DecodeString(strings.TrimSpace(ws.Key)); err != nil || len(raw) != 32 {
 			add("webclient.servers[%d].key: must be the base64 server public key (32 bytes)", i)
 		}
+	}
+	if v := c.ClientDownloads.Version; v != "" && !clientVersionRe.MatchString(v) {
+		add("client_downloads.version %q: must be a RustDesk release such as 1.4.2", v)
 	}
 	if len(errs) > 0 {
 		return fmt.Errorf("config: %w", errors.Join(errs...))

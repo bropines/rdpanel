@@ -1139,6 +1139,47 @@ paths:
         "401": { $ref: "#/components/responses/Unauthorized" }
         "404": { $ref: "#/components/responses/NotFound" }
 
+  /clients:
+    get:
+      tags: [about]
+      operationId: getClientDownloads
+      summary: Official RustDesk clients set up for this server ("Install client" page).
+      description: |
+        Any signed-in user. The server settings and config string are always returned. With client downloads
+        enabled (`RDPANEL_CLIENT_DOWNLOADS_ENABLED`, default true) the panel also looks up a RustDesk release on
+        GitHub (cached for 6 h; `error` reports a failed lookup while an earlier answer is kept) and lists its
+        assets; `windows_file_name` is the name under which the official Windows client applies these settings.
+      responses:
+        "200":
+          description: Client downloads and server settings.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ClientDownloads" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
+  /clients/windows/{arch}:
+    get:
+      tags: [about]
+      operationId: downloadWindowsClient
+      summary: The official RustDesk Windows installer, named so that it uses this server.
+      description: |
+        Any signed-in user. The panel downloads the installer from GitHub once per version (size and SHA-256
+        checked against GitHub's listing) and serves it as `windows_file_name`; supports Range requests.
+      parameters:
+        - name: arch
+          in: path
+          required: true
+          schema: { type: string, enum: [x64, arm64] }
+      responses:
+        "200":
+          description: The installer.
+          content:
+            application/vnd.microsoft.portable-executable: { schema: { type: string, format: binary } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "502": { $ref: "#/components/responses/BadGateway" }
+
   /lookup/users:
     get:
       tags: [lookup]
@@ -4916,6 +4957,37 @@ components:
           description: Other servers the admin offers (RDPANEL_WEBCLIENT_SERVERS). Their sessions get no panel token or web id.
           items: { $ref: "#/components/schemas/WebClientServer" }
         custom_servers: { type: boolean, description: "Users may enter their own servers (RDPANEL_WEBCLIENT_CUSTOM_SERVERS)" }
+
+    ClientDownloads:
+      type: object
+      required: [enabled, id_server, relay_server, api_server, public_key, config_string, assets]
+      properties:
+        enabled: { type: boolean, description: "Client downloads are on (RDPANEL_CLIENT_DOWNLOADS_ENABLED)" }
+        version: { type: string, description: "RustDesk release offered, e.g. 1.5.0" }
+        release_url: { type: string, description: "GitHub release page" }
+        published_at: { type: string, format: date-time }
+        error: { type: string, description: "Last failed release lookup (an earlier answer may still be listed)" }
+        id_server: { type: string }
+        relay_server: { type: string }
+        api_server: { type: string }
+        public_key: { type: string, description: "Server public key; empty when unreadable" }
+        config_string: { type: string, description: "RustDesk config string (--config, import, QR code as config=…)" }
+        windows_file_name: { type: string, description: "Installer name carrying the settings; absent when they do not fit" }
+        assets:
+          type: array
+          items: { $ref: "#/components/schemas/ClientAsset" }
+
+    ClientAsset:
+      type: object
+      required: [id, name, size, url]
+      properties:
+        id:
+          type: string
+          description: Platform, e.g. windows-x64, macos-arm64, linux-deb-x64, android-universal.
+        name: { type: string }
+        size: { type: integer, format: int64 }
+        url: { type: string, description: "GitHub download URL" }
+        sha256: { type: string, description: "GitHub's digest (hex), when published" }
 
     WebClientServer:
       type: object

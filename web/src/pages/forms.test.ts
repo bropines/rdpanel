@@ -276,9 +276,8 @@ describe("client config helpers", () => {
   });
 
   it("builds Windows executable name with host and key", () => {
-    expect(windowsExeName("desk.example.com", "pubkey123")).toBe("rustdesk-host=desk.example.com,key=pubkey123.exe");
-    expect(windowsExeName("desk.example.com", "")).toBe("rustdesk-host=desk.example.com.exe");
-    expect(windowsExeName("", "")).toBe("rustdesk.exe");
+    expect(windowsExeName("=0nI9Q2bu5yZ")).toBe("rustdesk-licensed-=0nI9Q2bu5yZ.exe");
+    expect(windowsExeName("")).toBe("rustdesk.exe");
   });
 });
 

@@ -77,6 +77,9 @@ func (a *App) Handler() http.Handler {
 		if a.Updates != nil {
 			adminDeps.Updates = a.Updates
 		}
+		if a.Clients != nil {
+			adminDeps.Clients = a.Clients
+		}
 		a.wireAdminDeps(&adminDeps)
 		a.b2bDeps(&adminDeps)
 		oidcSvc := oidc.NewService(oidc.Options{

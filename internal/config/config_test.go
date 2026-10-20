@@ -454,3 +454,23 @@ func TestWebClientServersEnv(t *testing.T) {
 		t.Fatal("bad JSON must be rejected")
 	}
 }
+
+func TestClientDownloadsEnv(t *testing.T) {
+	cfg, err := Load(env(map[string]string{}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !cfg.ClientDownloads.Enabled || cfg.ClientDownloads.Version != "" {
+		t.Fatalf("defaults %+v", cfg.ClientDownloads)
+	}
+	cfg, err = Load(env(map[string]string{"RDPANEL_CLIENT_DOWNLOADS_ENABLED": "false", "RDPANEL_CLIENT_DOWNLOADS_VERSION": "1.4.2"}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.ClientDownloads.Enabled || cfg.ClientDownloads.Version != "1.4.2" {
+		t.Fatalf("%+v", cfg.ClientDownloads)
+	}
+	if _, err := Load(env(map[string]string{"RDPANEL_CLIENT_DOWNLOADS_VERSION": "latest/../x"})); err == nil {
+		t.Fatal("a version that is not a release tag must be rejected")
+	}
+}

@@ -2,6 +2,7 @@ import {
   Activity,
   BookUser,
   Contact,
+  Download,
   FileClock,
   KeyRound,
   LayoutDashboard,
@@ -45,6 +46,7 @@ export const NAV: NavSection[] = [
       { path: "/my/devices", labelKey: "nav.myDevices", icon: MonitorSmartphone },
       { path: "/my/address-books", labelKey: "nav.myAddressBooks", icon: Contact },
       { path: "/my/sessions", labelKey: "nav.mySessions", icon: Activity },
+      { path: "/my/install", labelKey: "nav.installClient", icon: Download },
     ],
   },
   {
