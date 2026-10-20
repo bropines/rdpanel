@@ -1423,7 +1423,12 @@ export interface paths {
         get: operations["getControlRole"];
         put?: never;
         post?: never;
-        /** Delete control role. */
+        /**
+         * Delete control role.
+         * @description The default role cannot be deleted (400). A role referenced by any connection rule,
+         *     enabled or not, cannot be deleted either (409 `role_in_use`): its rules would
+         *     silently fall back to the default role. Change or delete those rules first.
+         */
         delete: operations["deleteControlRole"];
         options?: never;
         head?: never;
@@ -2730,7 +2735,14 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Test LDAP connection, bind credentials, user search or user password. */
+        /**
+         * Test LDAP connection, bind credentials, user search or user password.
+         * @description `settings` overrides the saved configuration for this test only. The saved bind
+         *     password is used only with the saved `server_url` (scheme and host:port), `bind_dn`
+         *     and TLS settings: when `settings` changes any of them (or turns `start_tls` off /
+         *     `insecure_skip_verify` on) the request must carry `bind_password`, otherwise 400
+         *     `validation_failed` (field `bind_password`).
+         */
         post: operations["testLDAPSettings"];
         delete?: never;
         options?: never;
@@ -2996,6 +3008,7 @@ export interface components {
             bind_password?: string;
             base_dn?: string;
             user_search_base?: string;
+            /** @description LDAP filter for the login search; `%s` (at most once, 400 otherwise) is replaced by the escaped username. */
             user_filter?: string;
             username_attribute?: string;
             display_name_attribute?: string;
@@ -7527,6 +7540,15 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
+            /** @description The role is referenced by connection rules (`role_in_use`). */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
         };
     };
     updateControlRole: {

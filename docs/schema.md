@@ -20,6 +20,7 @@ automatically on start (`rdpanel serve`, `rdpanel user ...`).
 | `00017_strategies.sql` | client_strategies, device_groups.strategy_id, devices.strategy_id (MDM configuration push) |
 | `00018_acl.sql` | control_roles, connection_acls (granular permissions and access matrix) |
 | `00019_ldap.sql` | ldap_settings, users.is_ldap, users.ldap_dn (Active Directory / LDAP authentication and sync) |
+| `00020_strategy_no_seeded_default.sql` | data only: the untouched seeded "Standard Office" strategy is no longer the default (no strategy is pushed until an admin assigns one) |
 
 Later streams add new numbered files; never edit an applied migration.
 

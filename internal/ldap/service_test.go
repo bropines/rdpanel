@@ -3,6 +3,7 @@ package ldap
 import (
 	"context"
 	"errors"
+	"fmt"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -17,7 +18,16 @@ import (
 type mockClient struct {
 	bindFn   func(username, password string) error
 	searchFn func(req *ldapv3.SearchRequest) (*ldapv3.SearchResult, error)
-	closeFn  func() error
+	// pagedFn serves SearchWithPaging (default: searchFn).
+	pagedFn func(req *ldapv3.SearchRequest, pageSize uint32) (*ldapv3.SearchResult, error)
+	closeFn func() error
+}
+
+func (m *mockClient) SearchWithPaging(req *ldapv3.SearchRequest, pageSize uint32) (*ldapv3.SearchResult, error) {
+	if m.pagedFn != nil {
+		return m.pagedFn(req, pageSize)
+	}
+	return m.Search(req)
 }
 
 func (m *mockClient) Bind(username, password string) error {
@@ -332,5 +342,234 @@ func TestSync(t *testing.T) {
 	updatedCfg, _ := st.LDAPSettings.Get(ctx)
 	if updatedCfg.LastSyncCount != 2 || updatedCfg.LastSyncStatus != "success" || updatedCfg.LastSyncAt == nil {
 		t.Fatalf("settings sync result not updated: %+v", updatedCfg)
+	}
+}
+
+// With a service account (BindDN) configured, the user's own bind must run on
+// a connection without the service bind: the dialer, like defaultDialer,
+// binds BindDN when it is set and go-ldap refuses empty-password binds.
+func TestAuthenticateWithServiceAccount(t *testing.T) {
+	svc, st, _ := setupTestService(t)
+	ctx := context.Background()
+	const (
+		svcDN   = "cn=svc,dc=example,dc=com"
+		aliceDN = "uid=alice,ou=users,dc=example,dc=com"
+	)
+	cfg, err := st.LDAPSettings.Get(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg.Enabled, cfg.ServerURL, cfg.BaseDN, cfg.BindDN, cfg.AutoRegister = true, "ldap://127.0.0.1:389", "dc=example,dc=com", svcDN, true
+	svcPass := "svc-pass"
+	if err := svc.UpdateSettings(ctx, cfg, &svcPass); err != nil {
+		t.Fatal(err)
+	}
+
+	var conns [][]string // binds per connection
+	svc.SetDialer(func(cfg *store.LDAPSettings, bindPassword string) (Client, error) {
+		idx := len(conns)
+		conns = append(conns, nil)
+		bind := func(dn, password string) error {
+			conns[idx] = append(conns[idx], dn)
+			if password == "" {
+				return errors.New("ldap: empty password not allowed by the client")
+			}
+			if (dn == svcDN && password == "svc-pass") || (dn == aliceDN && password == "alice-pass") {
+				return nil
+			}
+			return errors.New("invalid credentials")
+		}
+		if cfg.BindDN != "" { // what defaultDialer does
+			if err := bind(cfg.BindDN, bindPassword); err != nil {
+				return nil, fmt.Errorf("ldap bind failed: %w", err)
+			}
+		}
+		return &mockClient{
+			bindFn: bind,
+			searchFn: func(req *ldapv3.SearchRequest) (*ldapv3.SearchResult, error) {
+				if len(conns[idx]) == 0 || conns[idx][0] != svcDN {
+					return nil, errors.New("insufficient access: anonymous search")
+				}
+				return &ldapv3.SearchResult{Entries: []*ldapv3.Entry{{DN: aliceDN, Attributes: []*ldapv3.EntryAttribute{
+					{Name: "sAMAccountName", Values: []string{"alice"}}}}}}, nil
+			},
+		}, nil
+	})
+
+	u, err := svc.Authenticate(ctx, "alice", "alice-pass")
+	if err != nil || u.Username != "alice" || !u.IsLDAP {
+		t.Fatalf("authenticate with a service account: %+v %v", u, err)
+	}
+	if len(conns) != 2 || len(conns[0]) != 1 || conns[0][0] != svcDN || len(conns[1]) != 1 || conns[1][0] != aliceDN {
+		t.Fatalf("binds per connection: %v (want [[service] [user]])", conns)
+	}
+	if _, err := svc.Authenticate(ctx, "alice", "wrong"); !errors.Is(err, ErrInvalidCredentials) {
+		t.Fatalf("wrong password: %v", err)
+	}
+
+	// The settings test does the same user bind.
+	res, err := svc.Test(ctx, TestRequest{TestUsername: "alice", TestPassword: "alice-pass"})
+	if err != nil || !res.OK || !res.UserBound {
+		t.Fatalf("test with a service account: %+v %v", res, err)
+	}
+}
+
+// directory is a fake LDAP server: entries by sAMAccountName, user passwords
+// by DN. It accepts every bind that has the right password.
+type directory struct {
+	entries   map[string]*ldapv3.Entry
+	passwords map[string]string
+	// sizeLimit (> 0) fails unpaged searches with more results, like Active
+	// Directory's MaxPageSize; pageSizes records the paged searches.
+	sizeLimit int
+	pageSizes []uint32
+}
+
+func newDirectory() *directory {
+	return &directory{entries: map[string]*ldapv3.Entry{}, passwords: map[string]string{}}
+}
+
+func (d *directory) add(username, dn, password string) {
+	d.entries[strings.ToLower(username)] = &ldapv3.Entry{DN: dn, Attributes: []*ldapv3.EntryAttribute{
+		{Name: "sAMAccountName", Values: []string{username}},
+		{Name: "displayName", Values: []string{"Directory " + username}},
+	}}
+	d.passwords[dn] = password
+}
+
+func (d *directory) dialer(*store.LDAPSettings, string) (Client, error) {
+	return &mockClient{
+		bindFn: func(dn, password string) error {
+			if want, ok := d.passwords[dn]; ok && want != password {
+				return errors.New("invalid credentials")
+			}
+			return nil
+		},
+		searchFn: func(req *ldapv3.SearchRequest) (*ldapv3.SearchResult, error) {
+			res := d.search(req)
+			if d.sizeLimit > 0 && len(res.Entries) > d.sizeLimit {
+				return nil, errors.New(`LDAP Result Code 4 "Size Limit Exceeded"`)
+			}
+			return res, nil
+		},
+		pagedFn: func(req *ldapv3.SearchRequest, pageSize uint32) (*ldapv3.SearchResult, error) {
+			d.pageSizes = append(d.pageSizes, pageSize)
+			return d.search(req), nil
+		},
+	}, nil
+}
+
+func (d *directory) search(req *ldapv3.SearchRequest) *ldapv3.SearchResult {
+	res := &ldapv3.SearchResult{}
+	for name, e := range d.entries {
+		if strings.Contains(req.Filter, "=*)") || strings.Contains(strings.ToLower(req.Filter), "="+name+")") {
+			res.Entries = append(res.Entries, e)
+		}
+	}
+	return res
+}
+
+func enableLDAP(t *testing.T, svc *Service, st *store.Store) {
+	t.Helper()
+	ctx := context.Background()
+	cfg, err := st.LDAPSettings.Get(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg.Enabled, cfg.ServerURL, cfg.BaseDN, cfg.AutoRegister = true, "ldap://127.0.0.1:389", "dc=example,dc=com", true
+	if err := st.LDAPSettings.Update(ctx, cfg); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// A directory entry whose username matches a local (non-LDAP) account must
+// never authenticate as, or be linked to, that account.
+func TestAuthenticateNeverLinksLocalAccount(t *testing.T) {
+	svc, st, _ := setupTestService(t)
+	ctx := context.Background()
+	enableLDAP(t, svc, st)
+	dir := newDirectory()
+	svc.SetDialer(dir.dialer)
+
+	admin := &store.User{Username: "admin", Role: store.RoleAdmin, PasswordHash: "x", PasswordAlgo: "argon2id"}
+	if err := st.Users.Create(ctx, admin); err != nil {
+		t.Fatal(err)
+	}
+	dir.add("Admin", "uid=admin,ou=users,dc=example,dc=com", "directory-pass")
+
+	if _, err := svc.Authenticate(ctx, "admin", "directory-pass"); !errors.Is(err, ErrLocalAccount) {
+		t.Fatalf("login as local admin through LDAP: %v", err)
+	}
+	got, err := st.Users.GetByID(ctx, admin.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.IsLDAP || got.LDAPDN != "" || got.DisplayName != "" || got.Role != store.RoleAdmin {
+		t.Fatalf("local admin was modified: %+v", got)
+	}
+
+	// A sync skips the entry and leaves the account alone too.
+	dir.add("eve", "uid=eve,ou=users,dc=example,dc=com", "eve-pass")
+	res, err := svc.Sync(ctx)
+	if err != nil || res.Status != "success" || res.SyncedCount != 1 {
+		t.Fatalf("sync: %+v %v", res, err)
+	}
+	if got, _ := st.Users.GetByID(ctx, admin.ID); got.IsLDAP || got.LDAPDN != "" {
+		t.Fatalf("sync linked the local admin: %+v", got)
+	}
+	if eve, err := st.Users.GetByUsername(ctx, "eve"); err != nil || !eve.IsLDAP {
+		t.Fatalf("eve not provisioned: %+v %v", eve, err)
+	}
+
+	// An LDAP user that moved in the directory (new DN) is still matched by
+	// username and relinked.
+	dir.add("eve", "uid=eve,ou=moved,dc=example,dc=com", "eve-pass")
+	u, err := svc.Authenticate(ctx, "eve", "eve-pass")
+	if err != nil || u.LDAPDN != "uid=eve,ou=moved,dc=example,dc=com" {
+		t.Fatalf("relink moved LDAP user: %+v %v", u, err)
+	}
+}
+
+// The sync pages through directories larger than the server's size limit and
+// creates only usernames the panel accepts.
+func TestSyncPagedAndValidUsernames(t *testing.T) {
+	svc, st, _ := setupTestService(t)
+	ctx := context.Background()
+	enableLDAP(t, svc, st)
+	dir := newDirectory()
+	dir.sizeLimit = 2
+	svc.SetDialer(dir.dialer)
+	for _, name := range []string{"u1", "u2", "u3", "bad user!"} {
+		dir.add(name, "uid="+name+",dc=example,dc=com", "pw")
+	}
+
+	res, err := svc.Sync(ctx)
+	if err != nil || res.Status != "success" || res.SyncedCount != 3 {
+		t.Fatalf("sync: %+v %v", res, err)
+	}
+	if len(dir.pageSizes) != 1 || dir.pageSizes[0] != syncPageSize {
+		t.Fatalf("paged searches: %v", dir.pageSizes)
+	}
+	if _, err := st.Users.GetByUsername(ctx, "bad user!"); !errors.Is(err, store.ErrNotFound) {
+		t.Fatalf("invalid username provisioned: %v", err)
+	}
+	if _, err := svc.Authenticate(ctx, "bad user!", "pw"); !errors.Is(err, ErrInvalidUsername) {
+		t.Fatalf("login with an invalid directory username: %v", err)
+	}
+}
+
+func TestValidUserFilter(t *testing.T) {
+	for f, want := range map[string]bool{
+		"(&(objectClass=user)(sAMAccountName=%s))": true,
+		"(objectClass=person)":                     true,
+		"(|(uid=%s)(mail=%s))":                     false,
+	} {
+		if got := ValidUserFilter(f); got != want {
+			t.Errorf("ValidUserFilter(%q) = %v", f, got)
+		}
+	}
+	// A literal '%' is not a format verb.
+	if got := formatUserFilter("(&(cn=%s)(description=100%))", "a*b"); got != `(&(cn=a\2ab)(description=100%))` {
+		t.Errorf("formatUserFilter: %q", got)
 	}
 }

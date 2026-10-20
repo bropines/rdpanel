@@ -214,6 +214,18 @@ func (d *DB) PrepareContext(ctx context.Context, query string) (*sql.Stmt, error
 	return d.DB.PrepareContext(ctx, query)
 }
 
+// IsTx reports whether q is a transaction, also when Wrap adapted it for the
+// dialect (a Postgres transaction is a dialectQuerier around the *sql.Tx).
+func IsTx(q Querier) bool {
+	switch v := q.(type) {
+	case *sql.Tx:
+		return true
+	case dialectQuerier:
+		return IsTx(v.q)
+	}
+	return false
+}
+
 // Wrap returns a Querier that automatically adapts queries (e.g. parameter rebinding)
 // according to the database dialect.
 func (d *DB) Wrap(q Querier) Querier {

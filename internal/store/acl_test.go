@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"errors"
 	"testing"
 )
 
@@ -275,5 +276,108 @@ func TestConnectionACLsCRUDAndEvaluation(t *testing.T) {
 	}
 	if err := st.ConnectionACLs.Delete(ctx, rule2.ID); err != nil {
 		t.Fatal(err)
+	}
+}
+
+// docs/acl-policy.md: an operator who owns the device, or shares a "shared"
+// user group with its owner, keeps access unless a rule denies it.
+func TestEvaluateSharedGroupAccess(t *testing.T) {
+	st, _ := newTestStore(t)
+	ctx := context.Background()
+	shared := &UserGroup{Name: "Team", Visibility: VisibilityShared}
+	solo := &UserGroup{Name: "Solo"}
+	for _, g := range []*UserGroup{shared, solo} {
+		if err := st.UserGroups.Create(ctx, g); err != nil {
+			t.Fatal(err)
+		}
+	}
+	mk := func(name string, g *UserGroup) *User {
+		u := &User{Username: name, UserGroupID: &g.ID}
+		if err := st.Users.Create(ctx, u); err != nil {
+			t.Fatal(err)
+		}
+		return u
+	}
+	ann, ben := mk("ann", shared), mk("ben", shared)
+	cat, dan := mk("cat", solo), mk("dan", solo)
+	bensPC := &Device{RustdeskID: "400000001", OwnerUserID: &ben.ID}
+	dansPC := &Device{RustdeskID: "400000002", OwnerUserID: &dan.ID}
+	for _, d := range []*Device{bensPC, dansPC} {
+		if err := st.Devices.Create(ctx, d); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// Some rule exists, so unmatched access falls to default deny.
+	other := &Device{RustdeskID: "400000003"}
+	if err := st.Devices.Create(ctx, other); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.ConnectionACLs.Create(ctx, &ConnectionACL{Name: "x", DeviceID: &other.ID, Action: ACLActionAllow,
+		Priority: 10, Enabled: true}); err != nil {
+		t.Fatal(err)
+	}
+
+	check := func(u *User, d *Device, want ACLDecision) {
+		t.Helper()
+		dec, _, _, err := st.ConnectionACLs.Evaluate(ctx, u.ID, d.ID)
+		if err != nil || dec != want {
+			t.Fatalf("%s -> %s: %v %v, want %v", u.Username, d.RustdeskID, dec, err, want)
+		}
+	}
+	check(ann, bensPC, ACLDecisionOwner) // same shared group
+	check(cat, dansPC, ACLDecisionDeny)  // same group, but not shared
+	check(ann, dansPC, ACLDecisionDeny)
+
+	// An explicit deny still wins.
+	if err := st.ConnectionACLs.Create(ctx, &ConnectionACL{Name: "deny ann", UserID: &ann.ID, DeviceID: &bensPC.ID,
+		Action: ACLActionDeny, Priority: 1, Enabled: true}); err != nil {
+		t.Fatal(err)
+	}
+	check(ann, bensPC, ACLDecisionDeny)
+	check(ben, bensPC, ACLDecisionOwner)
+}
+
+// A role referenced by any rule cannot be deleted (its rules would silently
+// fall back to the default role); a failed default change keeps the default.
+func TestControlRoleDeleteReferencedAndAtomicDefault(t *testing.T) {
+	st, _ := newTestStore(t)
+	ctx := context.Background()
+	view, err := st.ControlRoles.GetByName(ctx, "View Only")
+	if err != nil {
+		t.Fatal(err)
+	}
+	rule := &ConnectionACL{Name: "viewers", ControlRoleID: &view.ID, Action: ACLActionAllow, Priority: 10}
+	if err := st.ConnectionACLs.Create(ctx, rule); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.ControlRoles.Delete(ctx, view.ID); !errors.Is(err, ErrRoleInUse) || !errors.Is(err, ErrReferenced) {
+		t.Fatalf("delete referenced role: %v", err)
+	}
+	if _, err := st.ControlRoles.Get(ctx, view.ID); err != nil {
+		t.Fatalf("role gone: %v", err)
+	}
+	if err := st.ConnectionACLs.Delete(ctx, rule.ID); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.ControlRoles.Delete(ctx, view.ID); err != nil {
+		t.Fatalf("delete unreferenced role: %v", err)
+	}
+
+	def, err := st.ControlRoles.GetDefault(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := st.ControlRoles.SetDefault(ctx, 9999); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("set default of a missing role: %v", err)
+	}
+	if err := st.ControlRoles.Create(ctx, &ControlRole{Name: "Full Control", IsDefault: true}); !errors.Is(err, ErrConflict) {
+		t.Fatalf("create duplicate default: %v", err)
+	}
+	if err := st.ControlRoles.Update(ctx, &ControlRole{ID: 9999, Name: "Ghost", IsDefault: true}); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("update missing role: %v", err)
+	}
+	var n int
+	if err := st.Querier().QueryRowContext(ctx, `SELECT count(*) FROM control_roles WHERE is_default = 1 AND id = ?`, def.ID).Scan(&n); err != nil || n != 1 {
+		t.Fatalf("default %q lost: %d %v", def.Name, n, err)
 	}
 }

@@ -38,33 +38,43 @@ func TestClientOptionsHeartbeatStrategy(t *testing.T) {
 		return m
 	}
 
-	// Fresh client (modified_at: 0) receives the default strategy.
-	m0 := beat(0)
-	if m0["strategy"] == nil || m0["modified_at"] == nil {
-		t.Fatalf("expected default strategy, got %v", m0)
-	}
-	stratMod := int64(m0["modified_at"].(float64))
-
-	// Client that applied the default strategy gets nothing more until options change.
-	if m := beat(stratMod); m["strategy"] != nil {
-		t.Fatalf("unexpected strategy: %v", m)
+	// A fresh install (no default strategy, no saved client options) pushes
+	// nothing: an upgrade must not reconfigure every device.
+	if m := beat(0); m["strategy"] != nil || m["modified_at"] != nil {
+		t.Fatalf("strategy without options or default strategy: %v", m)
 	}
 
 	on := true
-	o, err := a.ClientOptions.Set(ctx, "turn://u:p@turn.example.com:3478", &on, nil)
-	if err != nil {
+	if _, err := a.ClientOptions.Set(ctx, "turn://u:p@turn.example.com:3478", &on, nil); err != nil {
 		t.Fatal(err)
 	}
-	m := beat(stratMod)
+	m := beat(0)
 	s, _ := m["strategy"].(map[string]any)
 	opts, _ := s["config_options"].(map[string]any)
-	if int64(m["modified_at"].(float64)) != o.ModifiedAt || opts["ice-servers"] != "turn://u:p@turn.example.com:3478" ||
-		opts["allow-webrtc-congestion-control"] != "Y" || opts["approve-mode"] != "both" {
+	if m["modified_at"] == nil || opts["ice-servers"] != "turn://u:p@turn.example.com:3478" ||
+		opts["allow-webrtc-congestion-control"] != "Y" || len(opts) != 2 {
 		t.Fatalf("strategy: %v", m)
 	}
 	// A client that applied this version gets nothing more.
-	if m := beat(o.ModifiedAt); m["strategy"] != nil {
+	version := int64(m["modified_at"].(float64))
+	if m := beat(version); m["strategy"] != nil {
 		t.Fatalf("re-sent: %v", m)
+	}
+
+	// A default strategy is merged in under a new version.
+	office, err := a.Store.ClientStrategies.GetByName(ctx, "Standard Office")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := a.Store.ClientStrategies.SetDefault(ctx, office.ID); err != nil {
+		t.Fatal(err)
+	}
+	m = beat(version)
+	s, _ = m["strategy"].(map[string]any)
+	opts, _ = s["config_options"].(map[string]any)
+	if m["modified_at"] == nil || int64(m["modified_at"].(float64)) == version || opts["approve-mode"] != "both" ||
+		opts["ice-servers"] != "turn://u:p@turn.example.com:3478" {
+		t.Fatalf("default strategy: %v", m)
 	}
 }
 

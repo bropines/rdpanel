@@ -32,6 +32,10 @@ func (m *mockLDAPClient) Search(req *ldapv3.SearchRequest) (*ldapv3.SearchResult
 	return &ldapv3.SearchResult{}, nil
 }
 
+func (m *mockLDAPClient) SearchWithPaging(req *ldapv3.SearchRequest, _ uint32) (*ldapv3.SearchResult, error) {
+	return m.Search(req)
+}
+
 func (m *mockLDAPClient) Close() error {
 	if m.closeFn != nil {
 		return m.closeFn()
@@ -168,5 +172,154 @@ func TestLDAPAdminAPI(t *testing.T) {
 	}
 	if userObj["username"] != "corpuser" || userObj["is_ldap"] != true {
 		t.Fatalf("expected is_ldap=true, got %v", userObj)
+	}
+}
+
+// enableTestLDAP turns LDAP on with a directory that knows every user in
+// entries (username -> sAMAccountName) and accepts any non-empty password.
+func enableTestLDAP(t *testing.T, e *b2env, entries map[string]string) {
+	t.Helper()
+	cfg, err := e.st.LDAPSettings.Get(e.ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg.Enabled, cfg.ServerURL, cfg.BaseDN, cfg.AutoRegister = true, "ldap://ad.example.corp", "dc=example,dc=corp", true
+	if err := e.st.LDAPSettings.Update(e.ctx, cfg); err != nil {
+		t.Fatal(err)
+	}
+	e.deps.LDAP.SetDialer(func(*store.LDAPSettings, string) (ldap.Client, error) {
+		return &mockLDAPClient{
+			bindFn: func(_, password string) error {
+				if password == "" {
+					return errors.New("empty password")
+				}
+				return nil
+			},
+			searchFn: func(req *ldapv3.SearchRequest) (*ldapv3.SearchResult, error) {
+				for typed, account := range entries {
+					if strings.Contains(req.Filter, "="+typed+")") {
+						return &ldapv3.SearchResult{Entries: []*ldapv3.Entry{{
+							DN:         "uid=" + account + ",ou=users,dc=example,dc=corp",
+							Attributes: []*ldapv3.EntryAttribute{{Name: "sAMAccountName", Values: []string{account}}},
+						}}}, nil
+					}
+				}
+				return &ldapv3.SearchResult{}, nil
+			},
+		}, nil
+	})
+}
+
+func TestLDAPLoginCannotTakeOverLocalAccount(t *testing.T) {
+	e := newB2Env(t, b2opts{})
+	root := e.user("root", testPassword, store.RoleAdmin)
+	// "root" exists in the directory too; "corp-root" maps to the
+	// sAMAccountName "ROOT" (a different spelling of the local username).
+	enableTestLDAP(t, e, map[string]string{"root": "root", "corp-root": "ROOT"})
+
+	for _, name := range []string{"root", "corp-root"} {
+		if code, m := e.client().login(name, "directory password"); code != http.StatusUnauthorized {
+			t.Fatalf("login %s with the directory password: %d %v", name, code, m)
+		}
+	}
+	got, err := e.st.Users.GetByID(e.ctx, root.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.IsLDAP || got.LDAPDN != "" || got.Role != store.RoleAdmin {
+		t.Fatalf("local admin linked to the directory: %+v", got)
+	}
+	// The local password keeps working.
+	if code, m := e.client().login("root", testPassword); code != http.StatusOK {
+		t.Fatalf("local login: %d %v", code, m)
+	}
+}
+
+// A password verified by the directory must never be stored as a local hash
+// (the "rehash on login" upgrade saw the empty hash of LDAP users as stale).
+func TestLDAPLoginStoresNoLocalPassword(t *testing.T) {
+	e := newB2Env(t, b2opts{})
+	enableTestLDAP(t, e, map[string]string{"corpuser": "corpuser"})
+	for range 2 { // provisioning login, then a login of the existing LDAP user
+		if code, m := e.client().login("corpuser", "directory password"); code != http.StatusOK {
+			t.Fatalf("ldap login: %d %v", code, m)
+		}
+		u, err := e.st.Users.GetByUsername(e.ctx, "corpuser")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !u.IsLDAP || u.HasPassword() || u.PasswordAlgo != "" {
+			t.Fatalf("LDAP password stored locally: is_ldap=%v hash=%q", u.IsLDAP, u.PasswordHash)
+		}
+	}
+}
+
+// The test endpoint must not send the saved bind password to a server or as
+// a bind DN the caller chose.
+func TestLDAPTestKeepsSavedBindPasswordOnSavedServer(t *testing.T) {
+	e := newB2Env(t, b2opts{})
+	admin, _ := e.as("ldap_admin", store.RoleAdmin)
+	code, m, _ := admin.do("PUT", "/settings/ldap", map[string]any{
+		"enabled": true, "server_url": "ldaps://ad.example.corp:636", "bind_dn": "cn=svc,dc=example,dc=corp",
+		"bind_password": "SavedSecret", "base_dn": "dc=example,dc=corp",
+	})
+	want(t, "save settings", code, http.StatusOK, m)
+
+	type dial struct{ url, bindDN, password string }
+	var dials []dial
+	e.deps.LDAP.SetDialer(func(cfg *store.LDAPSettings, pw string) (ldap.Client, error) {
+		dials = append(dials, dial{cfg.ServerURL, cfg.BindDN, pw})
+		return &mockLDAPClient{}, nil
+	})
+	test := func(settings map[string]any, bindPassword *string) (int, map[string]any) {
+		body := map[string]any{"settings": settings}
+		if bindPassword != nil {
+			body["bind_password"] = *bindPassword
+		}
+		code, m, _ := admin.do("POST", "/settings/ldap/test", body)
+		return code, m
+	}
+
+	for name, s := range map[string]map[string]any{
+		"other host":     {"server_url": "ldaps://attacker.example:636"},
+		"other port":     {"server_url": "ldaps://ad.example.corp:1636"},
+		"plain ldap":     {"server_url": "ldap://ad.example.corp:636"},
+		"other bind dn":  {"bind_dn": "cn=attacker,dc=example,dc=corp"},
+		"skip tls check": {"insecure_skip_verify": true},
+	} {
+		code, m := test(s, nil)
+		wantErr(t, name, code, http.StatusBadRequest, m, "validation_failed")
+	}
+	if len(dials) != 0 {
+		t.Fatalf("dialed with the saved password: %+v", dials)
+	}
+
+	// The saved server and bind DN may use the saved password.
+	code, m = test(map[string]any{"server_url": "LDAPS://AD.example.corp:636", "base_dn": "ou=other,dc=example,dc=corp"}, nil)
+	want(t, "saved target", code, http.StatusOK, m)
+	// Another target works with a password supplied by the caller.
+	pw := "typed-secret"
+	code, m = test(map[string]any{"server_url": "ldaps://other.example.corp:636"}, &pw)
+	want(t, "other target with password", code, http.StatusOK, m)
+	if len(dials) != 2 || dials[0].password != "SavedSecret" || dials[1].url != "ldaps://other.example.corp:636" ||
+		dials[1].password != "typed-secret" {
+		t.Fatalf("dials: %+v", dials)
+	}
+}
+
+// The username is substituted into the user filter once: a filter with more
+// than one %s is rejected when saved or tested.
+func TestLDAPUserFilterSingleSubstitution(t *testing.T) {
+	e := newB2Env(t, b2opts{})
+	admin, _ := e.as("ldap_admin", store.RoleAdmin)
+	bad := "(|(uid=%s)(mail=%s))"
+	code, m, _ := admin.do("PUT", "/settings/ldap", map[string]any{"user_filter": bad})
+	wantErr(t, "save filter", code, http.StatusBadRequest, m, "validation_failed")
+	code, m, _ = admin.do("POST", "/settings/ldap/test", map[string]any{"settings": map[string]any{"user_filter": bad}})
+	wantErr(t, "test filter", code, http.StatusBadRequest, m, "validation_failed")
+	code, m, _ = admin.do("PUT", "/settings/ldap", map[string]any{"user_filter": "(&(objectClass=person)(uid=%s))"})
+	want(t, "save valid filter", code, http.StatusOK, m)
+	if m["user_filter"] != "(&(objectClass=person)(uid=%s))" {
+		t.Fatalf("saved filter: %v", m["user_filter"])
 	}
 }

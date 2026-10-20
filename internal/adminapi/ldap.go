@@ -72,6 +72,9 @@ func toLDAPSettingsDTO(s *store.LDAPSettings) ldapSettingsDTO {
 	}
 }
 
+// userFilterRule is the validation message for user_filter.
+const userFilterRule = "must contain %s (the username) at most once"
+
 type ldapSettingsInput struct {
 	Enabled              *bool            `json:"enabled"`
 	ServerURL            *string          `json:"server_url"`
@@ -148,6 +151,10 @@ func (a *resources) handleUpdateLDAPSettings(w http.ResponseWriter, r *http.Requ
 		f := strings.TrimSpace(*in.UserFilter)
 		if f == "" {
 			f = "(&(objectClass=user)(sAMAccountName=%s))"
+		}
+		if !ldap.ValidUserFilter(f) {
+			validationFailed(w, "invalid user_filter", map[string]string{"user_filter": userFilterRule})
+			return
 		}
 		cfg.UserFilter = f
 	}
@@ -231,11 +238,13 @@ func (a *resources) handleTestLDAP(w http.ResponseWriter, r *http.Request) {
 	testReq.TestPassword = req.TestPassword
 
 	if req.Settings != nil {
-		cfg, err := a.d.Store.LDAPSettings.Get(ctx)
+		saved, err := a.d.Store.LDAPSettings.Get(ctx)
 		if err != nil {
 			a.fail500(w, r, "get ldap settings", err)
 			return
 		}
+		c := *saved
+		cfg := &c
 		in := req.Settings
 		if in.Enabled != nil {
 			cfg.Enabled = *in.Enabled
@@ -260,6 +269,10 @@ func (a *resources) handleTestLDAP(w http.ResponseWriter, r *http.Request) {
 		}
 		if in.UserFilter != nil {
 			cfg.UserFilter = strings.TrimSpace(*in.UserFilter)
+			if !ldap.ValidUserFilter(cfg.UserFilter) {
+				validationFailed(w, "invalid user_filter", map[string]string{"user_filter": userFilterRule})
+				return
+			}
 		}
 		if in.UsernameAttribute != nil {
 			cfg.UsernameAttribute = strings.TrimSpace(*in.UsernameAttribute)
@@ -283,6 +296,14 @@ func (a *resources) handleTestLDAP(w http.ResponseWriter, r *http.Request) {
 		if in.BindPassword != nil {
 			testReq.RawBindPassword = in.BindPassword
 		}
+		// The saved bind password is only ever sent to the saved server as
+		// the saved bind DN: otherwise an admin session or API token could
+		// send it to a host of its choice.
+		if testReq.RawBindPassword == nil && len(saved.BindPasswordEnc) > 0 && bindTargetChanged(saved, cfg) {
+			validationFailed(w, "bind_password is required when server_url, bind_dn or TLS settings differ from the saved ones",
+				map[string]string{"bind_password": "required when testing another server, bind DN or weaker TLS"})
+			return
+		}
 	}
 
 	res, err := a.d.LDAP.Test(ctx, testReq)
@@ -291,6 +312,21 @@ func (a *resources) handleTestLDAP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	httpx.WriteJSON(w, http.StatusOK, res)
+}
+
+// bindTargetChanged reports whether test settings would send the bind
+// password somewhere the saved settings do not: another scheme or host:port,
+// another bind DN, or a weaker TLS setup.
+func bindTargetChanged(saved, test *store.LDAPSettings) bool {
+	if test.BindDN != saved.BindDN {
+		return true
+	}
+	su, err1 := url.Parse(saved.ServerURL)
+	tu, err2 := url.Parse(test.ServerURL)
+	if err1 != nil || err2 != nil || !strings.EqualFold(su.Scheme, tu.Scheme) || !strings.EqualFold(su.Host, tu.Host) {
+		return true
+	}
+	return (saved.StartTLS && !test.StartTLS) || (!saved.InsecureSkipVerify && test.InsecureSkipVerify)
 }
 
 func (a *resources) handleSyncLDAP(w http.ResponseWriter, r *http.Request) {
