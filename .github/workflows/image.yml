@@ -58,10 +58,10 @@ env:
   # The single pinned hbbs/hbbr source (push, tag and manual builds unless
   # server_ref overrides it); bump deliberately after testing a newer commit of
   # the bropines/rustdesk-server `rdpanel` branch.
-  # 98eb57c: rdpanel branch head (35f675c WebSocket hardening + a controller's
-  # control_permissions are never forwarded; opt-in AUTHZ_URL hook that asks
-  # the panel to allow/deny connections and restrict control permissions).
-  SERVER_REF: ${{ inputs.server_ref || '98eb57cea579cc1b7f5c97f455e2ccc35bbed6b4' }}
+  # f8f2fdc: rdpanel branch head (35f675c WebSocket hardening; 98eb57c opt-in
+  # AUTHZ_URL hook, a controller's control_permissions never forwarded;
+  # f8f2fdc opt-in WS_KEY_EXCHANGE, the signed key exchange on WebSocket too).
+  SERVER_REF: ${{ inputs.server_ref || 'f8f2fdc23c76f749bfccab90ae1a3bb63c5a66ac' }}
 
 jobs:
   hbb:

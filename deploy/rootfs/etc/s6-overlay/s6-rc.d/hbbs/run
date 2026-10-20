@@ -16,7 +16,7 @@
 #                        RDPANEL_HBBS_AUTHZ_SECRET_FILE when unset
 #                        (/usr/libexec/rdpanel/hbbs-authz-env)
 #      ALWAYS_USE_RELAY, MUST_LOGIN, TCP_KEEPALIVE, WEBRTC, RUSTDESK_API_JWT_KEY,
-#      TRUSTED_PROXIES, WS_PEERS, RUST_LOG
+#      TRUSTED_PROXIES, WS_PEERS, WS_KEY_EXCHANGE, RUST_LOG
 #                     -> read by hbbs itself from the environment (with-contenv
 #                        and as-service-user keep the container env)
 exec 2>&1
