@@ -20,7 +20,10 @@ type Client interface {
 	Close() error
 }
 
-// Dialer establishes an LDAP connection.
+// Dialer establishes an LDAP connection and, when cfg.BindDN is set, binds
+// as that service account with bindPassword. go-ldap refuses empty-password
+// binds, so a connection for a user's own bind must not ask for the service
+// bind (see Service.dialUnbound).
 type Dialer func(cfg *store.LDAPSettings, bindPassword string) (Client, error)
 
 func defaultDialer(cfg *store.LDAPSettings, bindPassword string) (Client, error) {

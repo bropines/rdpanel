@@ -120,6 +120,15 @@ func (s *Service) decryptBindPassword(cfg *store.LDAPSettings) (string, error) {
 	return s.aead.OpenString(cfg.BindPasswordEnc, crypto.LDAPBindPasswordAD())
 }
 
+// dialUnbound opens a connection for a bind as the user, without the
+// service-account bind: the dialer would bind BindDN with an empty password,
+// which go-ldap refuses.
+func (s *Service) dialUnbound(cfg *store.LDAPSettings) (Client, error) {
+	c := *cfg
+	c.BindDN = ""
+	return s.dialer(&c, "")
+}
+
 // Authenticate verifies user credentials against LDAP and provisions/updates the local user.
 func (s *Service) Authenticate(ctx context.Context, username, password string) (*store.User, error) {
 	cfg, err := s.store.LDAPSettings.Get(ctx)
@@ -192,7 +201,7 @@ func (s *Service) Authenticate(ctx context.Context, username, password string) (
 	userDN := entry.DN
 
 	// Test user bind on a separate connection
-	userConn, err := s.dialer(cfg, "")
+	userConn, err := s.dialUnbound(cfg)
 	if err != nil {
 		return nil, fmt.Errorf("ldap dial for user bind: %w", err)
 	}
@@ -410,7 +419,7 @@ func (s *Service) Test(ctx context.Context, req TestRequest) (*TestResult, error
 	res.MappedGroupID = resolveGroupID(res.Groups, cfg.GroupMappings, cfg.DefaultUserGroupID)
 
 	if req.TestPassword != "" {
-		userConn, err := s.dialer(cfg, "")
+		userConn, err := s.dialUnbound(cfg)
 		if err != nil {
 			res.OK = false
 			res.Message = fmt.Sprintf("Dial for user bind failed: %v", err)

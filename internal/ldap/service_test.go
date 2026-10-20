@@ -3,6 +3,7 @@ package ldap
 import (
 	"context"
 	"errors"
+	"fmt"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -332,6 +333,75 @@ func TestSync(t *testing.T) {
 	updatedCfg, _ := st.LDAPSettings.Get(ctx)
 	if updatedCfg.LastSyncCount != 2 || updatedCfg.LastSyncStatus != "success" || updatedCfg.LastSyncAt == nil {
 		t.Fatalf("settings sync result not updated: %+v", updatedCfg)
+	}
+}
+
+// With a service account (BindDN) configured, the user's own bind must run on
+// a connection without the service bind: the dialer, like defaultDialer,
+// binds BindDN when it is set and go-ldap refuses empty-password binds.
+func TestAuthenticateWithServiceAccount(t *testing.T) {
+	svc, st, _ := setupTestService(t)
+	ctx := context.Background()
+	const (
+		svcDN   = "cn=svc,dc=example,dc=com"
+		aliceDN = "uid=alice,ou=users,dc=example,dc=com"
+	)
+	cfg, err := st.LDAPSettings.Get(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg.Enabled, cfg.ServerURL, cfg.BaseDN, cfg.BindDN, cfg.AutoRegister = true, "ldap://127.0.0.1:389", "dc=example,dc=com", svcDN, true
+	svcPass := "svc-pass"
+	if err := svc.UpdateSettings(ctx, cfg, &svcPass); err != nil {
+		t.Fatal(err)
+	}
+
+	var conns [][]string // binds per connection
+	svc.SetDialer(func(cfg *store.LDAPSettings, bindPassword string) (Client, error) {
+		idx := len(conns)
+		conns = append(conns, nil)
+		bind := func(dn, password string) error {
+			conns[idx] = append(conns[idx], dn)
+			if password == "" {
+				return errors.New("ldap: empty password not allowed by the client")
+			}
+			if (dn == svcDN && password == "svc-pass") || (dn == aliceDN && password == "alice-pass") {
+				return nil
+			}
+			return errors.New("invalid credentials")
+		}
+		if cfg.BindDN != "" { // what defaultDialer does
+			if err := bind(cfg.BindDN, bindPassword); err != nil {
+				return nil, fmt.Errorf("ldap bind failed: %w", err)
+			}
+		}
+		return &mockClient{
+			bindFn: bind,
+			searchFn: func(req *ldapv3.SearchRequest) (*ldapv3.SearchResult, error) {
+				if len(conns[idx]) == 0 || conns[idx][0] != svcDN {
+					return nil, errors.New("insufficient access: anonymous search")
+				}
+				return &ldapv3.SearchResult{Entries: []*ldapv3.Entry{{DN: aliceDN, Attributes: []*ldapv3.EntryAttribute{
+					{Name: "sAMAccountName", Values: []string{"alice"}}}}}}, nil
+			},
+		}, nil
+	})
+
+	u, err := svc.Authenticate(ctx, "alice", "alice-pass")
+	if err != nil || u.Username != "alice" || !u.IsLDAP {
+		t.Fatalf("authenticate with a service account: %+v %v", u, err)
+	}
+	if len(conns) != 2 || len(conns[0]) != 1 || conns[0][0] != svcDN || len(conns[1]) != 1 || conns[1][0] != aliceDN {
+		t.Fatalf("binds per connection: %v (want [[service] [user]])", conns)
+	}
+	if _, err := svc.Authenticate(ctx, "alice", "wrong"); !errors.Is(err, ErrInvalidCredentials) {
+		t.Fatalf("wrong password: %v", err)
+	}
+
+	// The settings test does the same user bind.
+	res, err := svc.Test(ctx, TestRequest{TestUsername: "alice", TestPassword: "alice-pass"})
+	if err != nil || !res.OK || !res.UserBound {
+		t.Fatalf("test with a service account: %+v %v", res, err)
 	}
 }
 
