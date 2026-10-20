@@ -44,6 +44,10 @@ const (
 	ConfigLagLimit = 5 * time.Minute
 	// statusSaveEvery throttles last_status writes.
 	statusSaveEvery = 30 * time.Second
+	// liveStatsMaxAge is how long an agent's last status report (and a
+	// traffic sample) counts as current load: traffic sampling and auto
+	// weights ignore older ones (agents report every 10 s by default).
+	liveStatsMaxAge = 2 * time.Minute
 )
 
 // Panel settings keys (store.Settings).
@@ -128,7 +132,8 @@ type Service struct {
 	conns     map[int64]*agentConn
 	lastPush  string
 	statusAt  map[int64]time.Time
-	liveStats map[int64]agentproto.Status
+	liveStats map[int64]agentproto.Status // last status of connected agents
+	liveAt    map[int64]time.Time         // when liveStats[id] arrived
 
 	lastTraffic map[int64]trafficState
 	lastPurge   time.Time
@@ -185,7 +190,7 @@ func New(cfg Config) (*Service, error) {
 		rate:          newIPRate(1, 30, cfg.Now),
 		installScript: renderInstallScript(cfg.PublicURL, cfg.Image),
 		fails:         map[int64]int{}, probedAt: map[int64]time.Time{}, conns: map[int64]*agentConn{},
-		statusAt: map[int64]time.Time{}, liveStats: map[int64]agentproto.Status{},
+		statusAt: map[int64]time.Time{}, liveStats: map[int64]agentproto.Status{}, liveAt: map[int64]time.Time{},
 		lastTraffic: map[int64]trafficState{},
 	}, nil
 }
@@ -604,7 +609,7 @@ func (s *Service) updateMetrics(rs []Relay, rot Rotation) {
 		s.m.weight.WithLabelValues(r.Name).Set(float64(weights[r.ID]))
 		if r.Kind == KindAgent && r.Agent != nil {
 			s.m.configLag.WithLabelValues(r.Name).Set(float64(r.Agent.DesiredVersion - r.Agent.AckedVersion))
-			if st, ok := s.liveStats[r.ID]; ok {
+			if st, ok := s.freshLiveLocked(r.ID); ok {
 				s.m.active.WithLabelValues(r.Name).Set(float64(st.Usage.RelaysActive))
 			}
 		}
@@ -820,19 +825,43 @@ func (s *Service) SetOptions(ctx context.Context, o Options, by *int64) error {
 	return nil
 }
 
+// getActiveSessionsMap is the current load per relay for auto weights: fresh
+// status of connected agents and recent traffic samples only, so a relay
+// that went away does not keep its last session count.
 func (s *Service) getActiveSessionsMap() map[int64]int {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	now := s.now()
 	m := make(map[int64]int, len(s.liveStats)+len(s.lastTraffic))
-	for id, st := range s.liveStats {
-		m[id] = st.Usage.RelaysActive
+	for id := range s.liveStats {
+		if st, ok := s.freshLiveLocked(id); ok {
+			m[id] = st.Usage.RelaysActive
+		}
 	}
 	for id, ts := range s.lastTraffic {
-		if ts.activeSessions > m[id] {
+		if now.Sub(ts.at) <= liveStatsMaxAge && ts.activeSessions > m[id] {
 			m[id] = ts.activeSessions
 		}
 	}
 	return m
+}
+
+// freshLiveLocked returns the last status of agent id when the agent is
+// connected and the report is recent. Caller holds s.mu.
+func (s *Service) freshLiveLocked(id int64) (agentproto.Status, bool) {
+	st, ok := s.liveStats[id]
+	if !ok || s.conns[id] == nil || s.now().Sub(s.liveAt[id]) > liveStatsMaxAge {
+		return agentproto.Status{}, false
+	}
+	return st, true
+}
+
+// forgetLiveLocked drops the live state of relay id (agent gone or relay
+// deleted). Caller holds s.mu.
+func (s *Service) forgetLiveLocked(id int64) {
+	delete(s.liveStats, id)
+	delete(s.liveAt, id)
+	delete(s.lastTraffic, id)
 }
 
 // Create adds a static or agent relay. Agents get their enrollment material.
@@ -965,8 +994,7 @@ func (s *Service) Delete(ctx context.Context, id int64) error {
 	s.mu.Lock()
 	delete(s.fails, id)
 	delete(s.probedAt, id)
-	delete(s.liveStats, id)
-	delete(s.lastTraffic, id)
+	s.forgetLiveLocked(id)
 	s.mu.Unlock()
 	s.Notify()
 	return nil
@@ -1227,7 +1255,9 @@ func (s *Service) sampleTraffic(ctx context.Context, rs []Relay) {
 
 		switch r.Kind {
 		case KindAgent:
-			st, ok := s.liveStats[r.ID]
+			// Disconnected or silent agents contribute nothing: integrating
+			// their last reported rate would invent traffic.
+			st, ok := s.freshLiveLocked(r.ID)
 			if !ok {
 				continue
 			}
