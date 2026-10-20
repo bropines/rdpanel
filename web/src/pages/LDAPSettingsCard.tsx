@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
+import { ApiError } from "@/api/client";
 import { ldapApi, ldapKeys, type LDAPSettings, type LDAPSettingsInput, type LDAPTestRequest, type LDAPTestResult } from "@/api/ldap";
 import { groupsApi } from "@/api/users";
 import { ErrorState, Field, useToastError } from "@/components";
@@ -610,7 +611,12 @@ function LDAPTestDialog({
     onError: (err) => {
       setResult({
         ok: false,
-        message: err instanceof Error ? err.message : String(err),
+        message:
+          err instanceof ApiError && err.fields?.bind_password
+            ? t("settings.ldapTestNeedsBindPassword")
+            : err instanceof Error
+              ? err.message
+              : String(err),
         connected: false,
         bound: false,
         user_found: false,

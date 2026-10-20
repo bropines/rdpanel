@@ -2730,7 +2730,14 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Test LDAP connection, bind credentials, user search or user password. */
+        /**
+         * Test LDAP connection, bind credentials, user search or user password.
+         * @description `settings` overrides the saved configuration for this test only. The saved bind
+         *     password is used only with the saved `server_url` (scheme and host:port), `bind_dn`
+         *     and TLS settings: when `settings` changes any of them (or turns `start_tls` off /
+         *     `insecure_skip_verify` on) the request must carry `bind_password`, otherwise 400
+         *     `validation_failed` (field `bind_password`).
+         */
         post: operations["testLDAPSettings"];
         delete?: never;
         options?: never;

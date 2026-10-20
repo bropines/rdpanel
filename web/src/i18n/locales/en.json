@@ -1060,6 +1060,7 @@
     "ldapTestUsernameHint": "Lookup a specific user",
     "ldapTestPassword": "Test user password (optional)",
     "ldapTestPasswordHint": "Attempt user bind verification",
+    "ldapTestNeedsBindPassword": "The server, bind DN or TLS settings differ from the saved ones: enter the bind password to test them.",
     "ldapServerConnected": "Server reachable",
     "ldapAdminBound": "Service account authenticated",
     "ldapUserFound": "User located in directory",

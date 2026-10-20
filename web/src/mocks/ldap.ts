@@ -60,6 +60,25 @@ export const ldapHandlers = [
 
   http.post(`${B}/settings/ldap/test`, async ({ request }) => {
     const body = (await request.json()) as S["LDAPTestRequest"];
+    // Like the server: the saved bind password only goes to the saved server and bind DN.
+    const s = body.settings;
+    const targetChanged =
+      (s?.server_url !== undefined && s.server_url.trim().toLowerCase() !== mockLDAPSettings.server_url.toLowerCase()) ||
+      (s?.bind_dn !== undefined && s.bind_dn.trim() !== mockLDAPSettings.bind_dn) ||
+      (s?.start_tls === false && mockLDAPSettings.start_tls) ||
+      (s?.insecure_skip_verify === true && !mockLDAPSettings.insecure_skip_verify);
+    if (targetChanged && body.bind_password === undefined && s?.bind_password === undefined && mockLDAPSettings.has_bind_password) {
+      return HttpResponse.json(
+        {
+          error: {
+            code: "validation_failed",
+            message: "bind_password is required when server_url, bind_dn or TLS settings differ from the saved ones",
+            fields: { bind_password: "required when testing another server, bind DN or weaker TLS" },
+          },
+        },
+        { status: 400 },
+      );
+    }
     const username = body.test_username?.trim();
     const password = body.test_password?.trim();
 

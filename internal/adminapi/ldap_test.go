@@ -249,3 +249,56 @@ func TestLDAPLoginStoresNoLocalPassword(t *testing.T) {
 		}
 	}
 }
+
+// The test endpoint must not send the saved bind password to a server or as
+// a bind DN the caller chose.
+func TestLDAPTestKeepsSavedBindPasswordOnSavedServer(t *testing.T) {
+	e := newB2Env(t, b2opts{})
+	admin, _ := e.as("ldap_admin", store.RoleAdmin)
+	code, m, _ := admin.do("PUT", "/settings/ldap", map[string]any{
+		"enabled": true, "server_url": "ldaps://ad.example.corp:636", "bind_dn": "cn=svc,dc=example,dc=corp",
+		"bind_password": "SavedSecret", "base_dn": "dc=example,dc=corp",
+	})
+	want(t, "save settings", code, http.StatusOK, m)
+
+	type dial struct{ url, bindDN, password string }
+	var dials []dial
+	e.deps.LDAP.SetDialer(func(cfg *store.LDAPSettings, pw string) (ldap.Client, error) {
+		dials = append(dials, dial{cfg.ServerURL, cfg.BindDN, pw})
+		return &mockLDAPClient{}, nil
+	})
+	test := func(settings map[string]any, bindPassword *string) (int, map[string]any) {
+		body := map[string]any{"settings": settings}
+		if bindPassword != nil {
+			body["bind_password"] = *bindPassword
+		}
+		code, m, _ := admin.do("POST", "/settings/ldap/test", body)
+		return code, m
+	}
+
+	for name, s := range map[string]map[string]any{
+		"other host":     {"server_url": "ldaps://attacker.example:636"},
+		"other port":     {"server_url": "ldaps://ad.example.corp:1636"},
+		"plain ldap":     {"server_url": "ldap://ad.example.corp:636"},
+		"other bind dn":  {"bind_dn": "cn=attacker,dc=example,dc=corp"},
+		"skip tls check": {"insecure_skip_verify": true},
+	} {
+		code, m := test(s, nil)
+		wantErr(t, name, code, http.StatusBadRequest, m, "validation_failed")
+	}
+	if len(dials) != 0 {
+		t.Fatalf("dialed with the saved password: %+v", dials)
+	}
+
+	// The saved server and bind DN may use the saved password.
+	code, m = test(map[string]any{"server_url": "LDAPS://AD.example.corp:636", "base_dn": "ou=other,dc=example,dc=corp"}, nil)
+	want(t, "saved target", code, http.StatusOK, m)
+	// Another target works with a password supplied by the caller.
+	pw := "typed-secret"
+	code, m = test(map[string]any{"server_url": "ldaps://other.example.corp:636"}, &pw)
+	want(t, "other target with password", code, http.StatusOK, m)
+	if len(dials) != 2 || dials[0].password != "SavedSecret" || dials[1].url != "ldaps://other.example.corp:636" ||
+		dials[1].password != "typed-secret" {
+		t.Fatalf("dials: %+v", dials)
+	}
+}
