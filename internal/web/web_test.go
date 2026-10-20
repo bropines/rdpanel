@@ -90,7 +90,13 @@ func TestSecurityHeaders(t *testing.T) {
 		strings.Contains(csp, "script-src 'self' 'unsafe") {
 		t.Errorf("csp = %q", csp)
 	}
-	rec = serve(SecurityHeaders(false)(http.NotFoundHandler()), http.MethodGet, "/")
+	if strings.Contains(csp, " ws: ") || strings.Contains(csp, " wss:;") {
+		t.Errorf("connect-src must not allow every WebSocket host: %q", csp)
+	}
+	rec = serve(SecurityHeaders(false, "wss://rd.example.com/ws/id", "javascript:alert(1)", "wss://bad host/x")(http.NotFoundHandler()), http.MethodGet, "/")
+	if c := rec.Header().Get("Content-Security-Policy"); !strings.Contains(c, "connect-src 'self' ws://example.com wss://rd.example.com;") {
+		t.Errorf("connect-src = %q", c)
+	}
 	if rec.Header().Get("Strict-Transport-Security") != "" {
 		t.Error("HSTS must be off for http")
 	}

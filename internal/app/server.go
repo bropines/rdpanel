@@ -48,7 +48,7 @@ func (a *App) Handler() http.Handler {
 		httpx.Logger(a.Log),
 		httpx.Recoverer(a.Log),
 		a.httpMetrics.Middleware,
-		web.SecurityHeaders(cfg.HTTPS()),
+		web.SecurityHeaders(cfg.HTTPS(), cfg.WebClient.IDURL, cfg.WebClient.RelayURL),
 	)
 
 	r.Get("/healthz", a.handleHealthz)
