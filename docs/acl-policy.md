@@ -103,6 +103,7 @@ preserved.
 ### 2.1 `roles` (Control Roles)
 
 A map of named roles defining what actions an operator can perform inside an established RustDesk session.
+Roles only restrict: see [Enforcement](#3-enforcement) for how each capability reaches the device.
 
 | Permission Field | Type | Description |
 |---|---|---|
@@ -118,9 +119,10 @@ A map of named roles defining what actions an operator can perform inside an est
 If an `allow` rule does not specify a `role`, the system default control role is used.
 
 > [!NOTE]
-> Control roles are informational for now: they are stored, exported and evaluated
-> (the ACL test shows the effective role), but their capabilities are not yet enforced
-> on RustDesk sessions. The `allow` / `deny` decision of the rules is applied.
+> Roles are enforced by the server: file transfer, TCP tunnel and terminal connections a
+> role forbids are refused, and its other limits are applied by devices running RustDesk
+> 1.4.5 or newer (Windows, macOS, Linux). A role never re-enables what the device owner
+> turned off locally. Details: [Enforcement](#3-enforcement).
 
 A rule may name a role that exists in the panel but is not listed in `roles`; applying
 the policy keeps such a role. Roles missing from the document are deleted only when no
@@ -152,7 +154,7 @@ An array of access rules. Rules are evaluated in ascending order of `priority` (
 | `device_group:<group_name>` | Matches any device in a device group | `device_group:servers` |
 
 > [!NOTE]
-> Device ownership always takes precedence: if an operator owns the target device (or shares the same "shared" user group), connection is allowed under device owner permissions unless explicitly denied by an admin.
+> Device ownership always takes precedence: if an operator owns the target device (or shares the same "shared" user group), connection is allowed under the default control role unless a rule denies it.
 
 ### 2.3 `tests` (Policy Assertions)
 
@@ -168,11 +170,81 @@ If **any** test assertion fails, the policy update is **rejected atomically** wi
 
 ---
 
-## 3. REST API Reference
+## 3. Enforcement
+
+Rules and roles apply to every connection that goes through this server's hbbs (the
+rendezvous server in the image), however they were configured (UI, API or this file).
+
+### Before a connection starts
+
+For every punch-hole and relay request, hbbs asks the panel whether the connection may
+start (`POST /internal/hbbs/authorize`: loopback callers with a shared secret only; on by
+default, `RDPANEL_HBBS_AUTHZ`, see [configuration](configuration.md#hbbshbbr)). The
+controller is identified by the login token its RustDesk client, or the panel's web client,
+sends with the request:
+
+| situation | result |
+|---|---|
+| target device not known to the panel | allowed, no restrictions |
+| controller is an active panel admin | allowed, no restrictions |
+| no enabled rule | allowed under the default control role |
+| enabled rules, controller not signed in (no token; invalid, expired or revoked token; disabled user) | denied: *Sign in to connect: access rules apply* |
+| enabled rules, signed-in user | the rules decide (first match by priority, then owner access, otherwise denied). Denied: *Denied by access rule &lt;name&gt;* or *No access rule allows this connection*. Allowed: under the matching rule's role, else the default role |
+
+A denied connection never reaches the device; the controller sees the reason.
+
+### Under the effective role
+
+- File transfer, port forwarding / RDP and terminal connections that the role forbids are
+  refused before they start (*File transfer is not allowed by control role &lt;name&gt;*).
+- The role's other limits travel with the connection to the device as control
+  permissions. The device applies them from **RustDesk 1.4.5** on (Windows, macOS, Linux;
+  [rustdesk/rustdesk#13974](https://github.com/rustdesk/rustdesk/pull/13974)). Older
+  versions and Android devices ignore them and only get the allow/deny decision.
+- Roles only restrict. For every capability the role does not allow the panel sends
+  "disabled"; everything else is left to the device. What the device owner turned off in
+  RustDesk's settings stays off, and no role turns it back on.
+
+| role capability | permission sent to the device when not allowed |
+|---|---|
+| `allow_keyboard_mouse` | keyboard (keyboard and mouse input) |
+| `allow_clipboard` | clipboard |
+| `allow_file_transfer` | file transfer (file-transfer connections are also refused) |
+| `allow_audio` | audio |
+| `allow_tcp_tunneling` | tunnel (port-forward / RDP connections are also refused) |
+| `allow_terminal` | terminal (terminal connections are also refused) |
+| `allow_restart` | remote restart |
+
+A role that allows everything (such as the seeded *Full Control*) sends no permissions at
+all: the device's own settings apply unchanged.
+
+### After the fact
+
+When the controlled device reports an authorized connection (`/api/audit/conn`), the panel
+makes the same decision again (the controller's user is the owner of the controller's
+device, or the panel user of a web client session) and disconnects a connection it would
+have denied, at the device's next heartbeat. This catches connections that skipped the
+check above: older RustDesk versions and Android for role-forbidden connection types, and
+hbbs without or failing authorization.
+
+### Limits
+
+- Direct IP connections do not go through hbbs; only the after-the-fact disconnect applies
+  to them. Turn off direct IP access on the devices (for example with a client strategy)
+  if that matters.
+- If hbbs cannot get an answer (panel down, wrong secret), it lets the connection proceed
+  without the panel's decision. Watch `rdpanel_hbbs_authz_total{result="error"}` and the
+  `RustDeskHBBSAuthzErrors` alert ([monitoring](monitoring.md)).
+- Decisions are made when a connection starts: changing a rule or role does not affect
+  sessions that are already running.
+
+---
+
+## 4. REST API Reference
 
 All policy endpoints live under `/api/v1/admin/acls/policy` and require an authenticated admin session or personal API token with full access.
 
-### 3.1 Get Current Policy
+### 4.1 Get Current Policy
 
 ```http
 GET /api/v1/admin/acls/policy
@@ -188,7 +260,7 @@ GET /api/v1/admin/acls/policy
 The export names every target the way the policy is read back (devices by RustDesk ID),
 so applying an exported policy reproduces the same rules.
 
-### 3.2 Dry-Run Validation & Test Simulation
+### 4.2 Dry-Run Validation & Test Simulation
 
 Validates HuJSON syntax, ensures all referenced entities exist in the database, and executes all test assertions without saving changes.
 
@@ -220,7 +292,7 @@ Content-Type: application/json
 }
 ```
 
-### 3.3 Apply Policy (Atomic Update)
+### 4.3 Apply Policy (Atomic Update)
 
 Parses, validates, executes all tests, and atomically replaces active connection ACLs and custom control roles in SQLite.
 
@@ -243,7 +315,7 @@ Content-Type: application/json
 
 ---
 
-## 4. GitOps Workflow
+## 5. GitOps Workflow
 
 You can store `policy.hujson` in a private Git repository and automate deployments using CI/CD.
 
