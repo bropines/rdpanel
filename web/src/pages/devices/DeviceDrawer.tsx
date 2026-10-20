@@ -249,13 +249,15 @@ export function DeviceDrawer({
           ) : (
             <>
               <div>
-                <Button
-                  className="w-full"
-                  size="sm"
-                  onClick={() => window.open(`/connect?id=${encodeURIComponent(d.rustdesk_id)}`, "_blank")}
-                >
-                  <Cast className="mr-2 h-4 w-4" />
-                  {t("devices.webConnect")}
+                <Button className="w-full" size="sm" asChild>
+                  <a
+                    href={`/connect?id=${encodeURIComponent(d.rustdesk_id)}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    <Cast className="mr-2 h-4 w-4" />
+                    {t("devices.webConnect")}
+                  </a>
                 </Button>
               </div>
               <section>

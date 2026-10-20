@@ -32,10 +32,18 @@ export function WebClientPage() {
   const search = useSearch({ strict: false }) as { id?: string; pwd?: string };
   const navigate = useNavigate();
 
-  const peerIdParam = (search.id || '').trim();
-  const initialPassword = search.pwd || '';
+  const getUrlParam = (k: string) => {
+    if (typeof window !== 'undefined') {
+      const v = new URLSearchParams(window.location.search).get(k);
+      if (v) return v.trim();
+    }
+    return '';
+  };
 
-  const [peerId, setPeerId] = useState(peerIdParam);
+  const initialPeerId = (search.id || getUrlParam('id') || '').trim();
+  const initialPassword = search.pwd || getUrlParam('pwd') || '';
+
+  const [peerId, setPeerId] = useState(initialPeerId);
   const [password, setPassword] = useState(initialPassword);
   const [showPassword, setShowPassword] = useState(false);
   const [passwordDialogOpen, setPasswordDialogOpen] = useState(false);
@@ -63,24 +71,31 @@ export function WebClientPage() {
   const isWebCodecsSupported = VideoStreamDecoder.isSupported();
 
   const getWsUrls = useCallback(() => {
-    const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const isHttps = window.location.protocol === 'https:';
+    const proto = isHttps ? 'wss:' : 'ws:';
     const host = window.location.hostname;
 
-    // Use server config host if provided and not localhost
-    let idHost = host;
-    let relayHost = host;
+    // Prefer reverse proxy paths on port 443/80
+    let wsIdUrl = `${proto}//${host}/ws/id`;
+    let wsRelayUrl = `${proto}//${host}/ws/relay`;
 
     const data = serverConfigQuery.data;
     if (data?.id_server) {
-      idHost = data.id_server.split(':')[0] || host;
+      const idHost = data.id_server.split(':')[0] || host;
+      if (idHost !== host) {
+        wsIdUrl = `${proto}//${idHost}:21118`;
+      }
     }
     if (data?.relay_server) {
-      relayHost = data.relay_server.split(':')[0] || idHost;
+      const relayHost = data.relay_server.split(':')[0] || host;
+      if (relayHost !== host) {
+        wsRelayUrl = `${proto}//${relayHost}:21119`;
+      }
     }
 
     return {
-      wsIdUrl: `${proto}//${idHost}:21118`,
-      wsRelayUrl: `${proto}//${relayHost}:21119`,
+      wsIdUrl,
+      wsRelayUrl,
       serverKeyB64: data?.public_key,
     };
   }, [serverConfigQuery.data]);
@@ -138,16 +153,27 @@ export function WebClientPage() {
   }, [password, getWsUrls, t]);
 
   useEffect(() => {
-    if (peerIdParam && isWebCodecsSupported) {
-      startConnection(peerIdParam, initialPassword);
+    const rawId = (search.id || getUrlParam('id') || '').trim();
+    if (rawId && rawId !== peerId) {
+      setPeerId(rawId);
     }
+  }, [search.id, peerId]);
+
+  useEffect(() => {
+    const target = (peerId || search.id || getUrlParam('id') || '').trim();
+    if (target && isWebCodecsSupported && state === 'idle') {
+      startConnection(target, password || initialPassword);
+    }
+  }, [peerId, isWebCodecsSupported, startConnection, state, password, initialPassword, search.id]);
+
+  useEffect(() => {
     return () => {
       if (sessionRef.current) {
         sessionRef.current.disconnect();
         sessionRef.current = null;
       }
     };
-  }, [peerIdParam, initialPassword, isWebCodecsSupported, startConnection]);
+  }, []);
 
   // Handle password submission
   const handlePasswordSubmit = () => {

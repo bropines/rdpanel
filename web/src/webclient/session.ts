@@ -108,62 +108,85 @@ export class WebClientSession {
     return new Promise((resolve, reject) => {
       this.emit({ type: 'state', state: 'connecting_rendezvous' });
 
-      let ws: WebSocket;
-      try {
-        ws = new WebSocket(this.config.wsIdUrl);
-      } catch (e) {
-        reject(new Error(`Failed to create WebSocket to rendezvous: ${e}`));
-        return;
-      }
-
-      this.wsId = ws;
-      ws.binaryType = 'arraybuffer';
-
-      const timeout = setTimeout(() => {
-        if (ws.readyState !== WebSocket.OPEN) {
-          ws.close();
-          reject(new Error('Rendezvous connection timeout (10s)'));
-        }
-      }, 10000);
-
-      ws.onopen = () => {
-        clearTimeout(timeout);
-        this.requestRelay();
-      };
-
-      ws.onmessage = async (evt: MessageEvent) => {
+      const tryConnect = (url: string, fallbackUrl?: string) => {
+        let ws: WebSocket;
         try {
-          const buf = new Uint8Array(evt.data as ArrayBuffer);
-          const resp = decodeRelayResponse(buf);
+          ws = new WebSocket(url);
+        } catch (e) {
+          if (fallbackUrl) {
+            tryConnect(fallbackUrl);
+            return;
+          }
+          reject(new Error(`Failed to create WebSocket to rendezvous: ${e}`));
+          return;
+        }
 
-          if (resp) {
-            clearTimeout(timeout);
+        this.wsId = ws;
+        ws.binaryType = 'arraybuffer';
+
+        const timeout = setTimeout(() => {
+          if (ws.readyState !== WebSocket.OPEN) {
             ws.close();
-            this.wsId = null;
-
-            if (resp.refuseReason) {
-              reject(new Error(`Relay refused: ${resp.refuseReason}`));
+            if (fallbackUrl) {
+              tryConnect(fallbackUrl);
               return;
             }
-
-            const relayServer = resp.relayServer || '';
-            const uuid = resp.uuid || this.sessionUuid;
-            await this.connectRelay(relayServer, uuid);
-            resolve();
+            reject(new Error('Rendezvous connection timeout (10s)'));
           }
-        } catch (e) {
-          reject(e);
-        }
+        }, 8000);
+
+        ws.onopen = () => {
+          clearTimeout(timeout);
+          this.requestRelay();
+        };
+
+        ws.onmessage = async (evt: MessageEvent) => {
+          try {
+            const buf = new Uint8Array(evt.data as ArrayBuffer);
+            const resp = decodeRelayResponse(buf);
+
+            if (resp) {
+              clearTimeout(timeout);
+              ws.close();
+              this.wsId = null;
+
+              if (resp.refuseReason) {
+                reject(new Error(`Relay refused: ${resp.refuseReason}`));
+                return;
+              }
+
+              const relayServer = resp.relayServer || '';
+              const uuid = resp.uuid || this.sessionUuid;
+              await this.connectRelay(relayServer, uuid);
+              resolve();
+            }
+          } catch (e) {
+            reject(e);
+          }
+        };
+
+        ws.onerror = () => {
+          clearTimeout(timeout);
+          if (fallbackUrl) {
+            tryConnect(fallbackUrl);
+            return;
+          }
+          reject(new Error(`Failed to connect to rendezvous at ${url}`));
+        };
+
+        ws.onclose = () => {
+          clearTimeout(timeout);
+        };
       };
 
-      ws.onerror = (e) => {
-        clearTimeout(timeout);
-        reject(new Error(`WebSocket error connecting to rendezvous: ${JSON.stringify(e)}`));
-      };
+      const primaryUrl = this.config.wsIdUrl;
+      const host = window.location.hostname;
+      const isHttps = window.location.protocol === 'https:';
+      const fallbackUrl = primaryUrl.includes('/ws/id')
+        ? (isHttps ? `wss://${host}:21118` : `ws://${host}:21118`)
+        : undefined;
 
-      ws.onclose = () => {
-        clearTimeout(timeout);
-      };
+      tryConnect(primaryUrl, fallbackUrl);
     });
   }
 
@@ -187,48 +210,69 @@ export class WebClientSession {
         wsUrl = `${proto}//${host}:21119`;
       }
 
-      let ws: WebSocket;
-      try {
-        ws = new WebSocket(wsUrl);
-      } catch (e) {
-        reject(new Error(`Failed to create WebSocket to relay: ${e}`));
-        return;
-      }
-
-      this.wsRelay = ws;
-      ws.binaryType = 'arraybuffer';
-
-      const timeout = setTimeout(() => {
-        if (ws.readyState !== WebSocket.OPEN) {
-          ws.close();
-          reject(new Error('Relay connection timeout (15s)'));
+      const tryConnectRelay = (url: string, fallbackUrl?: string) => {
+        let ws: WebSocket;
+        try {
+          ws = new WebSocket(url);
+        } catch (e) {
+          if (fallbackUrl) {
+            tryConnectRelay(fallbackUrl);
+            return;
+          }
+          reject(new Error(`Failed to create WebSocket to relay: ${e}`));
+          return;
         }
-      }, 15000);
 
-      ws.onopen = () => {
-        clearTimeout(timeout);
-        this.emit({ type: 'state', state: 'pairing_relay' });
-        // Send pairing RelayRequest
-        const req = encodeRelayRequest(uuid, this.config.peerId);
-        ws.send(req);
+        this.wsRelay = ws;
+        ws.binaryType = 'arraybuffer';
+
+        const timeout = setTimeout(() => {
+          if (ws.readyState !== WebSocket.OPEN) {
+            ws.close();
+            if (fallbackUrl) {
+              tryConnectRelay(fallbackUrl);
+              return;
+            }
+            reject(new Error('Relay connection timeout (15s)'));
+          }
+        }, 12000);
+
+        ws.onopen = () => {
+          clearTimeout(timeout);
+          this.emit({ type: 'state', state: 'pairing_relay' });
+          const req = encodeRelayRequest(uuid, this.config.peerId);
+          ws.send(req);
+        };
+
+        ws.onmessage = (evt: MessageEvent) => {
+          void this.handleRelayMessage(new Uint8Array(evt.data as ArrayBuffer));
+        };
+
+        ws.onerror = () => {
+          clearTimeout(timeout);
+          if (fallbackUrl) {
+            tryConnectRelay(fallbackUrl);
+            return;
+          }
+          reject(new Error(`Failed to connect to relay at ${url}`));
+        };
+
+        ws.onclose = (evt) => {
+          clearTimeout(timeout);
+          if (this.state !== 'closed' && this.state !== 'error') {
+            this.emit({ type: 'state', state: 'closed', detail: evt.reason || 'Relay connection closed' });
+          }
+        };
       };
 
-      ws.onmessage = (evt: MessageEvent) => {
-        void this.handleRelayMessage(new Uint8Array(evt.data as ArrayBuffer));
-      };
+      const primaryUrl = wsUrl;
+      const host = window.location.hostname;
+      const isHttps = window.location.protocol === 'https:';
+      const fallbackUrl = primaryUrl.includes('/ws/relay')
+        ? (isHttps ? `wss://${host}:21119` : `ws://${host}:21119`)
+        : undefined;
 
-      ws.onerror = (e) => {
-        clearTimeout(timeout);
-        reject(new Error(`Relay WebSocket error: ${JSON.stringify(e)}`));
-      };
-
-      ws.onclose = (evt) => {
-        clearTimeout(timeout);
-        if (this.state !== 'closed' && this.state !== 'error') {
-          this.emit({ type: 'state', state: 'closed', detail: evt.reason || 'Relay connection closed' });
-        }
-      };
-
+      tryConnectRelay(primaryUrl, fallbackUrl);
       resolve();
     });
   }
