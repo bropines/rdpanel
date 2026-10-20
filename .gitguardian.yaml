@@ -1,0 +1,8 @@
+# GitGuardian: test fixtures and SQL schema contain password-looking literals
+# (fake LDAP passwords, CHECK (method IN ('password', ...))) that are not secrets.
+version: 2
+secret:
+  ignored_paths:
+    - "**/*_test.go"
+    - "internal/db/migrations/*.sql"
+    - "internal/db/migrations_pg/*.sql"

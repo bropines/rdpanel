@@ -14,8 +14,11 @@ export const dashboardApi = {
 
 export type WebClientConfig = Schemas["WebClientConfig"];
 
+export type WebClientCredentials = Schemas["WebClientCredentials"];
+
 export const webClientApi = {
   config: () => api.request<WebClientConfig>("/webclient/config"),
+  credentials: (peer: string) => api.request<WebClientCredentials>(`/webclient/credentials/${encodeURIComponent(peer)}`),
 };
 
 /* ── About ────────────────────────────────────────────────────────────── */

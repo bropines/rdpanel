@@ -1,6 +1,11 @@
-# RustDesk Relay Agent Helm Chart
+# RD Panel relay agent Helm chart
 
 Installs an extra remote `hbbr` relay agent supervised by **RD Panel** in Kubernetes.
+
+Published as `oci://ghcr.io/bropines/charts/rdpanel-relay-agent`. Versions up to
+0.11.0 were published as `rustdesk-relay-agent`; to move an existing release,
+`helm upgrade <release> oci://ghcr.io/bropines/charts/rdpanel-relay-agent --version <new>`
+— resource names and selectors stay the same, so the Deployment and its PVC are kept.
 
 ## Quick start
 
@@ -9,7 +14,7 @@ Installs an extra remote `hbbr` relay agent supervised by **RD Panel** in Kubern
 # Server -> Relays -> Add Relay -> Relay agent
 
 # 2. Install the chart:
-helm install relay-nl ./deploy/helm/rustdesk-relay-agent \
+helm install relay-nl ./deploy/helm/rdpanel-relay-agent \
   --set panel.url="https://desk-api.example.com" \
   --set panel.enrollToken="<one-time-token>" \
   --set service.type=LoadBalancer
@@ -20,7 +25,7 @@ helm install relay-nl ./deploy/helm/rustdesk-relay-agent \
 For bare-metal or cloud clusters where real client IPs and raw UDP/TCP performance are desired:
 
 ```sh
-helm install relay-nl ./deploy/helm/rustdesk-relay-agent \
+helm install relay-nl ./deploy/helm/rdpanel-relay-agent \
   --set panel.url="https://desk-api.example.com" \
   --set panel.enrollToken="<one-time-token>" \
   --set hostNetwork=true \

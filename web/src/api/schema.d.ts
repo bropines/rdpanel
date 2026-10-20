@@ -921,6 +921,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/webclient/credentials/{peer}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Saved login for a device from the caller's address books.
+         * @description What a signed-in desktop client receives through the client API's address book: the personal book's
+         *     remembered password hash for the device, else the password of the first shared book (readable by the caller)
+         *     that lists it (the entry's password, else the book's default password). All fields are null when nothing is
+         *     saved. 404 when the web client is off or not offered to the caller.
+         */
+        get: operations["getWebClientCredentials"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/lookup/users": {
         parameters: {
             query?: never;
@@ -3539,6 +3562,14 @@ export interface components {
             commit?: string;
             build_date?: string;
             go?: string;
+        };
+        WebClientCredentials: {
+            /** @description Base64 SHA256(password + salt) from the personal address book */
+            hash: string | null;
+            /** @description Plain password from a shared address book */
+            password: string | null;
+            /** @description Shared book the password comes from */
+            book: string | null;
         };
         WebClientConfig: {
             enabled: boolean;
@@ -6394,6 +6425,31 @@ export interface operations {
                 };
             };
             401: components["responses"]["Unauthorized"];
+        };
+    };
+    getWebClientCredentials: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description RustDesk ID */
+                peer: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Saved credentials (may be all null). */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WebClientCredentials"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
         };
     };
     lookupUsers: {
