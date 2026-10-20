@@ -1,7 +1,6 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import QRCode from "qrcode";
 import { Copy, Download, KeyRound, Loader2, ShieldCheck, ShieldOff } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
@@ -9,6 +8,7 @@ import { meQueryKey } from "@/api/auth";
 import { saveBlob } from "@/api/client";
 import { security, type TotpEnrollment } from "@/api/security";
 import { copyText, CopyButton, Field, Mono, useErrorMessage } from "@/components";
+import { QrCanvas } from "@/components/QrCanvas";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -18,15 +18,8 @@ import { useMe } from "@/lib/session";
 
 export const TOTP_CODE_RE = /^\d{6}$/;
 
-/** Draws the otpauth:// URI as a QR code on a canvas (no data: URLs, CSP-friendly). */
-export function QrCanvas({ value, size = 192 }: { value: string; size?: number }) {
-  const ref = useRef<HTMLCanvasElement>(null);
-  useEffect(() => {
-    if (!ref.current) return;
-    void QRCode.toCanvas(ref.current, value, { width: size, margin: 1, errorCorrectionLevel: "M" }).catch(() => undefined);
-  }, [value, size]);
-  return <canvas ref={ref} width={size} height={size} className="rounded-md border bg-white" aria-label="QR" role="img" />;
-}
+/** Draws the otpauth:// URI as a QR code (shared with the install and share pages). */
+export { QrCanvas };
 
 /** Groups a base32 secret in blocks of four for manual entry. */
 export function formatSecret(secret: string): string {

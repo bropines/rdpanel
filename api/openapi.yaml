@@ -5462,7 +5462,7 @@ components:
         name: { type: string, minLength: 1, maxLength: 128 }
         visibility: { $ref: "#/components/schemas/GroupVisibility" }
         note: { type: string, maxLength: 4096 }
-        can_share_links: { type: boolean, default: false }
+        can_share_links: { type: boolean, description: "Default false" }
     UserGroupPatch:
       type: object
       additionalProperties: false

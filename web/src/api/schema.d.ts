@@ -4097,8 +4097,8 @@ export interface components {
             name: string;
             visibility?: components["schemas"]["GroupVisibility"];
             note?: string;
-            /** @default false */
-            can_share_links: boolean;
+            /** @description Default false */
+            can_share_links?: boolean;
         };
         UserGroupPatch: {
             name?: string;
