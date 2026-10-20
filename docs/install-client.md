@@ -33,5 +33,9 @@ any other case ("Import server config" in the client's ID/Relay Server settings)
 Set `RDPANEL_CLIENT_DOWNLOADS_ENABLED=false` on hosts without internet access: the page
 then offers only the settings and the QR code, and the panel makes no request to GitHub.
 
+To give the same downloads and settings to people without a panel account, create a
+**share link** on this page (when `RDPANEL_SHARE_LINKS_ENABLED` is on and you may share):
+see [share-links.md](share-links.md).
+
 Custom-branded clients (own name, icon, locked settings) need a build of their own and
 are not covered by this page.

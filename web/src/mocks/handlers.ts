@@ -17,6 +17,7 @@ import { liveStream } from "@/mocks/sse";
 import { strategyHandlers } from "@/mocks/strategies";
 import { aclHandlers } from "@/mocks/acl";
 import { ldapHandlers } from "@/mocks/ldap";
+import { canShareMock, shareHandlers } from "@/mocks/share";
 
 type S = Schemas;
 const B = "/api/v1/admin";
@@ -113,7 +114,7 @@ function listItem(u: db.MockUser): S["UserListItem"] {
   return rest;
 }
 function meBody(u: db.MockUser): S["Me"] {
-  return { user: publicUser(u), csrf_token: "mock-csrf", must_enroll_totp: !!u.totp_required && !u.totp_enabled };
+  return { user: publicUser(u), csrf_token: "mock-csrf", must_enroll_totp: !!u.totp_required && !u.totp_enabled, can_share_links: canShareMock(u) };
 }
 
 function qs(request: Request) {
@@ -354,6 +355,8 @@ function passkeyLoginAs(credentialId: string | undefined, userId?: number): db.M
 }
 
 /* ── handlers ─────────────────────────────────────────────────────────── */
+
+const mockShells = new Map<string, { service_id: string; hostname: string; tabs: number; created_at: string; updated_at: string }[]>();
 
 export const handlers = [
   // Small latency so skeletons are visible but the UI stays snappy.
@@ -695,6 +698,23 @@ export const handlers = [
   }),
   // Web client: point VITE_MOCK_WEBCLIENT_ID_URL / _RELAY_URL / _KEY at a real
   // server to try the client against live devices from the mock build.
+  http.get(`${B}/webclient/shells/:peer`, ({ params }) => HttpResponse.json({ items: mockShells.get(String(params.peer)) ?? [] })),
+  http.put(`${B}/webclient/shells/:peer`, async ({ params, request }) => {
+    const b = (await request.json()) as { service_id: string; hostname?: string; tabs?: number };
+    const now = new Date().toISOString();
+    const list = (mockShells.get(String(params.peer)) ?? []).filter((x) => x.service_id !== b.service_id);
+    const old = mockShells.get(String(params.peer))?.find((x) => x.service_id === b.service_id);
+    mockShells.set(String(params.peer), [
+      { service_id: b.service_id, hostname: b.hostname ?? "", tabs: b.tabs ?? 1, created_at: old?.created_at ?? now, updated_at: now },
+      ...list,
+    ]);
+    return new HttpResponse(null, { status: 204 });
+  }),
+  http.post(`${B}/webclient/shells/:peer/forget`, async ({ params, request }) => {
+    const b = (await request.json()) as { service_id: string };
+    mockShells.set(String(params.peer), (mockShells.get(String(params.peer)) ?? []).filter((x) => x.service_id !== b.service_id));
+    return new HttpResponse(null, { status: 204 });
+  }),
   http.get(`${B}/clients`, () =>
     HttpResponse.json({
       enabled: true,
@@ -1115,10 +1135,13 @@ export const handlers = [
       http.post(`${B}/${path}`, async ({ request }) => {
         const u = requireAdmin();
         if (u instanceof Response) return u;
-        const b = await body<{ name: string; note?: string; visibility?: "self" | "shared" }>(request);
+        const b = await body<{ name: string; note?: string; visibility?: "self" | "shared"; can_share_links?: boolean }>(request);
         if (list().some((g) => g.name.toLowerCase() === b.name.toLowerCase())) return err(409, "conflict", "name taken");
         const base = { id: newId(), name: b.name, note: b.note ?? "", created_at: nowIso(), updated_at: nowIso() };
-        const g = path === "user-groups" ? { ...base, visibility: b.visibility ?? "self", member_count: 0 } : { ...base, device_count: 0 };
+        const g =
+          path === "user-groups"
+            ? { ...base, visibility: b.visibility ?? "self", can_share_links: b.can_share_links ?? false, member_count: 0 }
+            : { ...base, device_count: 0 };
         (list() as unknown[]).push(g);
         audit(u, `${path === "user-groups" ? "user_group" : "device_group"}.create`, "group", b.name);
         return ok(g, 201);
@@ -1679,6 +1702,7 @@ export const handlers = [
     const b = await body<S["PanelSettingsPatch"]>(request);
     const s = db.panelSettings;
     if (b.branding) Object.assign(s.branding, b.branding);
+    if (b.share_links) Object.assign(s.share_links, b.share_links);
     if (b.auth) Object.assign(s.auth, b.auth);
     if (b.retention) Object.assign(s.retention, b.retention);
     audit(u, "settings.update", "settings", Object.keys(b).join(","));
@@ -1797,6 +1821,7 @@ export const handlers = [
   ...strategyHandlers,
   ...aclHandlers,
   ...ldapHandlers,
+  ...shareHandlers(me),
 ];
 
 function ensureTags(bookId: number, names: string[]) {

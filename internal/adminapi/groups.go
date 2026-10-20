@@ -12,18 +12,19 @@ import (
 
 // userGroupDTO is components.schemas.UserGroup.
 type userGroupDTO struct {
-	ID          int64     `json:"id"`
-	Name        string    `json:"name"`
-	Visibility  string    `json:"visibility"`
-	Note        string    `json:"note"`
-	MemberCount int       `json:"member_count"`
-	CreatedAt   time.Time `json:"created_at"`
-	UpdatedAt   time.Time `json:"updated_at"`
+	ID            int64     `json:"id"`
+	Name          string    `json:"name"`
+	Visibility    string    `json:"visibility"`
+	Note          string    `json:"note"`
+	CanShareLinks bool      `json:"can_share_links"`
+	MemberCount   int       `json:"member_count"`
+	CreatedAt     time.Time `json:"created_at"`
+	UpdatedAt     time.Time `json:"updated_at"`
 }
 
 func newUserGroupDTO(g *store.UserGroupRow) userGroupDTO {
 	return userGroupDTO{ID: g.ID, Name: g.Name, Visibility: string(g.Visibility), Note: g.Note,
-		MemberCount: g.MemberCount, CreatedAt: g.CreatedAt, UpdatedAt: g.UpdatedAt}
+		CanShareLinks: g.CanShareLinks, MemberCount: g.MemberCount, CreatedAt: g.CreatedAt, UpdatedAt: g.UpdatedAt}
 }
 
 // deviceGroupDTO is components.schemas.DeviceGroup.
@@ -56,10 +57,11 @@ func newDeviceGroupDTO(g *store.DeviceGroupRow) deviceGroupDTO {
 
 // groupInput is UserGroupInput/Patch and DeviceGroupInput/Patch.
 type groupInput struct {
-	Name       *string    `json:"name"`
-	Visibility *string    `json:"visibility"`
-	Note       *string    `json:"note"`
-	StrategyID opt[int64] `json:"strategy_id"`
+	Name          *string    `json:"name"`
+	Visibility    *string    `json:"visibility"`
+	Note          *string    `json:"note"`
+	CanShareLinks *bool      `json:"can_share_links"`
+	StrategyID    opt[int64] `json:"strategy_id"`
 }
 
 func (in *groupInput) validate(create, withVisibility bool) map[string]string {
@@ -81,6 +83,9 @@ func (in *groupInput) validate(create, withVisibility bool) map[string]string {
 	}
 	if in.Note != nil && runes(*in.Note) > 4096 {
 		f["note"] = "must be at most 4096 characters"
+	}
+	if in.CanShareLinks != nil && !withVisibility {
+		f["can_share_links"] = "unknown field"
 	}
 	return f
 }
@@ -140,6 +145,9 @@ func (a *resources) handleCreateUserGroup(w http.ResponseWriter, r *http.Request
 	if in.Note != nil {
 		g.Note = *in.Note
 	}
+	if in.CanShareLinks != nil {
+		g.CanShareLinks = *in.CanShareLinks
+	}
 	if err := a.d.Store.UserGroups.Create(ctx, g); err != nil {
 		a.groupConflict(w, r, "create user group", err)
 		return
@@ -150,7 +158,7 @@ func (a *resources) handleCreateUserGroup(w http.ResponseWriter, r *http.Request
 		return
 	}
 	a.audit(ctx, r, "user_group.create", "user_group", idStr(g.ID), map[string]any{"name": g.Name,
-		"visibility": string(g.Visibility)})
+		"visibility": string(g.Visibility), "can_share_links": g.CanShareLinks})
 	httpx.WriteJSON(w, http.StatusCreated, newUserGroupDTO(row))
 }
 
@@ -184,9 +192,13 @@ func (a *resources) handleUpdateUserGroup(w http.ResponseWriter, r *http.Request
 		if in.Note != nil {
 			g.Note = *in.Note
 		}
+		if in.CanShareLinks != nil {
+			g.CanShareLinks = *in.CanShareLinks
+		}
 		ch.val("name", old.Name, g.Name)
 		ch.val("visibility", string(old.Visibility), string(g.Visibility))
 		ch.text("note", old.Note, g.Note)
+		ch.val("can_share_links", old.CanShareLinks, g.CanShareLinks)
 		return tx.UserGroups.Update(ctx, g)
 	})
 	if err != nil {

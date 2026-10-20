@@ -25,8 +25,10 @@ type UserGroup struct {
 	Name       string
 	Visibility GroupVisibility
 	Note       string
-	CreatedAt  time.Time
-	UpdatedAt  time.Time
+	// CanShareLinks lets members create public server share links (/s/...).
+	CanShareLinks bool
+	CreatedAt     time.Time
+	UpdatedAt     time.Time
 }
 
 // UserGroups is the user_groups repository.
@@ -35,16 +37,17 @@ type UserGroups struct {
 	now func() time.Time
 }
 
-const userGroupColumns = `id, name, visibility, note, created_at, updated_at`
+const userGroupColumns = `id, name, visibility, note, can_share_links, created_at, updated_at`
 
 func scanUserGroup(row interface{ Scan(...any) error }) (*UserGroup, error) {
 	var (
-		g                    UserGroup
-		createdAt, updatedAt int64
+		g                           UserGroup
+		share, createdAt, updatedAt int64
 	)
-	if err := row.Scan(&g.ID, &g.Name, &g.Visibility, &g.Note, &createdAt, &updatedAt); err != nil {
+	if err := row.Scan(&g.ID, &g.Name, &g.Visibility, &g.Note, &share, &createdAt, &updatedAt); err != nil {
 		return nil, mapErr(err)
 	}
+	g.CanShareLinks = share == 1
 	g.CreatedAt, g.UpdatedAt = fromMs(createdAt), fromMs(updatedAt)
 	return &g, nil
 }
@@ -59,8 +62,8 @@ func (r *UserGroups) Create(ctx context.Context, g *UserGroup) error {
 		g.CreatedAt = now
 	}
 	g.UpdatedAt = now
-	return insertWithID(ctx, r.q, "user_groups", "name, visibility, note, created_at, updated_at", &g.ID,
-		strings.TrimSpace(g.Name), g.Visibility, g.Note, toMs(g.CreatedAt), toMs(g.UpdatedAt))
+	return insertWithID(ctx, r.q, "user_groups", "name, visibility, note, can_share_links, created_at, updated_at", &g.ID,
+		strings.TrimSpace(g.Name), g.Visibility, g.Note, boolInt(g.CanShareLinks), toMs(g.CreatedAt), toMs(g.UpdatedAt))
 }
 
 // Get returns the group with id.
@@ -92,11 +95,12 @@ func (r *UserGroups) List(ctx context.Context) ([]*UserGroup, error) {
 	return out, mapErr(rows.Err())
 }
 
-// Update writes name, visibility and note.
+// Update writes name, visibility, note and can_share_links.
 func (r *UserGroups) Update(ctx context.Context, g *UserGroup) error {
 	g.UpdatedAt = r.now()
-	return expectOne(r.q.ExecContext(ctx, `UPDATE user_groups SET name = ?, visibility = ?, note = ?, updated_at = ?
-		WHERE id = ?`, strings.TrimSpace(g.Name), g.Visibility, g.Note, toMs(g.UpdatedAt), g.ID))
+	return expectOne(r.q.ExecContext(ctx, `UPDATE user_groups SET name = ?, visibility = ?, note = ?, can_share_links = ?,
+		updated_at = ? WHERE id = ?`, strings.TrimSpace(g.Name), g.Visibility, g.Note, boolInt(g.CanShareLinks),
+		toMs(g.UpdatedAt), g.ID))
 }
 
 // Delete removes a group; members' user_group_id becomes NULL.

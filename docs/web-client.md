@@ -148,6 +148,17 @@ Next to **Connect**, the connect form and the device drawer offer:
 Control roles apply to both: "File transfer" and "Terminal" must be allowed
 for the user's role, otherwise hbbs refuses the connection.
 
+The terminal has tabs (several shells over one connection), search
+(Ctrl+Shift+F, ⌘F), clickable links, copy on select and right-click paste,
+Shift+Enter as a newline for CLIs, Option as Alt on macOS, and font settings
+with built-in Nerd Font icons. With "Keep shells after a disconnect" (on by
+default) the device keeps the shells when the connection drops: the terminal
+reconnects by itself, and the session is remembered in your account
+(`terminal_shells`, the service id sealed with the secret key), so opening the
+terminal on that device from another browser or phone offers to return to
+those shells or close them. Back closes the shells; other accounts never see
+your sessions, and the device still asks for its own login.
+
 ## Files
 
 **Files** (toolbar or ⋯ menu) opens a separate file-transfer connection with

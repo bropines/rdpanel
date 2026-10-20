@@ -48,6 +48,14 @@ type brandingSettings struct {
 	WebClientURL    *string `json:"web_client_url"`
 }
 
+// shareLinksSettings is PanelSettings.share_links: the switch (read-only,
+// RDPANEL_SHARE_LINKS_ENABLED) and the public page's plain-text branding.
+type shareLinksSettings struct {
+	Enabled     bool   `json:"enabled"`
+	PageTitle   string `json:"page_title"`
+	Description string `json:"description"`
+}
+
 type authSettings struct {
 	PasswordLoginEnabled     bool `json:"password_login_enabled"`
 	RequireAdmin2FA          bool `json:"require_admin_2fa"`
@@ -81,13 +89,14 @@ type rateLimitInfo struct {
 // admin_url, trusted_proxies and rate_limits are read-only effective values
 // of the process configuration (environment / config file).
 type panelSettingsDTO struct {
-	PublicURL      string            `json:"public_url"`
-	AdminURL       string            `json:"admin_url"`
-	Branding       brandingSettings  `json:"branding"`
-	Auth           authSettings      `json:"auth"`
-	Retention      retentionSettings `json:"retention"`
-	RateLimits     rateLimitInfo     `json:"rate_limits"`
-	TrustedProxies []string          `json:"trusted_proxies"`
+	PublicURL      string             `json:"public_url"`
+	AdminURL       string             `json:"admin_url"`
+	Branding       brandingSettings   `json:"branding"`
+	ShareLinks     shareLinksSettings `json:"share_links"`
+	Auth           authSettings       `json:"auth"`
+	Retention      retentionSettings  `json:"retention"`
+	RateLimits     rateLimitInfo      `json:"rate_limits"`
+	TrustedProxies []string           `json:"trusted_proxies"`
 }
 
 // intSetting describes one integer setting: key, JSON path, bounds and the
@@ -163,6 +172,11 @@ func (a *resources) loadSettings(ctx context.Context) (panelSettingsDTO, error) 
 	errs(e)
 	s.Branding.HasLogo, _, e = a.d.Store.Assets().Exists(ctx, store.AssetLogo)
 	errs(e)
+	s.ShareLinks.Enabled = shareLinksEnabled(a.d)
+	s.ShareLinks.PageTitle, e = store.GetOr(ctx, st, SettingSharePageTitle, "")
+	errs(e)
+	s.ShareLinks.Description, e = store.GetOr(ctx, st, SettingShareDescription, "")
+	errs(e)
 	s.Auth.PasswordLoginEnabled, e = store.GetOr(ctx, st, store.SettingPasswordLoginEnabled, true)
 	errs(e)
 	s.Auth.RequireAdmin2FA, e = store.GetOr(ctx, st, store.SettingRequireAdmin2FA, false)
@@ -201,6 +215,11 @@ type panelSettingsPatch struct {
 		WelcomeMarkdown *string     `json:"welcome_markdown"`
 		WebClientURL    opt[string] `json:"web_client_url"`
 	} `json:"branding"`
+	ShareLinks *struct {
+		Enabled     json.RawMessage `json:"enabled"`
+		PageTitle   *string         `json:"page_title"`
+		Description *string         `json:"description"`
+	} `json:"share_links"`
 	Auth *struct {
 		PasswordLoginEnabled     *bool `json:"password_login_enabled"`
 		RequireAdmin2FA          *bool `json:"require_admin_2fa"`
@@ -286,6 +305,25 @@ func (a *resources) handleUpdateSettings(w http.ResponseWriter, r *http.Request)
 				}
 				set[store.SettingBrandingWebClientURL] = u
 			}
+		}
+	}
+	if sl := in.ShareLinks; sl != nil {
+		if sl.Enabled != nil {
+			f["share_links.enabled"] = "read-only: set via RDPANEL_SHARE_LINKS_ENABLED"
+		}
+		if sl.PageTitle != nil {
+			t := strings.TrimSpace(*sl.PageTitle)
+			if runes(t) > maxSharePageTitle || !validLabel(t) {
+				f["share_links.page_title"] = "must be at most 80 characters of text"
+			}
+			set[SettingSharePageTitle] = t
+		}
+		if sl.Description != nil {
+			d := strings.TrimSpace(strings.ReplaceAll(*sl.Description, "\r\n", "\n"))
+			if runes(d) > maxShareDescription || !validLabel(strings.ReplaceAll(d, "\n", " ")) {
+				f["share_links.description"] = "must be at most 500 characters of text"
+			}
+			set[SettingShareDescription] = d
 		}
 	}
 	if au := in.Auth; au != nil {

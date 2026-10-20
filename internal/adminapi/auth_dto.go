@@ -57,6 +57,8 @@ type meDTO struct {
 	User           UserDTO `json:"user"`
 	CSRFToken      string  `json:"csrf_token"`
 	MustEnrollTOTP bool    `json:"must_enroll_totp"`
+	// CanShareLinks: share links are on and the user may create them.
+	CanShareLinks bool `json:"can_share_links"`
 }
 
 // sessionDTO is components.schemas.Session.

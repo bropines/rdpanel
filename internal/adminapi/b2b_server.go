@@ -19,6 +19,7 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"github.com/bropines/rdpanel/internal/clientdl"
+	"github.com/bropines/rdpanel/internal/config"
 	"github.com/bropines/rdpanel/internal/hbbs/control"
 	"github.com/bropines/rdpanel/internal/hbbs/reconcile"
 	"github.com/bropines/rdpanel/internal/httpx"
@@ -1019,16 +1020,23 @@ func DecodeRustdeskConfig(s string) (host, relay, api, key string, err error) {
 // clientServerSettings returns the ID server, relay, API URL and public key
 // that RustDesk clients use for this server.
 func (c *b2bCore) clientServerSettings(r *http.Request) clientdl.ServerSettings {
+	return ClientServerSettings(c.d.Config, r)
+}
+
+// ClientServerSettings returns the ID server, relay, API URL and public key
+// that RustDesk clients use for this server: RDPANEL_PUBLIC_URL (or, unset,
+// the request's host), the relay public host and hbbs' public key file.
+func ClientServerSettings(cfg *config.Config, r *http.Request) clientdl.ServerSettings {
 	var publicKey string
-	if c.d.Config != nil && c.d.Config.HBBS.PublicKeyFile != "" {
-		if raw, err := os.ReadFile(c.d.Config.HBBS.PublicKeyFile); err == nil {
+	if cfg != nil && cfg.HBBS.PublicKeyFile != "" {
+		if raw, err := os.ReadFile(cfg.HBBS.PublicKeyFile); err == nil {
 			publicKey = strings.TrimSpace(string(raw))
 		}
 	}
 
 	var apiServer, idServer, relayServer string
-	if c.d.Config != nil && c.d.Config.PublicURL != "" {
-		apiServer = strings.TrimRight(c.d.Config.PublicURL, "/")
+	if cfg != nil && cfg.PublicURL != "" {
+		apiServer = strings.TrimRight(cfg.PublicURL, "/")
 		if u, err := url.Parse(apiServer); err == nil && u.Hostname() != "" {
 			idServer = u.Hostname()
 		}
@@ -1051,8 +1059,8 @@ func (c *b2bCore) clientServerSettings(r *http.Request) clientdl.ServerSettings 
 	}
 
 	if idServer == "" {
-		if c.d.Config != nil && c.d.Config.HBBS.IDServer != "" {
-			if h, _, err := net.SplitHostPort(c.d.Config.HBBS.IDServer); err == nil && h != "127.0.0.1" && h != "localhost" && h != "::1" {
+		if cfg != nil && cfg.HBBS.IDServer != "" {
+			if h, _, err := net.SplitHostPort(cfg.HBBS.IDServer); err == nil && h != "127.0.0.1" && h != "localhost" && h != "::1" {
 				idServer = h
 			}
 		}
@@ -1061,8 +1069,8 @@ func (c *b2bCore) clientServerSettings(r *http.Request) clientdl.ServerSettings 
 		idServer = "127.0.0.1"
 	}
 
-	if c.d.Config != nil && c.d.Config.HBBS.RelayPublicHost != "" {
-		relayServer = c.d.Config.HBBS.RelayPublicHost
+	if cfg != nil && cfg.HBBS.RelayPublicHost != "" {
+		relayServer = cfg.HBBS.RelayPublicHost
 	} else {
 		relayServer = idServer
 	}

@@ -1283,6 +1283,122 @@
     "testSent": "Test e-mail sent to {{to}}",
     "testFailed": "Sending failed: {{error}}"
   },
+  "share": {
+    "card": {
+      "title": "Share this server",
+      "description": "Create a public link: whoever opens it gets the RustDesk client set up for {{host}} and the connection settings, without an account.",
+      "validity": "Valid",
+      "permanent": "Permanent",
+      "temporary": "Temporary",
+      "expiresIn": "Expires after",
+      "durations": {
+        "1h": "1 hour",
+        "24h": "24 hours",
+        "7d": "7 days",
+        "30d": "30 days",
+        "custom": "Custom date…"
+      },
+      "customDate": "Expires at",
+      "maxDownloads": "Max downloads",
+      "maxDownloadsHint": "Optional. After this many Windows installer downloads the link stops working.",
+      "unlimited": "Unlimited",
+      "label": "Label",
+      "labelPlaceholder": "e.g. Front desk PC",
+      "create": "Create link",
+      "created": "Link created",
+      "createdHint": "Anyone with this link can set up RustDesk for this server. Send it only to the people who need it.",
+      "limit": "You have too many open links. Revoke some first.",
+      "mine": "My links",
+      "all": "All links",
+      "empty": "No share links yet",
+      "untitled": "Untitled link",
+      "ownedBy": "by {{name}}",
+      "never": "Never expires",
+      "expires": "Expires {{time}}",
+      "expiredAt": "Expired {{time}}",
+      "views": "Views",
+      "downloads": "Downloads",
+      "createdAt": "Created",
+      "copy": "Copy link",
+      "qr": "QR code",
+      "qrHint": "Scan the code to open the link on a phone.",
+      "open": "Open the page",
+      "noUrl": "This link cannot be shown again.",
+      "revoke": "Revoke",
+      "revokeTitle": "Revoke this link?",
+      "revokeDescription": "The link stops working immediately for everyone who has it.",
+      "revoked": "Link revoked",
+      "suspendedHint": "The owner may no longer share links, so the link does not work.",
+      "status": {
+        "active": "Active",
+        "expired": "Expired",
+        "exhausted": "Used up",
+        "revoked": "Revoked",
+        "suspended": "Suspended"
+      },
+      "errors": {
+        "date": "Pick a time between one minute and one year from now.",
+        "downloads": "Enter a whole number from 1 to 100000."
+      }
+    },
+    "groupRight": "Can share server links",
+    "groupRightHint": "Members may create public links to this server's settings and preconfigured client.",
+    "groupBadge": "Share links",
+    "settings": {
+      "title": "Share page",
+      "hint": "Shown on public share links (/s/…). Plain text only.",
+      "pageTitle": "Page title",
+      "description": "Description",
+      "descriptionHint": "Shown under the title; empty = a short default text. Up to 500 characters."
+    },
+    "public": {
+      "defaultTitle": "Connect to {{host}}",
+      "intro": "Install RustDesk already set up for this server, or enter the settings below in a client you already have.",
+      "invalidTitle": "This link is no longer valid",
+      "invalidText": "It may have expired, been used up or been revoked. Ask the person who sent it for a new one.",
+      "loadFailed": "The page could not be loaded.",
+      "rateLimited": "Too many requests. Wait a moment and try again.",
+      "retry": "Try again",
+      "github": "Download from GitHub",
+      "windows": {
+        "download": "Download for Windows",
+        "arm": "Windows on ARM",
+        "step1": "Run the downloaded file.",
+        "step2": "Click “Install”, or just use RustDesk without installing.",
+        "step3": "Done: RustDesk already uses this server.",
+        "keepName": "Do not rename the file: the server settings are in its name.",
+        "unavailable": "The preconfigured installer is not available right now. Install RustDesk from GitHub, then apply the settings."
+      },
+      "linux": {
+        "step1": "Install the package for your distribution (.deb or .rpm), or start the AppImage."
+      },
+      "android": {
+        "step1": "Install the APK (or RustDesk from Google Play or F-Droid)."
+      },
+      "ios": {
+        "step1": "Install RustDesk from the App Store."
+      },
+      "apply": {
+        "title": "Then apply the settings",
+        "step1": "Copy the settings:",
+        "step2": "In RustDesk open Settings → Network → ID/Relay Server (unlock the settings first if asked).",
+        "step3": "Click “Import server config” (clipboard icon) and OK."
+      },
+      "mobileApply": {
+        "step1": "In RustDesk open Settings and tap the QR scanner icon (top right).",
+        "step2": "Scan the code on this page from another screen, or copy the settings below and use the paste icon under Settings → ID/Relay Server."
+      },
+      "copySettings": "Copy settings",
+      "copied": "Copied",
+      "qrTitle": "Phone or tablet",
+      "qrHint": "In the RustDesk app: Settings → scan icon, then scan this code.",
+      "manualTitle": "Connection settings",
+      "manualHint": "For any RustDesk client: import the settings string or fill in the fields.",
+      "configString": "Settings string",
+      "official": "Official RustDesk {{version}} from GitHub.",
+      "officialNoVersion": "Official RustDesk clients from GitHub."
+    }
+  },
   "relays": {
     "add": "Add relay",
     "addAgent": "Relay agent",

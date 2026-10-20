@@ -123,7 +123,12 @@ func (c *authCore) me(ctx context.Context, user *store.User, csrf string) (meDTO
 	if err != nil {
 		return meDTO{}, err
 	}
-	return meDTO{User: NewUserDTO(user, enrolled), CSRFToken: csrf, MustEnrollTOTP: c.sess.mustEnroll(ctx, user, enrolled)}, nil
+	share, err := canShareLinks(ctx, c.d, user)
+	if err != nil {
+		return meDTO{}, err
+	}
+	return meDTO{User: NewUserDTO(user, enrolled), CSRFToken: csrf, MustEnrollTOTP: c.sess.mustEnroll(ctx, user, enrolled),
+		CanShareLinks: share}, nil
 }
 
 // registerAuth mounts /auth/* routes.
@@ -433,8 +438,16 @@ func (c *authCore) handleMe(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+	share := false
+	if !s.MFAPending && !s.MustEnrollTOTP {
+		var err error
+		if share, err = canShareLinks(r.Context(), c.d, s.User); err != nil {
+			internalError(w)
+			return
+		}
+	}
 	httpx.WriteJSON(w, http.StatusOK, meDTO{User: NewUserDTO(s.User, s.TOTPEnabled), CSRFToken: csrf,
-		MustEnrollTOTP: s.MustEnrollTOTP})
+		MustEnrollTOTP: s.MustEnrollTOTP, CanShareLinks: share})
 }
 
 type providerOptionDTO struct {

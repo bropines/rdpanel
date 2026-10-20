@@ -47,6 +47,9 @@ func (c *b2bCore) registerWebClient(r chi.Router) {
 	r.With(RequireUser).Get("/webclient/credentials/{peer}", c.handleWebClientCredentials)
 	r.With(RequireUser).Put("/webclient/credentials/{peer}", c.handleWebClientRemember)
 	r.With(RequireUser).Delete("/webclient/credentials/{peer}", c.handleWebClientForget)
+	r.With(RequireUser).Get("/webclient/shells/{peer}", c.handleWebClientShells)
+	r.With(RequireUser).Put("/webclient/shells/{peer}", c.handleWebClientShellSave)
+	r.With(RequireUser).Post("/webclient/shells/{peer}/forget", c.handleWebClientShellForget)
 }
 
 // webClientRememberDTO is components.schemas.WebClientRemember.

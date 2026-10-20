@@ -200,7 +200,7 @@ type UserGroupRow struct {
 	MemberCount int
 }
 
-const userGroupRowSelect = `SELECT g.id, g.name, g.visibility, g.note, g.created_at, g.updated_at,
+const userGroupRowSelect = `SELECT g.id, g.name, g.visibility, g.note, g.can_share_links, g.created_at, g.updated_at,
 	(SELECT count(*) FROM users u WHERE u.user_group_id = g.id) AS member_count FROM user_groups g`
 
 func scanUserGroupRow(row interface{ Scan(...any) error }) (*UserGroupRow, error) {

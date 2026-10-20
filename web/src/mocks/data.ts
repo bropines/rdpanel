@@ -32,8 +32,8 @@ const DAY = 24 * HOUR;
 /* ── Users & groups ───────────────────────────────────────────────────── */
 
 export const userGroups: S["UserGroup"][] = [
-  { id: 1, name: "Engineering", visibility: "shared", note: "Dev & ops team", member_count: 2, created_at: iso(200 * DAY), updated_at: iso(30 * DAY) },
-  { id: 2, name: "Support", visibility: "self", note: "First-line support", member_count: 1, created_at: iso(180 * DAY), updated_at: iso(60 * DAY) },
+  { id: 1, name: "Engineering", visibility: "shared", note: "Dev & ops team", can_share_links: true, member_count: 2, created_at: iso(200 * DAY), updated_at: iso(30 * DAY) },
+  { id: 2, name: "Support", visibility: "self", note: "First-line support", can_share_links: false, member_count: 1, created_at: iso(180 * DAY), updated_at: iso(60 * DAY) },
 ];
 
 export const deviceGroups: S["DeviceGroup"][] = [
@@ -596,6 +596,7 @@ export const panelSettings: S["PanelSettings"] = {
     has_logo: false,
     web_client_url: null,
   },
+  share_links: { enabled: true, page_title: "", description: "" },
   auth: {
     password_login_enabled: true,
     require_admin_2fa: true,

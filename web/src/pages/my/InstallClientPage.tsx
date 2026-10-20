@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/misc";
 import { cn } from "@/lib/utils";
+import { ShareLinksCard } from "./ShareLinksCard";
 import { QrCanvas } from "./TotpSection";
 import {
   APP_STORE_URL,
@@ -64,6 +65,8 @@ export function InstallClientPage() {
       {(platform === "android" || platform === "ios") && <MobileCard d={d} platform={platform} />}
 
       <ManualCard d={d} />
+
+      <ShareLinksCard host={d.id_server} />
 
       {d.version && (
         <p className="text-xs text-muted-foreground">

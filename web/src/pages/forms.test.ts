@@ -206,6 +206,8 @@ describe("panel settings form", () => {
     web_client_url: "",
     title: " Panel ",
     welcome_markdown: "hi",
+    share_page_title: " Connect to Acme ",
+    share_description: "Call IT\n",
     password_login_enabled: true,
     require_admin_2fa: true,
     require_email_2fa: false,
@@ -239,6 +241,7 @@ describe("panel settings form", () => {
     expect(p).not.toHaveProperty("trusted_proxies");
     expect(p).not.toHaveProperty("rate_limits");
     expect(p.branding).toEqual({ title: "Panel", welcome_markdown: "hi", web_client_url: null });
+    expect(p.share_links).toEqual({ page_title: "Connect to Acme", description: "Call IT" });
     expect(p.auth?.client_token_lifetime_hours).toBe(4380);
     expect(p.retention?.admin_audit_days).toBe(0);
   });

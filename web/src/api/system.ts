@@ -22,7 +22,15 @@ export const webClientApi = {
   remember: (peer: string, hash: string) =>
     api.request<void>(`/webclient/credentials/${encodeURIComponent(peer)}`, { method: "PUT", body: { hash } }),
   forget: (peer: string) => api.request<void>(`/webclient/credentials/${encodeURIComponent(peer)}`, { method: "DELETE" }),
+  /** Terminal sessions the device keeps for the caller (reattach from any browser). */
+  shells: (peer: string) => api.request<{ items: WebClientShell[] }>(`/webclient/shells/${encodeURIComponent(peer)}`),
+  saveShell: (peer: string, body: Schemas["WebClientShellSave"]) =>
+    api.request<void>(`/webclient/shells/${encodeURIComponent(peer)}`, { method: "PUT", body }),
+  forgetShell: (peer: string, serviceId: string) =>
+    api.request<void>(`/webclient/shells/${encodeURIComponent(peer)}/forget`, { method: "POST", body: { service_id: serviceId } }),
 };
+
+export type WebClientShell = Schemas["WebClientShell"];
 
 /* ── Install client ───────────────────────────────────────────────────── */
 
