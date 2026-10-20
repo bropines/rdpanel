@@ -144,10 +144,15 @@ func (a *App) webWSProxy(targetAddr string) http.Handler {
 	proxy := &httputil.ReverseProxy{
 		Rewrite: func(pr *httputil.ProxyRequest) {
 			pr.SetURL(targetURL)
-			pr.Out.Header["X-Forwarded-For"] = pr.In.Header["X-Forwarded-For"]
-			pr.SetXForwarded()
+			// hbbs/hbbr take the peer address from these headers: send only
+			// the client IP we resolved (trusted proxies only), never a
+			// client-supplied X-Forwarded-For chain.
+			pr.Out.Header.Del("X-Forwarded-For")
+			pr.Out.Header.Del("X-Real-IP")
+			pr.Out.Header.Del("Forwarded")
 			if ip := httpx.ClientIP(pr.In); ip.IsValid() {
 				pr.Out.Header.Set("X-Real-IP", ip.String())
+				pr.Out.Header.Set("X-Forwarded-For", ip.String())
 			}
 		},
 		ErrorHandler: func(w http.ResponseWriter, r *http.Request, err error) {

@@ -27,6 +27,8 @@ func TestWebWSProxy(t *testing.T) {
 	// Test /ws/id
 	req := httptest.NewRequest(http.MethodGet, "/ws/id", nil)
 	req.RemoteAddr = "192.0.2.10:1234"
+	req.Header.Set("X-Forwarded-For", "203.0.113.66")
+	req.Header.Set("X-Real-IP", "203.0.113.66")
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, req)
 
