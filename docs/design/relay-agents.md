@@ -328,7 +328,7 @@ services:
 
 ### 5.3 Helm
 
-A new chart, `deploy/helm/rustdesk-relay-agent`, separate because agents live in other clusters:
+A new chart, `deploy/helm/rdpanel-relay-agent` (first published as `rustdesk-relay-agent`), separate because agents live in other clusters:
 
 - A Deployment with `replicas: 1`. **Never put two replicas behind one Service**: pairing state is
   per process (`PEERS`, `srv:src/relay_server.rs:33`), so the two halves of a session would land

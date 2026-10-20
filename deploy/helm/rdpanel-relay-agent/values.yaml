@@ -1,4 +1,4 @@
-# Default values for rustdesk-relay-agent.
+# Default values for rdpanel-relay-agent.
 # This runs an extra hbbr relay managed by the central RD Panel (RDPANEL_MODE=agent).
 
 image:
