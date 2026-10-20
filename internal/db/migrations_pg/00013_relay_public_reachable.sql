@@ -4,7 +4,7 @@
 -- See docs/design/relay-agents.md §17.
 
 -- +goose Up
-ALTER TABLE relays ADD COLUMN public_reachable INTEGER NULL CHECK (
+ALTER TABLE relays ADD COLUMN public_reachable BIGINT NULL CHECK (
     public_reachable IS NULL OR public_reachable IN (0, 1)
 );
 
