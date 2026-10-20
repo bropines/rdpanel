@@ -28,7 +28,9 @@ import (
 type fakePresence struct {
 	mu     sync.Mutex
 	online map[string]time.Time
-	health PresenceHealth
+	// offline: devices hbbs reports offline, with the start of that streak
+	offline map[string]time.Time
+	health  PresenceHealth
 }
 
 func (f *fakePresence) set(id string, since time.Time) {
@@ -50,8 +52,13 @@ func (f *fakePresence) OnlineIDs() []string {
 func (f *fakePresence) DevicePresence(id string) (bool, time.Time, bool) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	s, ok := f.online[id]
-	return ok, s, ok
+	if s, ok := f.online[id]; ok {
+		return true, s, true
+	}
+	if s, ok := f.offline[id]; ok {
+		return false, s, true
+	}
+	return false, time.Time{}, false
 }
 
 func (f *fakePresence) PresenceHealth() PresenceHealth { return f.health }
@@ -1126,16 +1133,21 @@ func TestDevicesNotRegistered(t *testing.T) {
 	e := newREnv(t, true)
 	now := e.clk.now()
 	recent, stale := now.Add(-10*time.Second), now.Add(-time.Minute)
-	e.device("1", func(d *store.Device) { d.LastHeartbeatAt = &recent }) // heartbeat, hbbs: offline
+	e.device("1", func(d *store.Device) { d.LastHeartbeatAt = &recent }) // heartbeat, hbbs: offline for 5 min
 	e.device("2", func(d *store.Device) { d.LastHeartbeatAt = &stale })
 	e.device("3", func(d *store.Device) { d.LastHeartbeatAt = &recent })
-	e.presence.set("3", now) // online in hbbs
+	e.device("4", func(d *store.Device) { d.LastHeartbeatAt = &recent }) // offline for 30 s: re-registering
+	e.device("5", func(d *store.Device) { d.LastHeartbeatAt = &recent }) // hbbs has not reported it yet
+	e.presence.set("3", now)                                             // online in hbbs
+	e.presence.mu.Lock()
+	e.presence.offline = map[string]time.Time{"1": now.Add(-5 * time.Minute), "2": now.Add(-5 * time.Minute), "4": now.Add(-30 * time.Second)}
+	e.presence.mu.Unlock()
 	_, m, _ := e.admin.do("GET", "/devices?sort=rustdesk_id", nil)
 	got := map[string]any{}
 	for _, it := range items(m) {
 		got[it["rustdesk_id"].(string)] = it["not_registered"]
 	}
-	if got["1"] != true || got["2"] != false || got["3"] != false {
+	if got["1"] != true || got["2"] != false || got["3"] != false || got["4"] != false || got["5"] != false {
 		t.Fatalf("not_registered: %v", got)
 	}
 }
