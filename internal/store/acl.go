@@ -241,24 +241,26 @@ const (
 
 // ConnectionACL is a rule in the access matrix.
 type ConnectionACL struct {
-	ID              int64     `json:"id"`
-	Name            string    `json:"name"`
-	Note            string    `json:"note"`
-	UserID          *int64    `json:"user_id"`
-	UserName        string    `json:"user_name,omitempty"`
-	UserGroupID     *int64    `json:"user_group_id"`
-	UserGroupName   string    `json:"user_group_name,omitempty"`
-	DeviceID        *int64    `json:"device_id"`
-	DeviceName      string    `json:"device_name,omitempty"`
-	DeviceGroupID   *int64    `json:"device_group_id"`
-	DeviceGroupName string    `json:"device_group_name,omitempty"`
-	ControlRoleID   *int64    `json:"control_role_id"`
-	ControlRoleName string    `json:"control_role_name,omitempty"`
-	Action          ACLAction `json:"action"`
-	Priority        int       `json:"priority"`
-	Enabled         bool      `json:"enabled"`
-	CreatedAt       time.Time `json:"created_at"`
-	UpdatedAt       time.Time `json:"updated_at"`
+	ID            int64  `json:"id"`
+	Name          string `json:"name"`
+	Note          string `json:"note"`
+	UserID        *int64 `json:"user_id"`
+	UserName      string `json:"user_name,omitempty"`
+	UserGroupID   *int64 `json:"user_group_id"`
+	UserGroupName string `json:"user_group_name,omitempty"`
+	DeviceID      *int64 `json:"device_id"`
+	DeviceName    string `json:"device_name,omitempty"`
+	// DeviceRustdeskID is the RustDesk id of DeviceID (what policy selectors use).
+	DeviceRustdeskID string    `json:"device_rustdesk_id,omitempty"`
+	DeviceGroupID    *int64    `json:"device_group_id"`
+	DeviceGroupName  string    `json:"device_group_name,omitempty"`
+	ControlRoleID    *int64    `json:"control_role_id"`
+	ControlRoleName  string    `json:"control_role_name,omitempty"`
+	Action           ACLAction `json:"action"`
+	Priority         int       `json:"priority"`
+	Enabled          bool      `json:"enabled"`
+	CreatedAt        time.Time `json:"created_at"`
+	UpdatedAt        time.Time `json:"updated_at"`
 }
 
 // ConnectionACLs repository.
@@ -275,13 +277,14 @@ func scanACL(row interface{ Scan(...any) error }) (*ConnectionACL, error) {
 		createdMs, updatedMs                         int64
 		uID, ugID, dID, dgID, crID                   sql.NullInt64
 		uName, ugName, dAlias, dHost, dgName, crName sql.NullString
+		dRustdeskID                                  sql.NullString
 	)
 	err := row.Scan(
 		&a.ID, &a.Name, &a.Note,
 		&uID, &ugID, &dID, &dgID, &crID,
 		&action, &a.Priority, &en,
 		&createdMs, &updatedMs,
-		&uName, &ugName, &dAlias, &dHost, &dgName, &crName,
+		&uName, &ugName, &dAlias, &dHost, &dgName, &crName, &dRustdeskID,
 	)
 	if err != nil {
 		return nil, mapErr(err)
@@ -312,6 +315,7 @@ func scanACL(row interface{ Scan(...any) error }) (*ConnectionACL, error) {
 	} else if dHost.Valid {
 		a.DeviceName = dHost.String
 	}
+	a.DeviceRustdeskID = dRustdeskID.String
 	if dgName.Valid {
 		a.DeviceGroupName = dgName.String
 	}
@@ -331,7 +335,7 @@ const aclJoinedCols = `
 	a.user_id, a.user_group_id, a.device_id, a.device_group_id, a.control_role_id,
 	a.action, a.priority, a.enabled,
 	a.created_at, a.updated_at,
-	u.username, ug.name, d.alias, d.hostname, dg.name, cr.name
+	u.username, ug.name, d.alias, d.hostname, dg.name, cr.name, d.rustdesk_id
 `
 
 const aclJoins = `
@@ -543,9 +547,15 @@ func (r *ConnectionACLs) ForUser(ctx context.Context, userID int64) (*UserACL, e
 
 // Decide returns the decision for a connection of the user to d.
 func (u *UserACL) Decide(d *Device) (ACLDecision, *ConnectionACL) {
+	return DecideACL(u.rules, u.Subject(d))
+}
+
+// Subject is the ACLSubject of a connection of the user to d: the user owns
+// d, or d's owner is in the user's "shared" group, for OwnerAccess.
+func (u *UserACL) Subject(d *Device) ACLSubject {
 	owner := d.OwnerUserID != nil && (*d.OwnerUserID == u.userID || u.peers[*d.OwnerUserID])
-	return DecideACL(u.rules, ACLSubject{UserID: u.userID, UserGroupID: u.groupID, DeviceID: d.ID,
-		DeviceGroupID: d.DeviceGroupID, OwnerAccess: owner})
+	return ACLSubject{UserID: u.userID, UserGroupID: u.groupID, DeviceID: d.ID, DeviceGroupID: d.DeviceGroupID,
+		OwnerAccess: owner}
 }
 
 // Evaluate checks connection permission between userID and deviceID and
