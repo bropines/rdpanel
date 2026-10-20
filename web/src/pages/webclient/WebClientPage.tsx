@@ -1,26 +1,33 @@
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate, useSearch } from "@tanstack/react-router";
 import {
+  Activity,
   ArrowLeft,
+  Ban,
+  Camera,
   ClipboardPaste,
   Command,
+  Eye,
+  FolderOpen,
   Keyboard,
   Loader2,
   Lock,
   Maximize2,
   MessageSquare,
   Minimize2,
-  MoreVertical,
+  MonitorUp,
   MousePointer2,
-  PowerOff,
+  MousePointerClick,
   RefreshCw,
   RotateCcw,
+  Scaling,
   Settings2,
   ShieldAlert,
+  ShieldCheck,
   Trash2,
   Type,
-  X,
-  Camera,
+  Volume2,
+  VolumeX,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -29,10 +36,13 @@ import {
   Session,
   Viewer,
   decodeBase64,
+  encodeBase64,
   isWebCodecsAvailable,
   type CloseInfo,
   type InputMode,
   type PeerSummary,
+  type ScaleMode,
+  type ServerConfig,
   type SessionSettings,
   type SessionState,
   type SessionStats,
@@ -41,13 +51,6 @@ import {
 import { webClientApi, type WebClientConfig, type WebClientCredentials } from "@/api/system";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox, Textarea } from "@/components/ui/misc";
@@ -64,7 +67,9 @@ import {
   type ViewPrefs,
   type WebClientPrefs,
 } from "./prefs";
+import { FilesSheet } from "./FilesSheet";
 import { SettingsSheet } from "./SettingsSheet";
+import { DEFAULT_PINNED_DESKTOP, DEFAULT_PINNED_TOUCH, Toolbar, type ActionId, type ToolbarAction } from "./Toolbar";
 
 type Search = { id?: string };
 
@@ -262,6 +267,7 @@ function RemoteSession({
   const sessionRef = useRef<Session | null>(null);
   const viewerRef = useRef<Viewer | null>(null);
   const rememberRef = useRef(false);
+  const [loginHash, setLoginHash] = useState<Uint8Array | null>(null);
 
   const [prefs, setPrefs] = useState<WebClientPrefs>(loadPrefs);
   const [state, setState] = useState<SessionState>("idle");
@@ -275,6 +281,7 @@ function RemoteSession({
   const [waiting, setWaiting] = useState(false);
   const [tfaWrong, setTfaWrong] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [filesOpen, setFilesOpen] = useState(false);
   const [fullscreen, setFullscreen] = useState(false);
   const [keyboardBar, setKeyboardBar] = useState(false);
   const [sticky, setSticky] = useState<Set<Sticky>>(new Set());
@@ -284,6 +291,15 @@ function RemoteSession({
   const [permKeyboard, setPermKeyboard] = useState(true);
   const [hasSaved, setHasSaved] = useState(() => hasRememberedHash(config.public_key, peerId));
   const inputMode: InputMode = prefs.view.inputMode ?? (isTouchFirst() ? "trackpad" : "mouse");
+  const server = useMemo<ServerConfig>(
+    () => ({
+      rendezvousUrl: wsUrl(config.rendezvous_url, "/ws/id"),
+      relayUrl: () => wsUrl(config.relay_url, "/ws/relay"),
+      key: config.public_key,
+      token: config.token ?? undefined,
+    }),
+    [config],
+  );
   const touch = inputMode !== "mouse";
 
   // Session + viewer lifecycle
@@ -307,12 +323,7 @@ function RemoteSession({
     try {
       session = new Session({
         peerId,
-        server: {
-          rendezvousUrl: wsUrl(config.rendezvous_url, "/ws/id"),
-          relayUrl: () => wsUrl(config.relay_url, "/ws/relay"),
-          key: config.public_key,
-          token: config.token ?? undefined,
-        },
+        server,
         rememberedHash: localHash ?? abHash,
         myName: config.display_name,
         myId: config.my_id || undefined,
@@ -346,6 +357,7 @@ function RemoteSession({
           saveRememberedHash(config.public_key, peerId, null);
           setHasSaved(false);
         }
+        if (wrong && abHash && !credentials?.book) void webClientApi.forget(peerId).catch(() => {});
         setDialog("password");
       }),
       session.on("waitingForApproval", () => {
@@ -357,6 +369,7 @@ function RemoteSession({
         setDialog("twoFactor");
       }),
       session.on("connected", ({ peer, rememberedHash }) => {
+        setLoginHash(rememberedHash);
         setPeer(peer);
         setCurrentDisplay(peer.currentDisplay);
         setDialog("none");
@@ -365,6 +378,8 @@ function RemoteSession({
         if (rememberedHash && rememberRef.current) {
           saveRememberedHash(config.public_key, peerId, rememberedHash);
           setHasSaved(true);
+          // the personal address book: other browsers and RustDesk apps signed in to this account
+          webClientApi.remember(peerId, encodeBase64(rememberedHash)).catch(() => toast.error(t("webclient.rememberAccountFailed")));
         }
         viewer.focus();
       }),
@@ -493,137 +508,129 @@ function RemoteSession({
 
   const title = peer?.hostname || peerId;
 
+  const displays = peer?.displays ?? [];
+  const screenshot = () =>
+    void viewerRef.current?.screenshot().then((blob) => {
+      if (!blob) return;
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = `${peerId}-${new Date().toISOString().replace(/[:.]/g, "-")}.png`;
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+    });
+  const nextScale: Record<ScaleMode, ScaleMode> = { fit: "original", original: "stretch", stretch: "fit" };
+  const nextInput: Record<InputMode, InputMode> = { mouse: "trackpad", trackpad: "touch", touch: "mouse" };
+  const off = !connected;
+  const st = prefs.settings;
+  const actions: ToolbarAction[] = [
+    { id: "settings", label: t("webclient.settings.title"), icon: Settings2, disabled: off, run: () => setSettingsOpen(true) },
+    { id: "files", label: t("webclient.files.title"), icon: FolderOpen, disabled: off || s?.permission.file === false, run: () => setFilesOpen(true) },
+    {
+      id: "keyboard",
+      label: t("webclient.keyboard.show"),
+      icon: Keyboard,
+      hidden: !touch,
+      active: keyboardBar,
+      disabled: off,
+      run: () => {
+        setKeyboardBar((v) => !v);
+        if (!keyboardBar) viewerRef.current?.showKeyboard();
+        else viewerRef.current?.hideKeyboard();
+      },
+    },
+    { id: "inputMode", label: `${t("webclient.settings.inputMode")}: ${t(`webclient.input.${inputMode}`)}`, icon: MousePointer2, disabled: off, run: () => updateView({ inputMode: nextInput[inputMode] }) },
+    { id: "viewMode", label: `${t("webclient.settings.viewStyle")}: ${t(`webclient.view.${prefs.view.scaleMode}`)}`, icon: Scaling, disabled: off, run: () => updateView({ scaleMode: nextScale[prefs.view.scaleMode] }) },
+    {
+      id: "nextDisplay",
+      label: t("webclient.toolbar.nextDisplay", { n: currentDisplay + 1, total: displays.length }),
+      icon: MonitorUp,
+      hidden: displays.length < 2,
+      disabled: off,
+      run: () => s?.switchDisplay((currentDisplay + 1) % Math.max(1, displays.length)),
+    },
+    { id: "ctrlAltDel", label: t("webclient.ctrlAltDel"), icon: Command, disabled: off || !permKeyboard || st.viewOnly, run: () => s?.ctrlAltDel() },
+    { id: "lockScreen", label: t("webclient.lockScreen"), icon: Lock, disabled: off || !permKeyboard || st.viewOnly, run: () => s?.lockScreen() },
+    { id: "refresh", label: t("webclient.refresh"), icon: RefreshCw, disabled: off, run: () => s?.refreshVideo() },
+    { id: "mute", label: t("webclient.settings.mute"), icon: st.disableAudio ? VolumeX : Volume2, active: st.disableAudio, disabled: off, run: () => updateSettings({ disableAudio: !st.disableAudio }) },
+    { id: "viewOnly", label: t("webclient.settings.viewOnly"), icon: Eye, active: st.viewOnly, disabled: off, run: () => updateSettings({ viewOnly: !st.viewOnly }) },
+    { id: "remoteCursor", label: t("webclient.settings.showRemoteCursor"), icon: MousePointerClick, active: st.showRemoteCursor, disabled: off, run: () => updateSettings({ showRemoteCursor: !st.showRemoteCursor }) },
+    { id: "stats", label: t("webclient.settings.showStats"), icon: Activity, active: prefs.view.showStats, disabled: off, run: () => updateView({ showStats: !prefs.view.showStats }) },
+    { id: "clipboard", label: t("webclient.sendClipboard"), icon: ClipboardPaste, disabled: off || !permKeyboard || st.viewOnly, run: () => setDialog("clipboard") },
+    { id: "typeText", label: t("webclient.typeText"), icon: Type, disabled: off || !permKeyboard || st.viewOnly, run: () => setDialog("type") },
+    { id: "chat", label: t("webclient.chat"), icon: MessageSquare, disabled: off, run: () => setDialog("chat") },
+    { id: "screenshot", label: t("webclient.screenshot"), icon: Camera, disabled: off, run: screenshot },
+    {
+      id: "privacy",
+      label: t("webclient.settings.privacyMode"),
+      icon: ShieldCheck,
+      hidden: !peer?.privacyModeSupported || s?.permission.privacyMode === false,
+      active: privacyOn,
+      disabled: off,
+      run: () => s?.setPrivacyMode(!privacyOn),
+    },
+    {
+      id: "blockInput",
+      label: t("webclient.settings.blockInput"),
+      icon: Ban,
+      hidden: peer?.os !== "windows" || s?.permission.blockInput === false,
+      active: blockOn,
+      disabled: off,
+      run: () => {
+        setBlockOn(!blockOn);
+        s?.setBlockInput(!blockOn);
+      },
+    },
+    {
+      id: "fullscreen",
+      label: fullscreen ? t("webclient.exitFullscreen") : t("webclient.fullscreen"),
+      icon: fullscreen ? Minimize2 : Maximize2,
+      hidden: !document.fullscreenEnabled,
+      active: fullscreen,
+      run: () => (fullscreen ? void viewerRef.current?.exitFullscreen() : void viewerRef.current?.enterFullscreen(shellRef.current ?? undefined)),
+    },
+    {
+      id: "forgetPassword",
+      label: t("webclient.forgetPassword"),
+      icon: Trash2,
+      hidden: !hasSaved && !(credentials?.hash && !credentials.book),
+      run: () => {
+        saveRememberedHash(config.public_key, peerId, null);
+        setHasSaved(false);
+        void webClientApi.forget(peerId).then(
+          () => toast.success(t("webclient.passwordCleared")),
+          () => toast.error(t("webclient.rememberAccountFailed")),
+        );
+      },
+    },
+    { id: "restart", label: t("webclient.restartRemote"), icon: RotateCcw, danger: true, hidden: s?.permission.restart === false, disabled: off, run: () => setDialog("restart") },
+  ];
+  const defaultPinned = touch ? DEFAULT_PINNED_TOUCH : DEFAULT_PINNED_DESKTOP;
+  const pinned = (prefs.toolbar.pinned as ActionId[] | null) ?? defaultPinned;
+
   return (
     <div ref={shellRef} className="fixed inset-x-0 top-0 flex h-dvh flex-col overflow-hidden bg-black text-white">
-      {/* toolbar: one row, icons only, never wider than the screen */}
-      <div className="flex h-11 shrink-0 items-center gap-1 border-b border-white/10 bg-neutral-900 px-1.5">
-        <IconBtn label={t("common.back")} onClick={onLeave}>
-          <ArrowLeft className="h-4 w-4" />
-        </IconBtn>
-        <div className="flex min-w-0 flex-1 items-center gap-2 px-1">
-          <span
-            className={cn(
-              "h-2 w-2 shrink-0 rounded-full",
-              connected ? "bg-emerald-400" : closed || error ? "bg-red-400" : "animate-pulse bg-amber-400",
-            )}
-          />
-          <div className="min-w-0">
-            <div className="truncate text-sm font-medium leading-tight">{title}</div>
-            <div className="truncate text-[11px] leading-tight text-white/60">
-              {connected && peer ? `${peerId} · ${peer.platform}` : statusText}
-            </div>
-          </div>
-        </div>
-        {connected && touch && (
-          <IconBtn
-            label={t("webclient.keyboard.show")}
-            active={keyboardBar}
-            onClick={() => {
-              setKeyboardBar((v) => !v);
-              if (!keyboardBar) viewerRef.current?.showKeyboard();
-              else viewerRef.current?.hideKeyboard();
-            }}
-          >
-            <Keyboard className="h-4 w-4" />
-          </IconBtn>
-        )}
-        {connected && (
-          <IconBtn
-            label={t(`webclient.input.${inputMode}`)}
-            onClick={() => updateView({ inputMode: inputMode === "mouse" ? "trackpad" : inputMode === "trackpad" ? "touch" : "mouse" })}
-            className={touch ? "" : "hidden sm:inline-flex"}
-          >
-            <MousePointer2 className="h-4 w-4" />
-          </IconBtn>
-        )}
-        <IconBtn label={t("webclient.settings.title")} onClick={() => setSettingsOpen(true)} disabled={!connected}>
-          <Settings2 className="h-4 w-4" />
-        </IconBtn>
-        <DropdownMenu modal={false}>
-          <DropdownMenuTrigger asChild>
-            <Button variant="ghost" size="icon" className="h-9 w-9 shrink-0 text-white hover:bg-white/10 hover:text-white" aria-label={t("webclient.actions")} disabled={!connected}>
-              <MoreVertical className="h-4 w-4" />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-60">
-            <DropdownMenuItem onSelect={() => s?.ctrlAltDel()} disabled={!permKeyboard}>
-              <Command className="mr-2 h-4 w-4" />
-              {t("webclient.ctrlAltDel")}
-            </DropdownMenuItem>
-            <DropdownMenuItem onSelect={() => s?.lockScreen()} disabled={!permKeyboard}>
-              <Lock className="mr-2 h-4 w-4" />
-              {t("webclient.lockScreen")}
-            </DropdownMenuItem>
-            <DropdownMenuItem onSelect={() => s?.refreshVideo()}>
-              <RefreshCw className="mr-2 h-4 w-4" />
-              {t("webclient.refresh")}
-            </DropdownMenuItem>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem onSelect={() => setDialog("clipboard")} disabled={!permKeyboard}>
-              <ClipboardPaste className="mr-2 h-4 w-4" />
-              {t("webclient.sendClipboard")}
-            </DropdownMenuItem>
-            <DropdownMenuItem onSelect={() => setDialog("type")} disabled={!permKeyboard}>
-              <Type className="mr-2 h-4 w-4" />
-              {t("webclient.typeText")}
-            </DropdownMenuItem>
-            <DropdownMenuItem onSelect={() => setDialog("chat")}>
-              <MessageSquare className="mr-2 h-4 w-4" />
-              {t("webclient.chat")}
-            </DropdownMenuItem>
-            <DropdownMenuItem
-              onSelect={() =>
-                void viewerRef.current?.screenshot().then((blob) => {
-                  if (!blob) return;
-                  const a = document.createElement("a");
-                  a.href = URL.createObjectURL(blob);
-                  a.download = `${peerId}-${new Date().toISOString().replace(/[:.]/g, "-")}.png`;
-                  a.click();
-                  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
-                })
-              }
-            >
-              <Camera className="mr-2 h-4 w-4" />
-              {t("webclient.screenshot")}
-            </DropdownMenuItem>
-            <DropdownMenuSeparator />
-            {hasSaved && (
-              <DropdownMenuItem
-                onSelect={() => {
-                  saveRememberedHash(config.public_key, peerId, null);
-                  setHasSaved(false);
-                  toast.success(t("webclient.passwordCleared"));
-                }}
-              >
-                <Trash2 className="mr-2 h-4 w-4" />
-                {t("webclient.forgetPassword")}
-              </DropdownMenuItem>
-            )}
-            {s?.permission.restart !== false && (
-              <DropdownMenuItem onSelect={() => setDialog("restart")} className="text-destructive">
-                <RotateCcw className="mr-2 h-4 w-4" />
-                {t("webclient.restartRemote")}
-              </DropdownMenuItem>
-            )}
-          </DropdownMenuContent>
-        </DropdownMenu>
-        {document.fullscreenEnabled && (
-          <IconBtn
-            label={fullscreen ? t("webclient.exitFullscreen") : t("webclient.fullscreen")}
-            onClick={() => (fullscreen ? void viewerRef.current?.exitFullscreen() : void viewerRef.current?.enterFullscreen(shellRef.current ?? undefined))}
-            className="hidden sm:inline-flex"
-          >
-            {fullscreen ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
-          </IconBtn>
-        )}
-        <IconBtn label={t("webclient.disconnect")} onClick={() => (closed || error ? onLeave() : s?.close())} className="text-red-300">
-          {closed || error ? <X className="h-4 w-4" /> : <PowerOff className="h-4 w-4" />}
-        </IconBtn>
-      </div>
-
+      {/* the floating toolbar overlays the screen (positioned in the screen box below) */}
       {/* screen */}
       <div className="relative min-h-0 flex-1">
         <div ref={screenRef} className="absolute inset-0" />
+        <Toolbar
+          actions={actions}
+          pinned={pinned}
+          onPinned={(ids) => setPrefs((p) => ({ ...p, toolbar: { ...p.toolbar, pinned: ids } }))}
+          defaultPinned={defaultPinned}
+          keepOpen={prefs.toolbar.keepOpen}
+          onKeepOpen={(v) => setPrefs((p) => ({ ...p, toolbar: { ...p.toolbar, keepOpen: v } }))}
+          position={prefs.toolbar.position}
+          onPosition={(x) => setPrefs((p) => ({ ...p, toolbar: { ...p.toolbar, position: x } }))}
+          title={title}
+          subtitle={connected && peer ? `${peerId} · ${peer.platform}` : statusText}
+          status={connected ? "ok" : closed || error ? "error" : "busy"}
+          canCollapse={connected && !settingsOpen && !filesOpen && dialog === "none"}
+          onDisconnect={() => s?.close()}
+          onLeave={onLeave}
+          ended={!!(closed || error)}
+        />
+
         {prefs.view.showStats && stats && connected && (
           <div className="pointer-events-none absolute left-2 top-2 rounded bg-black/70 px-2 py-1 font-mono text-[11px] leading-snug text-white/90">
             <div>
@@ -685,6 +692,15 @@ function RemoteSession({
         </div>
       )}
 
+      <FilesSheet
+        open={filesOpen}
+        onOpenChange={setFilesOpen}
+        peerId={peerId}
+        server={server}
+        rememberedHash={loginHash}
+        myName={config.display_name}
+        myId={config.my_id || undefined}
+      />
       <SettingsSheet
         open={settingsOpen}
         onOpenChange={setSettingsOpen}
@@ -793,23 +809,6 @@ function RemoteSession({
   );
 }
 
-function IconBtn({ label, children, onClick, disabled, active, className }: { label: string; children: React.ReactNode; onClick: () => void; disabled?: boolean; active?: boolean; className?: string }) {
-  return (
-    <Button
-      variant="ghost"
-      size="icon"
-      title={label}
-      aria-label={label}
-      aria-pressed={active}
-      onClick={onClick}
-      disabled={disabled}
-      className={cn("h-9 w-9 shrink-0 text-white hover:bg-white/10 hover:text-white", active && "bg-white/15", className)}
-    >
-      {children}
-    </Button>
-  );
-}
-
 function KeyBtn({ children, onClick, active }: { children: React.ReactNode; onClick: () => void; active?: boolean }) {
   return (
     <button
@@ -878,9 +877,12 @@ function PasswordDialog({
             autoFocus
             aria-label={t("webclient.passwordPlaceholder")}
           />
-          <label className="flex items-center gap-2 text-sm">
-            <Checkbox checked={remember} onCheckedChange={(v) => setRemember(v === true)} />
-            <span>{t("webclient.rememberPassword")}</span>
+          <label className="flex items-start gap-2 text-sm">
+            <Checkbox className="mt-0.5" checked={remember} onCheckedChange={(v) => setRemember(v === true)} />
+            <span>
+              {t("webclient.rememberPassword")}
+              <span className="block text-xs text-muted-foreground">{t("webclient.rememberHint")}</span>
+            </span>
           </label>
           <DialogFooter className="gap-2">
             <Button type="button" variant="outline" onClick={onCancel}>

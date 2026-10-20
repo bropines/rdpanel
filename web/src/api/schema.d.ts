@@ -936,9 +936,16 @@ export interface paths {
          *     saved. 404 when the web client is off or not offered to the caller.
          */
         get: operations["getWebClientCredentials"];
-        put?: never;
+        /**
+         * Remember a device's password hash in the caller's personal address book.
+         * @description Stores the salted hash (base64 of SHA256(password + salt), 32 bytes) the way the desktop client's address book
+         *     does, so the web client and RustDesk apps signed in to this account log in without asking. The entry is created
+         *     if the device is not in the book yet.
+         */
+        put: operations["rememberWebClientCredentials"];
         post?: never;
-        delete?: never;
+        /** Forget a remembered password hash (personal address book). */
+        delete: operations["forgetWebClientCredentials"];
         options?: never;
         head?: never;
         patch?: never;
@@ -3562,6 +3569,10 @@ export interface components {
             commit?: string;
             build_date?: string;
             go?: string;
+        };
+        WebClientRemember: {
+            /** @description Base64 of the 32-byte SHA256(password + salt) */
+            hash: string;
         };
         WebClientCredentials: {
             /** @description Base64 SHA256(password + salt) from the personal address book */
@@ -6447,6 +6458,55 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["WebClientCredentials"];
                 };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    rememberWebClientCredentials: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                peer: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["WebClientRemember"];
+            };
+        };
+        responses: {
+            /** @description Stored. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    forgetWebClientCredentials: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                peer: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Cleared (or nothing was stored). */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             401: components["responses"]["Unauthorized"];
             404: components["responses"]["NotFound"];

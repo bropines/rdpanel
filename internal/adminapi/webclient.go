@@ -1,6 +1,7 @@
 package adminapi
 
 import (
+	"encoding/base64"
 	"log/slog"
 	"net/http"
 	"os"
@@ -10,6 +11,7 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"github.com/bropines/rdpanel/internal/httpx"
+	"github.com/bropines/rdpanel/internal/store"
 )
 
 // webClientTokenLifetime bounds the hbbs login token handed to the browser:
@@ -31,6 +33,80 @@ type webClientConfigDTO struct {
 func (c *b2bCore) registerWebClient(r chi.Router) {
 	r.With(RequireUser).Get("/webclient/config", c.handleWebClientConfig)
 	r.With(RequireUser).Get("/webclient/credentials/{peer}", c.handleWebClientCredentials)
+	r.With(RequireUser).Put("/webclient/credentials/{peer}", c.handleWebClientRemember)
+	r.With(RequireUser).Delete("/webclient/credentials/{peer}", c.handleWebClientForget)
+}
+
+// webClientRememberDTO is components.schemas.WebClientRemember.
+type webClientRememberDTO struct {
+	Hash string `json:"hash"`
+}
+
+func (c *b2bCore) webClientAllowed(w http.ResponseWriter, r *http.Request) (string, bool) {
+	user := CurrentUser(r.Context())
+	if cfg := c.d.Config; cfg != nil && (!cfg.WebClient.Enabled || (cfg.WebClient.AdminOnly && !user.IsAdmin())) {
+		httpx.WriteError(w, http.StatusNotFound, "not_found", "web client is not available")
+		return "", false
+	}
+	peer := strings.Join(strings.Fields(chi.URLParam(r, "peer")), "")
+	if peer == "" || len(peer) > 64 {
+		httpx.WriteError(w, http.StatusBadRequest, "invalid_peer", "invalid device id")
+		return "", false
+	}
+	return peer, true
+}
+
+// handleWebClientRemember stores the device's salted password hash in the
+// caller's personal address book, where signed-in desktop clients look for
+// it too (the address book's "remember password").
+func (c *b2bCore) handleWebClientRemember(w http.ResponseWriter, r *http.Request) {
+	peer, ok := c.webClientAllowed(w, r)
+	if !ok {
+		return
+	}
+	var in webClientRememberDTO
+	if !decodeBody(w, r, &in, 1<<12) {
+		return
+	}
+	raw, err := base64.StdEncoding.DecodeString(in.Hash)
+	if err != nil || len(raw) != 32 {
+		httpx.WriteError(w, http.StatusBadRequest, "invalid_hash", "hash must be base64 of 32 bytes")
+		return
+	}
+	ctx := r.Context()
+	user := CurrentUser(ctx)
+	book, err := c.d.Store.AddressBooks.EnsurePersonal(ctx, user.ID)
+	if err != nil {
+		internalError(w)
+		return
+	}
+	hash := in.Hash
+	if _, err := c.d.Store.AddressBooks.UpsertEntry(ctx, book.ID, peer, store.ABEntryPatch{Hash: &hash}); err != nil {
+		internalError(w)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// handleWebClientForget clears a remembered hash (personal book only).
+func (c *b2bCore) handleWebClientForget(w http.ResponseWriter, r *http.Request) {
+	peer, ok := c.webClientAllowed(w, r)
+	if !ok {
+		return
+	}
+	ctx := r.Context()
+	user := CurrentUser(ctx)
+	book, err := c.d.Store.AddressBooks.GetPersonal(ctx, user.ID)
+	if err == nil {
+		if _, err := c.d.Store.AddressBooks.GetEntry(ctx, book.ID, peer); err == nil {
+			empty := ""
+			if err := c.d.Store.AddressBooks.PatchEntry(ctx, book.ID, peer, store.ABEntryPatch{Hash: &empty}); err != nil {
+				internalError(w)
+				return
+			}
+		}
+	}
+	w.WriteHeader(http.StatusNoContent)
 }
 
 // webClientCredentialsDTO is components.schemas.WebClientCredentials.

@@ -19,6 +19,9 @@ export type WebClientCredentials = Schemas["WebClientCredentials"];
 export const webClientApi = {
   config: () => api.request<WebClientConfig>("/webclient/config"),
   credentials: (peer: string) => api.request<WebClientCredentials>(`/webclient/credentials/${encodeURIComponent(peer)}`),
+  remember: (peer: string, hash: string) =>
+    api.request<void>(`/webclient/credentials/${encodeURIComponent(peer)}`, { method: "PUT", body: { hash } }),
+  forget: (peer: string) => api.request<void>(`/webclient/credentials/${encodeURIComponent(peer)}`, { method: "DELETE" }),
 };
 
 /* ── About ────────────────────────────────────────────────────────────── */

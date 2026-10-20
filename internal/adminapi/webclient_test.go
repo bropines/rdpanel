@@ -119,3 +119,34 @@ func TestWebClientCredentials(t *testing.T) {
 		t.Fatalf("anonymous: %d", code)
 	}
 }
+
+func TestWebClientRememberInAccount(t *testing.T) {
+	e := newB2Env(t, b2opts{})
+	ctx := context.Background()
+	bobC, bob := e.as("bob", store.RoleUser)
+	hash := "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=" // 32 bytes
+
+	if code, _, _ := bobC.do(http.MethodPut, "/webclient/credentials/123456789", map[string]any{"hash": "c2hvcnQ="}); code != http.StatusBadRequest {
+		t.Fatalf("short hash: %d", code)
+	}
+	if code, _, _ := bobC.do(http.MethodPut, "/webclient/credentials/123456789", map[string]any{"hash": hash}); code != http.StatusNoContent {
+		t.Fatalf("remember: %d", code)
+	}
+	// stored in the personal book, where desktop clients read it too
+	book, err := e.st.AddressBooks.GetPersonal(ctx, bob.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if en, err := e.st.AddressBooks.GetEntry(ctx, book.ID, "123456789"); err != nil || en.Hash != hash {
+		t.Fatalf("entry: %+v %v", en, err)
+	}
+	if _, m, _ := bobC.do(http.MethodGet, "/webclient/credentials/123456789", nil); m["hash"] != hash {
+		t.Fatalf("read back: %v", m)
+	}
+	if code, _, _ := bobC.do(http.MethodDelete, "/webclient/credentials/123456789", nil); code != http.StatusNoContent {
+		t.Fatalf("forget: %d", code)
+	}
+	if _, m, _ := bobC.do(http.MethodGet, "/webclient/credentials/123456789", nil); m["hash"] != nil {
+		t.Fatalf("after forget: %v", m)
+	}
+}
