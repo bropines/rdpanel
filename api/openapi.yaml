@@ -95,6 +95,7 @@ tags:
   - name: audit
   - name: server
   - name: relays
+  - name: federation
   - name: strategies
   - name: settings
   - name: lookup
@@ -3309,10 +3310,16 @@ paths:
                 items: { $ref: "#/components/schemas/FederationPeer" }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "403": { $ref: "#/components/responses/Forbidden" }
+        "503": { $ref: "#/components/responses/FederationDisabled" }
     post:
       tags: [federation]
       operationId: createFederationPeer
       summary: Register a new peer RD Panel.
+      description: >-
+        Stores the peer and the token this panel presents to it (AEAD-encrypted,
+        never returned), then starts a first sync in the background. Unless
+        Relays -> Options -> allow private hosts is on, api_url must not point at a
+        private, loopback or link-local address.
       parameters:
         - $ref: "#/components/parameters/CsrfHeader"
       requestBody:
@@ -3329,6 +3336,7 @@ paths:
         "400": { $ref: "#/components/responses/ValidationFailed" }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "403": { $ref: "#/components/responses/Forbidden" }
+        "503": { $ref: "#/components/responses/FederationDisabled" }
         "409": { $ref: "#/components/responses/Conflict" }
   /federation/peers/{id}:
     parameters:
@@ -3347,6 +3355,7 @@ paths:
           description: Peer deleted.
         "401": { $ref: "#/components/responses/Unauthorized" }
         "403": { $ref: "#/components/responses/Forbidden" }
+        "503": { $ref: "#/components/responses/FederationDisabled" }
         "404": { $ref: "#/components/responses/NotFound" }
   /federation/peers/{id}/sync:
     parameters:
@@ -3368,13 +3377,23 @@ paths:
               schema: { $ref: "#/components/schemas/FederationPeer" }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "403": { $ref: "#/components/responses/Forbidden" }
+        "503": { $ref: "#/components/responses/FederationDisabled" }
         "404": { $ref: "#/components/responses/NotFound" }
-        "502": { $ref: "#/components/responses/BadGateway" }
+        "502":
+          description: >-
+            Sync failed (error code sync_failed); the message is the short reason
+            also stored as the peer's last_error.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
   /federation/relays:
     get:
       tags: [federation]
       operationId: listFederatedRelays
       summary: List all relays announced by peered panels.
+      description: >-
+        Relays announced by active peers, imported for visibility only: they are
+        not added to this panel's hbbs relay rotation.
       responses:
         "200":
           description: List of announced relays.
@@ -3385,6 +3404,7 @@ paths:
                 items: { $ref: "#/components/schemas/FederatedRelay" }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "403": { $ref: "#/components/responses/Forbidden" }
+        "503": { $ref: "#/components/responses/FederationDisabled" }
         "404": { $ref: "#/components/responses/NotFound" }
   /relays/{id}:
     parameters:
@@ -4011,6 +4031,13 @@ components:
   responses:
     Unavailable:
       description: hbbs/hbbr unreachable (error code `server_unavailable`).
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    FederationDisabled:
+      description: >-
+        Federation is off (error code federation_disabled); enable it with
+        RDPANEL_FEDERATION_ENABLED=true and RDPANEL_FEDERATION_TOKEN.
       content:
         application/json:
           schema: { $ref: "#/components/schemas/Error" }
@@ -5980,8 +6007,9 @@ components:
         status:
           type: string
           enum: [unknown, active, unreachable]
+          description: "unreachable: the last sync failed (unreachable, token rejected or invalid answer); see last_error."
         last_sync_at: { type: string, format: date-time, nullable: true }
-        last_error: { type: string, nullable: true }
+        last_error: { type: string, nullable: true, description: Short reason of the last failed sync (no URLs or network errors). }
         created_at: { type: string, format: date-time }
         updated_at: { type: string, format: date-time }
     CreateFederationPeerInput:
@@ -5990,8 +6018,13 @@ components:
       properties:
         name: { type: string }
         api_url: { type: string }
-        auth_token: { type: string }
-        sync_relays: { type: boolean, default: true }
+        auth_token:
+          type: string
+          minLength: 16
+          description: >-
+            The peer panel's RDPANEL_FEDERATION_TOKEN (not an admin API token).
+            Stored encrypted and sent as a Bearer token on every sync.
+        sync_relays: { type: boolean, default: true, description: Import the relays the peer announces (listed for visibility only). }
     FederatedRelay:
       type: object
       required: [id, peer_id, remote_name, public_host, health, last_sync_at]

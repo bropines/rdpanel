@@ -6,6 +6,7 @@ import { QueryClientProvider } from "@tanstack/react-query";
 import { createMemoryHistory, RouterProvider } from "@tanstack/react-router";
 import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { http, HttpResponse } from "msw";
 import { setupServer } from "msw/node";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -284,6 +285,35 @@ describe("server → relays", () => {
     await user.click(screen.getByRole("button", { name: "Country preset" }));
     await user.click(screen.getByRole("button", { name: "Import country prefixes" }));
     expect(await screen.findByText("95.165.0.0/16")).toBeInTheDocument();
+  });
+});
+
+describe("server → federation", () => {
+  beforeEach(() => loginAs(1));
+
+  it("labels imported relays as visibility only and asks for the peer's federation token", async () => {
+    const user = userEvent.setup();
+    renderApp("/server?tab=federation");
+    expect((await screen.findAllByText("ams-eu-panel", undefined, { timeout: 5000 })).length).toBeGreaterThan(0);
+    expect(screen.getByText(/for visibility only: they are not added to this panel's relay rotation/)).toBeInTheDocument();
+    expect(screen.getByText("Sync failed")).toBeInTheDocument();
+    expect(screen.getByText("peer unreachable")).toBeInTheDocument();
+    await user.click(screen.getAllByRole("button", { name: "Add peer" })[0]!);
+    const dialog = await screen.findByRole("dialog");
+    const token = within(dialog).getByLabelText("Peer federation token");
+    expect(token).toHaveAttribute("placeholder", "The peer's RDPANEL_FEDERATION_TOKEN");
+    expect(within(dialog).getByText(/It is not an admin API token/)).toBeInTheDocument();
+  });
+
+  it("explains how to enable federation when it is off", async () => {
+    server.use(
+      http.get("/api/v1/admin/federation/peers", () =>
+        HttpResponse.json({ error: { code: "federation_disabled", message: "federation is disabled" } }, { status: 503 }),
+      ),
+    );
+    renderApp("/server?tab=federation");
+    expect(await screen.findByText("Federation is off", undefined, { timeout: 5000 })).toBeInTheDocument();
+    expect(screen.getByText(/RDPANEL_FEDERATION_ENABLED=true/)).toBeInTheDocument();
   });
 });
 

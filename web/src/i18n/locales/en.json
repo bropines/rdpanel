@@ -1458,27 +1458,27 @@
   },
   "federation": {
     "title": "Panel Federation",
-    "description": "Federate with peer RD Panels to discover distributed relays and bridge infrastructure across geographic regions.",
+    "description": "Federate with peer RD Panels to see the relays they run. Opt-in: enable it with RDPANEL_FEDERATION_ENABLED and RDPANEL_FEDERATION_TOKEN.",
     "peers": {
       "title": "Peered Panels",
       "description": "Registered RD Panel instances synchronized on a recurring schedule.",
       "add": "Add peer",
       "name": "Name",
       "apiUrl": "API URL",
-      "authToken": "Auth token",
+      "authToken": "Peer federation token",
       "syncRelays": "Sync relays",
-      "syncRelaysDesc": "Automatically import healthy relays announced by this peer into local rotation.",
+      "syncRelaysDesc": "Import the relays this peer announces. They are listed below for visibility only and are not added to this panel's relay rotation.",
       "status": "Status",
       "lastSync": "Last sync",
       "syncNow": "Sync now",
       "syncing": "Syncing...",
       "deleteTitle": "Remove peer \"{{name}}\"?",
-      "deleteHint": "All announced relays from this peer will be removed from local rotation.",
+      "deleteHint": "The relays imported from this peer are removed from the list. The peer itself is not changed.",
       "empty": "No peered panels registered yet. Add a peer to begin discovering external relays."
     },
     "relays": {
       "title": "Announced Federated Relays",
-      "description": "Relays exported by active peered RD Panels and available for client routing.",
+      "description": "Relays announced by active peers, for visibility only: they are not added to this panel's relay rotation.",
       "remoteName": "Relay Name",
       "publicHost": "Public Host",
       "peer": "Origin Peer",
@@ -1489,21 +1489,26 @@
     },
     "status": {
       "active": "Active",
-      "unreachable": "Unreachable",
+      "unreachable": "Sync failed",
       "unknown": "Unknown"
     },
     "addDialog": {
       "title": "Register Peered Panel",
-      "description": "Enter the URL and authentication token of the remote RD Panel.",
+      "description": "Enter the address of the remote RD Panel and the federation token configured there.",
       "namePlaceholder": "e.g. ams-eu-panel",
       "urlPlaceholder": "https://rdpanel.example.com",
-      "tokenPlaceholder": "Bearer token or API token",
-      "submit": "Register peer"
+      "tokenPlaceholder": "The peer's RDPANEL_FEDERATION_TOKEN",
+      "submit": "Register peer",
+      "tokenHint": "Ask the peer's operator for the value of RDPANEL_FEDERATION_TOKEN on that panel (at least 16 characters). It is not an admin API token. Stored encrypted."
     },
     "toasts": {
       "peerAdded": "Peer registered successfully.",
       "peerDeleted": "Peer removed.",
       "syncSuccess": "Peer synchronized successfully."
+    },
+    "disabled": {
+      "title": "Federation is off",
+      "description": "Federation is opt-in. Set RDPANEL_FEDERATION_ENABLED=true and RDPANEL_FEDERATION_TOKEN (at least 16 random characters, given to the panels allowed to read this one) and restart the panel."
     }
   },
   "apiDocs": {

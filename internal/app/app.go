@@ -65,7 +65,8 @@ type App struct {
 	// Relays manages relays (local, static, agents), the computed hbbs relay
 	// list and the agent hub at /agent/v1/*.
 	Relays *relays.Service
-	// Federation manages peer panels and federated relays.
+	// Federation manages peer panels and federated relays (nil unless
+	// RDPANEL_FEDERATION_ENABLED: no public endpoints, no sync loop).
 	Federation *federation.Service
 	// Kicks queues admin "disconnect" requests delivered by client heartbeats;
 	// shared by the client API (Take) and the admin API (Kick).
@@ -219,15 +220,28 @@ func keyFileAttr(src crypto.KeySource, path string) string {
 	return path
 }
 
+// initFederation builds the federation service when it is enabled; its sync
+// loop runs as a worker (startWorkers) and its public endpoints are mounted
+// by Handler.
 func (a *App) initFederation() {
-	st := &federation.Store{DB: a.DB}
+	cfg := a.Config.Federation
+	if !cfg.Enabled {
+		return
+	}
 	a.Federation = federation.NewService(federation.Config{
-		Store:   st,
-		Relays:  a.Relays,
-		Version: buildinfo.Get().Version,
-		Log:     a.Log.With("component", "federation"),
+		Store:        &federation.Store{DB: a.DB, AEAD: a.AEAD},
+		Relays:       a.Relays,
+		Version:      buildinfo.Get().Version,
+		Log:          a.Log.With("component", "federation"),
+		InboundToken: cfg.Token.Reveal(),
+		AllowPrivate: func(ctx context.Context) bool {
+			if a.Relays == nil {
+				return false
+			}
+			o, err := a.Relays.GetOptions(ctx)
+			return err == nil && o.AllowPrivateHosts
+		},
 	})
-	a.Federation.Start(context.Background())
 }
 
 // Close releases resources.

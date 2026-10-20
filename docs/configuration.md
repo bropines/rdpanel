@@ -93,6 +93,15 @@ See [deploy.md → Passkeys](deploy.md#passkeys) for how the RP id and origins a
 | `RDPANEL_WEBHOOK_URL` (`webhook.url`) | empty | HTTP/HTTPS endpoint for critical alerts (relay degraded/offline, hbbs down); empty = disabled. Logs show only its scheme and host ([webhooks](#webhooks)) |
 | `RDPANEL_WEBHOOK_SECRET` (`webhook.secret`) | empty | optional HMAC-SHA256 secret: requests are signed over timestamp and body (`X-RDPanel-Timestamp`, `X-Signature-256`; [verifying](#webhooks)) |
 
+### Federation
+
+Off by default; see [deploy.md → Panel federation](deploy.md#panel-federation).
+
+| variable (yaml key) | default | description |
+|---|---|---|
+| `RDPANEL_FEDERATION_ENABLED` (`federation.enabled`) | `false` | serve `/api/v1/federation/{health,relays}` to peer panels and sync the peers registered in Server → Federation; when off, those endpoints do not exist and nothing is synced |
+| `RDPANEL_FEDERATION_TOKEN` (`federation.token`) | — | bearer token peer panels must present to this panel (at least 16 characters, required when enabled); give it only to the panels allowed to read this one |
+
 ### E-mail (SMTP)
 
 Leave `RDPANEL_SMTP_HOST` empty to configure e-mail in **Settings → E-mail** instead (or

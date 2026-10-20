@@ -297,6 +297,11 @@ Desired hbbs/hbbr runtime state re-applied by the reconciler. PK (`target`, `key
 Panel key/value settings (`key` PK, `value` JSON, `updated_by`, `updated_at`).
 Well-known keys are constants in `internal/store/settings.go`.
 
+`federation.peer.<peer id>.token` holds the token sent to a federation peer as
+`{"token_enc": ...}` (AEAD, AD `settings.federation_peer_token:<peer id>`); it is
+written and deleted together with the `federation_peers` row, whose `token_hash` only
+keeps the token's SHA-256.
+
 Keys written by `PATCH /settings` are constants in `internal/store/panel.go`
 (`panel.public_url`, `branding.*`, `auth.*`, `retention.*_days`, `rate_limits.*`,
 `http.trusted_proxies`); unset keys fall back to the configuration / built-in defaults.

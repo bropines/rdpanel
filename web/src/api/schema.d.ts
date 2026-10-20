@@ -2404,7 +2404,10 @@ export interface paths {
         /** List all registered peer RD Panels. */
         get: operations["listFederationPeers"];
         put?: never;
-        /** Register a new peer RD Panel. */
+        /**
+         * Register a new peer RD Panel.
+         * @description Stores the peer and the token this panel presents to it (AEAD-encrypted, never returned), then starts a first sync in the background. Unless Relays -> Options -> allow private hosts is on, api_url must not point at a private, loopback or link-local address.
+         */
         post: operations["createFederationPeer"];
         delete?: never;
         options?: never;
@@ -2457,7 +2460,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** List all relays announced by peered panels. */
+        /**
+         * List all relays announced by peered panels.
+         * @description Relays announced by active peers, imported for visibility only: they are not added to this panel's hbbs relay rotation.
+         */
         get: operations["listFederatedRelays"];
         put?: never;
         post?: never;
@@ -4588,10 +4594,14 @@ export interface components {
             name: string;
             api_url: string;
             sync_relays: boolean;
-            /** @enum {string} */
+            /**
+             * @description unreachable: the last sync failed (unreachable, token rejected or invalid answer); see last_error.
+             * @enum {string}
+             */
             status: "unknown" | "active" | "unreachable";
             /** Format: date-time */
             last_sync_at?: string | null;
+            /** @description Short reason of the last failed sync (no URLs or network errors). */
             last_error?: string | null;
             /** Format: date-time */
             created_at: string;
@@ -4601,8 +4611,12 @@ export interface components {
         CreateFederationPeerInput: {
             name: string;
             api_url: string;
+            /** @description The peer panel's RDPANEL_FEDERATION_TOKEN (not an admin API token). Stored encrypted and sent as a Bearer token on every sync. */
             auth_token: string;
-            /** @default true */
+            /**
+             * @description Import the relays the peer announces (listed for visibility only).
+             * @default true
+             */
             sync_relays: boolean;
         };
         FederatedRelay: {
@@ -4817,6 +4831,15 @@ export interface components {
     responses: {
         /** @description hbbs/hbbr unreachable (error code `server_unavailable`). */
         Unavailable: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["Error"];
+            };
+        };
+        /** @description Federation is off (error code federation_disabled); enable it with RDPANEL_FEDERATION_ENABLED=true and RDPANEL_FEDERATION_TOKEN. */
+        FederationDisabled: {
             headers: {
                 [name: string]: unknown;
             };
@@ -9581,6 +9604,7 @@ export interface operations {
             };
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
+            503: components["responses"]["FederationDisabled"];
         };
     };
     createFederationPeer: {
@@ -9612,6 +9636,7 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             409: components["responses"]["Conflict"];
+            503: components["responses"]["FederationDisabled"];
         };
     };
     deleteFederationPeer: {
@@ -9638,6 +9663,7 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
+            503: components["responses"]["FederationDisabled"];
         };
     };
     syncFederationPeer: {
@@ -9666,7 +9692,16 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
-            502: components["responses"]["BadGateway"];
+            /** @description Sync failed (error code sync_failed); the message is the short reason also stored as the peer's last_error. */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            503: components["responses"]["FederationDisabled"];
         };
     };
     listFederatedRelays: {
@@ -9690,6 +9725,7 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
+            503: components["responses"]["FederationDisabled"];
         };
     };
     getRelay: {

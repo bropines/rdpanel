@@ -46,7 +46,7 @@ func (a *App) initLogs() {
 	cfg := a.Config
 	secrets := []string{
 		cfg.SecretKey.Reveal(), cfg.Auth.JWTKey.Reveal(), cfg.SMTP.Password.Reveal(),
-		cfg.Webhook.Secret.Reveal(),
+		cfg.Webhook.Secret.Reveal(), cfg.Federation.Token.Reveal(),
 	}
 	// Webhook URLs (Slack, Teams, ...) carry their token in the path or query.
 	secrets = append(secrets, webhookURLSecrets(cfg.Webhook.URL)...)

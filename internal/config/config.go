@@ -59,14 +59,31 @@ type Config struct {
 	// "public" (readable without login) or "off" (404).
 	APIDocs string `yaml:"api_docs"`
 
-	Auth     AuthConfig     `yaml:"auth"`
-	WebAuthn WebAuthnConfig `yaml:"webauthn"`
-	HTTP     HTTPConfig     `yaml:"http"`
-	HBBS     HBBSConfig     `yaml:"hbbs"`
-	Log      LogConfig      `yaml:"log"`
-	Logs     LogsConfig     `yaml:"logs"`
-	SMTP     SMTPConfig     `yaml:"smtp"`
-	Webhook  WebhookConfig  `yaml:"webhook"`
+	Auth       AuthConfig       `yaml:"auth"`
+	WebAuthn   WebAuthnConfig   `yaml:"webauthn"`
+	HTTP       HTTPConfig       `yaml:"http"`
+	HBBS       HBBSConfig       `yaml:"hbbs"`
+	Log        LogConfig        `yaml:"log"`
+	Logs       LogsConfig       `yaml:"logs"`
+	SMTP       SMTPConfig       `yaml:"smtp"`
+	Webhook    WebhookConfig    `yaml:"webhook"`
+	Federation FederationConfig `yaml:"federation"`
+}
+
+// MinFederationTokenLen is the shortest accepted federation token.
+const MinFederationTokenLen = 16
+
+// FederationConfig controls panel federation (Server -> Federation). Off by
+// default: when off, /api/v1/federation/* is not served and no peer is synced.
+type FederationConfig struct {
+	// Enabled serves /api/v1/federation/{health,relays} to peer panels and
+	// runs the peer sync loop.
+	Enabled bool `yaml:"enabled"`
+	// Token is the bearer token peer panels must present to this panel's
+	// federation endpoints (at least MinFederationTokenLen characters;
+	// required when Enabled). Peers store it as their "auth token" for this
+	// panel.
+	Token Secret `yaml:"token"`
 }
 
 // WebhookConfig specifies an optional webhook endpoint for critical alerts.
@@ -436,6 +453,8 @@ func (c *Config) envVars() []envVar {
 		{"RDPANEL_SMTP_INSECURE_SKIP_VERIFY", boolean(&c.SMTP.InsecureSkipVerify)},
 		{"RDPANEL_WEBHOOK_URL", str(&c.Webhook.URL)},
 		{"RDPANEL_WEBHOOK_SECRET", sec(&c.Webhook.Secret)},
+		{"RDPANEL_FEDERATION_ENABLED", boolean(&c.Federation.Enabled)},
+		{"RDPANEL_FEDERATION_TOKEN", sec(&c.Federation.Token)},
 	}
 }
 
@@ -651,6 +670,12 @@ func (c *Config) Validate() error {
 		u, err := url.ParseRequestURI(c.Webhook.URL)
 		if err != nil || (u.Scheme != "http" && u.Scheme != "https") {
 			add("webhook.url %q: must be an http or https URL", c.Webhook.URL)
+		}
+	}
+	if c.Federation.Enabled {
+		if tok := c.Federation.Token.Reveal(); strings.TrimSpace(tok) != tok || len(tok) < MinFederationTokenLen {
+			add("federation.token (RDPANEL_FEDERATION_TOKEN) must be at least %d characters without surrounding spaces when federation is enabled",
+				MinFederationTokenLen)
 		}
 	}
 	if len(errs) > 0 {
