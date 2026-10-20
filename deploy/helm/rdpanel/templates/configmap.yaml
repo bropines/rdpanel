@@ -32,6 +32,8 @@ data:
   RDPANEL_HBBS_PUBLIC_KEY_FILE: {{ $p.hbbsPublicKeyFile | quote }}
   RDPANEL_HBBS_ID_SERVER: {{ $p.hbbsIdServer | quote }}
   RDPANEL_HBBS_RELAY_SERVER: {{ $p.hbbsRelayServer | quote }}
+  # Read by the panel and by the hbbs run script (AUTHZ_URL / AUTHZ_SECRET_FILE).
+  RDPANEL_HBBS_AUTHZ: {{ ternary "true" "false" (ne $p.hbbsAuthz false) | quote }}
   RDPANEL_TRUSTED_PROXIES: {{ join "," $p.trustedProxies | quote }}
   RDPANEL_REAL_IP_HEADER: {{ $p.realIPHeader | quote }}
   RDPANEL_METRICS_ALLOW: {{ join "," $p.metricsAllow | quote }}

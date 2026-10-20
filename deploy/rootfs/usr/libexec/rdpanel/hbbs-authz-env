@@ -1,0 +1,48 @@
+#!/bin/sh
+# Sourced by the hbbs run script (". /usr/libexec/rdpanel/hbbs-authz-env"):
+# points hbbs at the panel's connection authorization endpoint, so hbbs asks
+# the panel before every punch-hole / relay request whether the connection
+# may start and which control permissions it gets (docs/acl-policy.md).
+#
+# Exports, unless already set by the operator:
+#   AUTHZ_SECRET_FILE  RDPANEL_HBBS_AUTHZ_SECRET_FILE, default
+#                      $RDPANEL_DATA_DIR/hbbs-authz.key (created by key-secret)
+#   AUTHZ_URL          http://<loopback>:<port of RDPANEL_LISTEN>/internal/hbbs/authorize
+#                      ":21114", "0.0.0.0:21114", "[::]:21114", "localhost:21114"
+#                      -> 127.0.0.1:21114; "127.0.0.1:31114" and "[::1]:21114"
+#                      are used as given. The endpoint only answers loopback
+#                      peers, so a panel bound to another address gets no
+#                      AUTHZ_URL (with a warning).
+# Nothing is exported with RDPANEL_HBBS_AUTHZ=false (same spellings as the
+# panel's boolean parser) or on relay hosts (RDPANEL_MODE=agent).
+rdpanel_hbbs_authz_env() {
+	[ "${RDPANEL_MODE:-panel}" = panel ] || return 0
+	case "${RDPANEL_HBBS_AUTHZ:-true}" in
+		0 | f | F | false | FALSE | False) return 0 ;;
+	esac
+	if [ -z "${AUTHZ_SECRET_FILE:-}" ]; then
+		AUTHZ_SECRET_FILE=${RDPANEL_HBBS_AUTHZ_SECRET_FILE:-${RDPANEL_DATA_DIR:-/data/panel}/hbbs-authz.key}
+		export AUTHZ_SECRET_FILE
+	fi
+	[ -z "${AUTHZ_URL:-}" ] || return 0
+	_rdp_listen=${RDPANEL_LISTEN:-:21114}
+	_rdp_port=${_rdp_listen##*:}
+	_rdp_host=${_rdp_listen%:*}
+	case "$_rdp_port" in
+		'' | *[!0-9]*)
+			echo "hbbs: no port in RDPANEL_LISTEN=$_rdp_listen; control roles are not enforced at connection time (set AUTHZ_URL)"
+			return 0 ;;
+	esac
+	case "$_rdp_host" in
+		'' | 0.0.0.0 | '[::]' | '*' | localhost) _rdp_host=127.0.0.1 ;;
+		127.* | '[::1]') ;;
+		*)
+			echo "hbbs: RDPANEL_LISTEN=$_rdp_listen is not a loopback or wildcard address; control roles are not enforced at connection time"
+			return 0 ;;
+	esac
+	AUTHZ_URL="http://$_rdp_host:$_rdp_port/internal/hbbs/authorize"
+	export AUTHZ_URL
+}
+rdpanel_hbbs_authz_env
+unset -f rdpanel_hbbs_authz_env
+unset _rdp_listen _rdp_port _rdp_host

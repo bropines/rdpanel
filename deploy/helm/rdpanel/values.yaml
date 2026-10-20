@@ -89,6 +89,11 @@ panel:
   hbbsIdServer: "127.0.0.1:21116"
   # -- RDPANEL_HBBS_RELAY_SERVER (loopback; the hbbr admin channel is the same port).
   hbbsRelayServer: "127.0.0.1:21117"
+  # -- RDPANEL_HBBS_AUTHZ. hbbs asks the panel (loopback, shared secret in
+  # dataDir/hbbs-authz.key) before every connection: connection rules block
+  # denied connections up front and control roles restrict sessions on devices
+  # running RustDesk 1.4.5+. false = rules are only enforced after the fact.
+  hbbsAuthz: true
   # -- RDPANEL_TRUSTED_PROXIES. IPs/CIDRs whose forwarding headers are honoured.
   # Behind an Ingress controller add its pod CIDR (or the cluster pod CIDR, e.g.
   # 10.244.0.0/16), otherwise the panel sees the controller IP as the client IP

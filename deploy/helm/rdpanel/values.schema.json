@@ -103,6 +103,7 @@
         "hbbsPublicKeyFile": { "type": "string", "pattern": "^/" },
         "hbbsIdServer": { "type": "string", "pattern": "^[^\\s]+:[0-9]{1,5}$" },
         "hbbsRelayServer": { "type": "string", "pattern": "^[^\\s]+:[0-9]{1,5}$" },
+        "hbbsAuthz": { "type": "boolean" },
         "trustedProxies": { "$ref": "#/definitions/cidrList" },
         "realIPHeader": { "enum": ["X-Forwarded-For", "X-Real-IP", "CF-Connecting-IP"] },
         "metricsAllow": { "$ref": "#/definitions/cidrList" },
