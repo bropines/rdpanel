@@ -2,24 +2,15 @@ package aclpolicy
 
 import (
 	"context"
-	"path/filepath"
 	"testing"
 
-	"github.com/bropines/rdpanel/internal/db"
+	"github.com/bropines/rdpanel/internal/db/dbtest"
 	"github.com/bropines/rdpanel/internal/store"
 )
 
 func newTestStore(t *testing.T) *store.Store {
 	t.Helper()
-	ctx := context.Background()
-	d, err := db.Open(ctx, filepath.Join(t.TempDir(), "panel.db"), db.Options{})
-	if err != nil {
-		t.Fatalf("open db: %v", err)
-	}
-	t.Cleanup(func() { _ = d.Close() })
-	if _, err := d.Migrate(ctx); err != nil {
-		t.Fatalf("migrate: %v", err)
-	}
+	d := dbtest.Open(t)
 	return store.New(d)
 }
 

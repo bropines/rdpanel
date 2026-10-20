@@ -8,7 +8,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
-	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
@@ -18,7 +17,7 @@ import (
 
 	"github.com/bropines/rdpanel/internal/auth"
 	"github.com/bropines/rdpanel/internal/crypto"
-	"github.com/bropines/rdpanel/internal/db"
+	"github.com/bropines/rdpanel/internal/db/dbtest"
 	"github.com/bropines/rdpanel/internal/oidc"
 	"github.com/bropines/rdpanel/internal/oidc/oidctest"
 	"github.com/bropines/rdpanel/internal/store"
@@ -57,15 +56,7 @@ type env struct {
 
 func newEnv(t *testing.T, mutate func(p *store.IdentityProvider)) *env {
 	t.Helper()
-	ctx := context.Background()
-	d, err := db.Open(ctx, filepath.Join(t.TempDir(), "panel.db"), db.Options{})
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = d.Close() })
-	if _, err := d.Migrate(ctx); err != nil {
-		t.Fatal(err)
-	}
+	d := dbtest.Open(t)
 	clk := &clock{t: time.Date(2026, 10, 15, 12, 0, 0, 0, time.UTC)}
 	st := store.New(d).WithClock(clk.now)
 	key, _ := crypto.RandomBytes(32)

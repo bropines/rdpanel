@@ -10,7 +10,6 @@ import (
 	"net/http/cookiejar"
 	"net/http/httptest"
 	"net/url"
-	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
@@ -21,7 +20,7 @@ import (
 	"github.com/bropines/rdpanel/internal/auth"
 	"github.com/bropines/rdpanel/internal/config"
 	"github.com/bropines/rdpanel/internal/crypto"
-	"github.com/bropines/rdpanel/internal/db"
+	"github.com/bropines/rdpanel/internal/db/dbtest"
 	"github.com/bropines/rdpanel/internal/oidc"
 	"github.com/bropines/rdpanel/internal/oidc/oidctest"
 	"github.com/bropines/rdpanel/internal/store"
@@ -59,15 +58,7 @@ func newTEnv(t *testing.T) *tenv {
 // newTEnvWithConfig is newTEnv with a custom configuration (nil: defaults).
 func newTEnvWithConfig(t *testing.T, cfg *config.Config) *tenv {
 	t.Helper()
-	ctx := context.Background()
-	d, err := db.Open(ctx, filepath.Join(t.TempDir(), "panel.db"), db.Options{})
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = d.Close() })
-	if _, err := d.Migrate(ctx); err != nil {
-		t.Fatal(err)
-	}
+	d := dbtest.Open(t)
 	clk := &testClock{t: time.Date(2026, 10, 15, 12, 0, 0, 0, time.UTC)}
 	st := store.New(d).WithClock(clk.now)
 	key, _ := crypto.RandomBytes(32)
@@ -635,7 +626,16 @@ func TestIdentityProvidersCRUD(t *testing.T) {
 	}
 	// Audit rows never contain the secret.
 	var details string
-	_ = e.st.Querier().QueryRowContext(context.Background(), `SELECT group_concat(details) FROM admin_audit WHERE action LIKE 'identity_provider.%'`).Scan(&details)
+	rows, err := e.st.Querier().QueryContext(context.Background(), `SELECT details FROM admin_audit WHERE action LIKE 'identity_provider.%'`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for rows.Next() {
+		var d string
+		_ = rows.Scan(&d)
+		details += d + ","
+	}
+	rows.Close()
 	if details == "" || strings.Contains(details, "csecret") {
 		t.Fatalf("audit: %q", details)
 	}
