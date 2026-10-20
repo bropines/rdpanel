@@ -5,7 +5,7 @@
  * Authentication -> WebCodecs Video Streaming -> Mouse/Keyboard Input Forwarding.
  */
 
-import { StreamCipher, sealSymmetricKey, loginPasswordHash } from './crypto';
+import { StreamCipher, sealSymmetricKey, loginPasswordHash, decodeB64, signOpen } from './crypto';
 import { VideoStreamDecoder } from './decoder';
 import {
   encodeRequestRelay,
@@ -17,6 +17,7 @@ import {
   encodeMouseEvent,
   encodeKeyEvent,
   decodePeerMessage,
+  decodeIdPk,
 } from './protocol';
 import type {
   WebClientConfig,
@@ -180,10 +181,12 @@ export class WebClientSession {
       };
 
       const primaryUrl = this.config.wsIdUrl;
-      const host = window.location.hostname;
+      const host = window.location.host;
       const isHttps = window.location.protocol === 'https:';
-      const fallbackUrl = primaryUrl.includes('/ws/id')
-        ? (isHttps ? `wss://${host}:21118` : `ws://${host}:21118`)
+      // Only attempt direct port 21118 on plaintext http (e.g. local dev). On https, browsers block ws://
+      // and port 21118 doesn't speak TLS, so falling back to wss://:21118 causes spurious TLS errors.
+      const fallbackUrl = (!isHttps && primaryUrl.includes('/ws/id'))
+        ? `ws://${host}:21118`
         : undefined;
 
       tryConnect(primaryUrl, fallbackUrl);
@@ -266,10 +269,11 @@ export class WebClientSession {
       };
 
       const primaryUrl = wsUrl;
-      const host = window.location.hostname;
+      const host = window.location.host;
       const isHttps = window.location.protocol === 'https:';
-      const fallbackUrl = primaryUrl.includes('/ws/relay')
-        ? (isHttps ? `wss://${host}:21119` : `ws://${host}:21119`)
+      // Only attempt direct port 21119 on plaintext http.
+      const fallbackUrl = (!isHttps && primaryUrl.includes('/ws/relay'))
+        ? `ws://${host}:21119`
         : undefined;
 
       tryConnectRelay(primaryUrl, fallbackUrl);
@@ -330,8 +334,25 @@ export class WebClientSession {
   private async handlePeerSignedId(signedId: Uint8Array): Promise<void> {
     this.emit({ type: 'state', state: 'handshaking' });
 
-    let peerCurvePk = signedId;
-    if (signedId.length > 32) {
+    let idPkBytes: Uint8Array | null = null;
+    if (this.config.serverKeyB64) {
+      try {
+        const serverKey = decodeB64(this.config.serverKeyB64);
+        idPkBytes = signOpen(signedId, serverKey);
+      } catch (e) {
+        console.warn('Server key signature verification failed, falling back to payload parsing', e);
+      }
+    }
+
+    if (!idPkBytes) {
+      // In libsodium crypto_sign, signature is 64 bytes prepended to the message.
+      idPkBytes = signedId.length > 64 ? signedId.subarray(64) : signedId;
+    }
+
+    const { pk } = decodeIdPk(idPkBytes);
+    let peerCurvePk = pk;
+    if (peerCurvePk.length !== 32) {
+      // Fallback: take last 32 bytes
       peerCurvePk = signedId.subarray(signedId.length - 32);
     }
 

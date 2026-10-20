@@ -73,25 +73,14 @@ export function WebClientPage() {
   const getWsUrls = useCallback(() => {
     const isHttps = window.location.protocol === 'https:';
     const proto = isHttps ? 'wss:' : 'ws:';
-    const host = window.location.hostname;
+    const host = window.location.host;
 
-    // Prefer reverse proxy paths on port 443/80
-    let wsIdUrl = `${proto}//${host}/ws/id`;
-    let wsRelayUrl = `${proto}//${host}/ws/relay`;
+    // Connect via reverse-proxied /ws/id and /ws/relay endpoints on current host.
+    // This uses port 443 with the existing TLS certificate, avoiding Mixed Content.
+    const wsIdUrl = `${proto}//${host}/ws/id`;
+    const wsRelayUrl = `${proto}//${host}/ws/relay`;
 
     const data = serverConfigQuery.data;
-    if (data?.id_server) {
-      const idHost = data.id_server.split(':')[0] || host;
-      if (idHost !== host) {
-        wsIdUrl = `${proto}//${idHost}:21118`;
-      }
-    }
-    if (data?.relay_server) {
-      const relayHost = data.relay_server.split(':')[0] || host;
-      if (relayHost !== host) {
-        wsRelayUrl = `${proto}//${relayHost}:21119`;
-      }
-    }
 
     return {
       wsIdUrl,

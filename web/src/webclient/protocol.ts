@@ -41,6 +41,13 @@ export class ProtoWriter {
     this.writeVarint(val < 0 ? BigInt.asUintN(64, BigInt(val)) : BigInt(val));
   }
 
+  writeSint32(fieldNumber: number, val: number): void {
+    if (val === 0) return;
+    this.writeTag(fieldNumber, WIRE_VARINT);
+    const zigzag = (val << 1) ^ (val >> 31);
+    this.writeVarint(BigInt(zigzag >>> 0));
+  }
+
   writeBool(fieldNumber: number, val: boolean): void {
     if (!val) return;
     this.writeTag(fieldNumber, WIRE_VARINT);
@@ -114,6 +121,11 @@ export class ProtoReader {
 
   readBool(): boolean {
     return this.readVarint() !== 0n;
+  }
+
+  readSint32(): number {
+    const v = Number(this.readVarint());
+    return (v >>> 1) ^ -(v & 1);
   }
 
   readBytes(): Uint8Array<ArrayBuffer> {
@@ -198,12 +210,12 @@ export function encodeRequestRelay(id: string, uuid: string, relayServer?: strin
 
 export function encodeRelayRequest(uuid: string, id: string): Uint8Array {
   const wReq = new ProtoWriter();
-  wReq.writeString(1, uuid);
-  wReq.writeString(2, id);
-  wReq.writeBool(4, true); // secure = true
+  wReq.writeString(1, id);
+  wReq.writeString(2, uuid);
+  wReq.writeBool(5, true); // secure = true
 
   const wMsg = new ProtoWriter();
-  wMsg.writeMessage(10, wReq.finish()); // field 10 = relay_request
+  wMsg.writeMessage(18, wReq.finish()); // field 18 = request_relay in RendezvousMessage
   return wMsg.finish();
 }
 
@@ -243,7 +255,7 @@ export function encodePublicKeyMessage(asymmetricVal: Uint8Array, symmetricVal: 
   wPk.writeBytes(2, symmetricVal);
 
   const wMsg = new ProtoWriter();
-  wMsg.writeMessage(2, wPk.finish()); // field 2 = public_key
+  wMsg.writeMessage(4, wPk.finish()); // field 4 = public_key in Message
   return wMsg.finish();
 }
 
@@ -251,45 +263,58 @@ export function encodeLoginRequest(username: string, passwordHash: Uint8Array, m
   const wReq = new ProtoWriter();
   wReq.writeString(1, username);
   wReq.writeBytes(2, passwordHash);
-  wReq.writeString(3, myId);
-  wReq.writeString(4, myName);
-  wReq.writeString(5, '1.4.0');
+  wReq.writeString(4, myId);
+  wReq.writeString(5, myName);
+  wReq.writeString(11, '1.4.0');
 
   const wMsg = new ProtoWriter();
-  wMsg.writeMessage(11, wReq.finish()); // field 11 = login_request
+  wMsg.writeMessage(7, wReq.finish()); // field 7 = login_request in Message
   return wMsg.finish();
 }
 
 export function encodeVideoReceivedAck(): Uint8Array {
+  const wMisc = new ProtoWriter();
+  wMisc.writeBool(12, true); // field 12 = video_received in Misc
+
   const wMsg = new ProtoWriter();
-  wMsg.writeMessage(30, new Uint8Array(0)); // field 30 = video_received (empty)
+  wMsg.writeMessage(19, wMisc.finish()); // field 19 = misc in Message
   return wMsg.finish();
 }
 
 export function encodeMouseEvent(mask: number, x: number, y: number, wheelDelta = 0): Uint8Array {
   const wEv = new ProtoWriter();
   wEv.writeInt32(1, mask);
-  wEv.writeInt32(2, x);
-  wEv.writeInt32(3, y);
+  wEv.writeSint32(2, x); // sint32 x = 2
+  wEv.writeSint32(3, y); // sint32 y = 3
   if (wheelDelta !== 0) wEv.writeInt32(4, wheelDelta);
 
   const wMsg = new ProtoWriter();
-  wMsg.writeMessage(20, wEv.finish()); // field 20 = mouse_event
+  wMsg.writeMessage(10, wEv.finish()); // field 10 = mouse_event in Message
   return wMsg.finish();
 }
 
-export function encodeKeyEvent(keyCode: number, down: boolean, ctrl = false, alt = false, shift = false, command = false, chr = 0): Uint8Array {
+export function encodeKeyEvent(
+  keyCode: number,
+  down: boolean,
+  ctrl = false,
+  alt = false,
+  shift = false,
+  _command = false,
+  chr = 0,
+): Uint8Array {
   const wEv = new ProtoWriter();
-  wEv.writeBool(1, down);
-  if (alt) wEv.writeBool(2, true);
-  if (ctrl) wEv.writeBool(3, true);
-  if (shift) wEv.writeBool(4, true);
-  if (command) wEv.writeBool(5, true);
-  if (chr !== 0) wEv.writeInt32(6, chr);
-  if (keyCode !== 0) wEv.writeInt32(7, keyCode);
+  wEv.writeBool(1, down); // bool down = 1
+  if (chr !== 0) {
+    wEv.writeInt32(4, chr); // uint32 chr = 4
+  } else if (keyCode !== 0) {
+    wEv.writeInt32(3, keyCode); // ControlKey control_key = 3
+  }
+  if (alt) wEv.writeInt32(8, 1); // ControlKey.Alt = 1
+  if (ctrl) wEv.writeInt32(8, 4); // ControlKey.Control = 4
+  if (shift) wEv.writeInt32(8, 27); // ControlKey.Shift = 27
 
   const wMsg = new ProtoWriter();
-  wMsg.writeMessage(21, wEv.finish()); // field 21 = key_event
+  wMsg.writeMessage(15, wEv.finish()); // field 15 = key_event in Message
   return wMsg.finish();
 }
 
@@ -306,7 +331,7 @@ export function decodePeerMessage(buf: Uint8Array): DecodedPeerMessage | null {
   if (!tag) return null;
 
   switch (tag.field) {
-    case 1: { // signed_id
+    case 3: { // signed_id in Message
       const rInner = new ProtoReader(r.readBytes());
       let signedId = new Uint8Array(0);
       while (rInner.hasMore()) {
@@ -317,7 +342,7 @@ export function decodePeerMessage(buf: Uint8Array): DecodedPeerMessage | null {
       }
       return { type: 'signed_id', signedId };
     }
-    case 10: { // hash
+    case 9: { // hash in Message
       const rInner = new ProtoReader(r.readBytes());
       let salt = '';
       let challenge = '';
@@ -330,7 +355,7 @@ export function decodePeerMessage(buf: Uint8Array): DecodedPeerMessage | null {
       }
       return { type: 'hash', salt, challenge };
     }
-    case 12: { // login_response
+    case 8: { // login_response in Message
       const rInner = new ProtoReader(r.readBytes());
       let error = '';
       while (rInner.hasMore()) {
@@ -341,7 +366,7 @@ export function decodePeerMessage(buf: Uint8Array): DecodedPeerMessage | null {
       }
       return { type: 'login_response', error: error || undefined };
     }
-    case 14: { // video_frame
+    case 6: { // video_frame in Message
       const rInner = new ProtoReader(r.readBytes());
       let codec: CodecType = 'vp9';
       let frameBytes = new Uint8Array(0);
@@ -349,27 +374,39 @@ export function decodePeerMessage(buf: Uint8Array): DecodedPeerMessage | null {
       while (rInner.hasMore()) {
         const t = rInner.readTag();
         if (!t) break;
-        if (t.field === 1) { codec = 'vp9'; frameBytes = rInner.readBytes(); }
-        else if (t.field === 2) { codec = 'vp8'; frameBytes = rInner.readBytes(); }
-        else if (t.field === 3) { codec = 'h264'; frameBytes = rInner.readBytes(); }
-        else if (t.field === 5) { codec = 'av1'; frameBytes = rInner.readBytes(); }
+        if (t.field === 6) { codec = 'vp9'; frameBytes = rInner.readBytes(); }
+        else if (t.field === 10) { codec = 'h264'; frameBytes = rInner.readBytes(); }
+        else if (t.field === 12) { codec = 'vp8'; frameBytes = rInner.readBytes(); }
+        else if (t.field === 13) { codec = 'av1'; frameBytes = rInner.readBytes(); }
         else rInner.skip(t.wireType);
       }
 
       if (frameBytes.length > 0) {
-        const rFrame = new ProtoReader(frameBytes);
-        let data = new Uint8Array(0);
-        let pts = 0n;
-        let key = false;
-        while (rFrame.hasMore()) {
-          const tf = rFrame.readTag();
+        // EncodedVideoFrames: repeated EncodedVideoFrame frames = 1;
+        const rFrames = new ProtoReader(frameBytes);
+        while (rFrames.hasMore()) {
+          const tf = rFrames.readTag();
           if (!tf) break;
-          if (tf.field === 1) data = rFrame.readBytes();
-          else if (tf.field === 2) pts = rFrame.readVarint();
-          else if (tf.field === 3) key = rFrame.readBool();
-          else rFrame.skip(tf.wireType);
+          if (tf.field === 1) { // EncodedVideoFrame
+            const rFrame = new ProtoReader(rFrames.readBytes());
+            let data = new Uint8Array(0);
+            let pts = 0n;
+            let key = false;
+            while (rFrame.hasMore()) {
+              const tSub = rFrame.readTag();
+              if (!tSub) break;
+              if (tSub.field === 1) data = rFrame.readBytes();
+              else if (tSub.field === 2) key = rFrame.readBool();
+              else if (tSub.field === 3) pts = rFrame.readVarint();
+              else rFrame.skip(tSub.wireType);
+            }
+            if (data.length > 0) {
+              return { type: 'video_frame', codec, data, key, pts };
+            }
+          } else {
+            rFrames.skip(tf.wireType);
+          }
         }
-        return { type: 'video_frame', codec, data, key, pts };
       }
       break;
     }
