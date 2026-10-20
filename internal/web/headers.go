@@ -11,7 +11,7 @@ const ContentSecurityPolicy = "default-src 'self'; " +
 	"style-src 'self' 'unsafe-inline'; " +
 	"img-src 'self' data: https:; " +
 	"font-src 'self' data:; " +
-	"connect-src 'self'; " +
+	"connect-src 'self' ws: wss:; " +
 	"worker-src 'self' blob:; " +
 	"child-src 'self' blob:; " +
 	"object-src 'none'; " +
