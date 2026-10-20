@@ -47,6 +47,34 @@ login token for the signed-in user.
   to that device but does not reveal the password. **Actions → Forget saved
   password** removes it.
 
+## Toolbar
+
+The session toolbar floats at the top of the screen and folds into a small
+handle a few seconds after the pointer leaves it; the pin keeps it open, and on
+desktops the grip moves it along the top edge. Pick the buttons you want on it
+in **⋯ → Customize toolbar**; everything else stays in the ⋯ menu. The choice,
+the pin and the position are remembered in the browser.
+
+## Files
+
+**Files** (toolbar or ⋯ menu) opens a separate file-transfer connection with
+the same login: browse folders (drives on Windows), download files and folders,
+upload files and folders (buttons or drag and drop; existing files can be
+replaced, skipped or resumed), create, rename and delete. Chrome and Edge save
+downloaded folders straight into a folder you pick; Safari and Firefox get a
+zip archive (up to 4 GiB). The control role's file-transfer permission
+applies.
+
+## Remembered passwords
+
+"Remember in my account" stores the device's salted password hash in your
+personal address book, exactly as the desktop client's address book does:
+afterwards neither the web client (in any browser) nor RustDesk apps signed in
+to the same account ask for that device's password. **⋯ → Forget saved
+password** removes it again. Devices in shared address books with a password
+log in with that password. RustDesk devices only accept their own password or a
+click on "Accept" — a signed-in account alone does not unlock a device.
+
 ## Features
 
 Display: fit / original size / stretch, monitor selection, image quality
