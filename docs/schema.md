@@ -23,6 +23,26 @@ automatically on start (`rdpanel serve`, `rdpanel user ...`).
 
 Later streams add new numbered files; never edit an applied migration.
 
+### PostgreSQL
+
+`internal/db/migrations_pg/` holds the PostgreSQL version of every migration under
+the same number and name, so a new migration is added to both directories. Tests
+check the counts match and, on PostgreSQL, that both schemas have the same tables,
+columns (name, type class, nullability) and indexes. Mapping: `INTEGER` → `BIGINT`
+(booleans stay 0/1), `BLOB` → `BYTEA`, `REAL` → `DOUBLE PRECISION`, `AUTOINCREMENT`
+→ identity columns, `NOCASE` columns → `CITEXT`, `COLLATE NOCASE` → the ICU
+collation `nocase` created by 00001; the `json_valid` CHECKs are dropped.
+
+Repository SQL is written once, for SQLite. On PostgreSQL `internal/db` adapts it
+at run time (placeholders, `LIKE` → `ILIKE`, Go booleans → 0/1, arguments no `?N`
+refers to are dropped) and `WithTx` serializes transactions with an advisory lock,
+as SQLite's `BEGIN IMMEDIATE` does. Keep SQLite-only SQL out of repositories:
+scalar `max(a, b)`/`min(a, b)` (use `CASE`), `IS NOT ?` on values (`IS DISTINCT
+FROM`), `json_each(?)` (`db.Dialect.InJSONArray`), `sum()` over booleans,
+`LIMIT -1`, NUL bytes in `TEXT`; recover from a constraint error inside a
+transaction only within `db.Savepoint`. Run the suites on PostgreSQL with
+`RDPANEL_TEST_PG_DSN` (see the README).
+
 ## Conventions
 
 - **Timestamps**: `INTEGER` UTC unix **milliseconds** (`*_at`). `NULL` = never/unset.
