@@ -31,7 +31,7 @@ export const mockFederationPeers: S["FederationPeer"][] = [
     sync_relays: true,
     status: "unreachable",
     last_sync_at: iso(3_600_000),
-    last_error: "connection refused: 198.51.100.44:443",
+    last_error: "peer unreachable",
     created_at: iso(86_400_000 * 3),
     updated_at: iso(3_600_000),
   },
@@ -69,6 +69,18 @@ export const federationHandlers = [
     const body = (await request.json()) as S["CreateFederationPeerInput"];
     if (!body?.name || !body?.api_url || !body?.auth_token) {
       return err(400, "invalid_parameter", "name, api_url and auth_token are required");
+    }
+    if (body.auth_token.trim().length < 16) {
+      return HttpResponse.json(
+        {
+          error: {
+            code: "validation_failed",
+            message: "invalid peer input",
+            fields: { auth_token: "auth_token must be the peer's federation token (at least 16 characters, no spaces)" },
+          },
+        },
+        { status: 400 },
+      );
     }
     if (mockFederationPeers.some((p) => p.name.toLowerCase() === body.name.toLowerCase())) {
       return err(409, "conflict", "a peer with this name already exists");

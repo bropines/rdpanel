@@ -38,4 +38,10 @@ helm install relay-nl ./deploy/helm/rustdesk-relay-agent \
 | `hostNetwork` | Use host network namespace | `false` |
 | `persistence.enabled` | Persist agent ed25519 identity key and config | `true` |
 | `service.type` | Service type (`LoadBalancer`, `NodePort`, `ClusterIP`) | `LoadBalancer` |
-| `serviceMonitor.enabled` | Prometheus Operator ServiceMonitor | `false` |
+| `podSecurityContext`, `securityContext` | s6-overlay's `/init` starts as root and drops to `PUID:PGID` (10001) for the agent and hbbr; capabilities are limited to `CHOWN`, `DAC_OVERRIDE`, `FOWNER`, `SETGID`, `SETUID`, `KILL` | see `values.yaml` |
+
+## Monitoring
+
+The agent has no metrics endpoint of its own (port 21117 is hbbr's relay port), so the
+chart ships no ServiceMonitor. Relay health, sessions and traffic of every agent are
+exported by the central RD Panel's `/metrics` (`rdpanel_relay_*`); scrape the panel.

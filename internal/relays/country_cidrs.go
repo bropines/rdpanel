@@ -2,11 +2,12 @@ package relays
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"log/slog"
 	"sort"
 	"strings"
+
+	"github.com/bropines/rdpanel/internal/store"
 )
 
 // CountryPrefixInfo describes a supported country for geographic relay prefix routing.
@@ -147,56 +148,73 @@ type ImportCountryRulesResult struct {
 	TotalRules  int    `json:"total_rules"`
 }
 
-// ImportCountryRules imports curated CIDR rules for a country code pointing to relayHost.
+// MaxCountryImport bounds the rules one country import may add (the rules
+// table and relay_map.txt are not meant for full GeoIP databases).
+const MaxCountryImport = 5000
+
+// ImportCountryRules imports the CIDRs of a country pointing to relayHost:
+// those of the loaded GeoIP dataset (Server -> Relays -> Update GeoIP), else
+// the curated built-in list. Input problems wrap store.ErrInvalid.
 func (s *Service) ImportCountryRules(ctx context.Context, countryCode, relayHost, customComment string) (*ImportCountryRulesResult, error) {
 	code := strings.ToUpper(strings.TrimSpace(countryCode))
-	name, ok := CountryNames[code]
-	if !ok {
-		return nil, fmt.Errorf("unsupported country code %q", countryCode)
+	name, known := CountryNames[code]
+	var prefixes []string
+	if len(code) == 2 {
+		prefixes = s.cfg.GeoIP.CountryCIDRsFor(code)
+		if len(prefixes) == 0 {
+			prefixes = CountryCIDRs[code]
+		}
 	}
-	prefixes := CountryCIDRs[code]
+	if !known && len(prefixes) == 0 {
+		return nil, fmt.Errorf("%w: unsupported country code %q", store.ErrInvalid, countryCode)
+	}
+	if name == "" {
+		name = code
+	}
 	if len(prefixes) == 0 {
-		return nil, errors.New("no CIDRs available for country")
-	}
-
-	host := strings.TrimSpace(relayHost)
-	if host == "" {
-		return nil, errors.New("relay_host is required")
+		return nil, fmt.Errorf("%w: no CIDRs available for country %s", store.ErrInvalid, code)
 	}
 
 	comment := strings.TrimSpace(customComment)
 	if comment == "" {
 		comment = fmt.Sprintf("[%s] %s", code, name)
 	}
+	probe := PrefixRule{CIDR: prefixes[0], RelayHost: relayHost, Comment: comment}
+	if err := probe.Validate(); err != nil {
+		return nil, err
+	}
+	host := probe.RelayHost
 
-	// Fetch existing rules to avoid duplicate CIDRs
+	s.prefixMu.Lock()
+	defer s.prefixMu.Unlock()
 	existing, err := s.st.ListPrefixRules(ctx)
 	if err != nil {
 		return nil, err
 	}
-	existingMap := make(map[string]bool)
+	seen := make(map[string]bool, len(existing)+len(prefixes))
 	for _, r := range existing {
-		existingMap[strings.TrimSpace(r.CIDR)] = true
+		if r.Validate() == nil {
+			seen[r.CIDR] = true
+		}
 	}
-
-	added := 0
+	var add []*PrefixRule
 	for _, p := range prefixes {
-		if existingMap[p] {
+		rule := &PrefixRule{CIDR: p, RelayHost: host, Comment: comment}
+		if rule.Validate() != nil || seen[rule.CIDR] {
 			continue
 		}
-		rule := &PrefixRule{
-			CIDR:      p,
-			RelayHost: host,
-			Comment:   comment,
-		}
-		if err := s.st.CreatePrefixRule(ctx, rule); err == nil {
-			added++
-			existingMap[p] = true
-		}
+		seen[rule.CIDR] = true
+		add = append(add, rule)
 	}
-
-	if added > 0 {
-		if syncErr := s.SyncPrefixRules(ctx); syncErr != nil {
+	if len(add) > MaxCountryImport {
+		return nil, fmt.Errorf("%w: %s has %d prefixes in the loaded GeoIP data; at most %d can be imported at once",
+			store.ErrInvalid, code, len(add), MaxCountryImport)
+	}
+	if len(add) > 0 {
+		if err := s.st.CreatePrefixRules(ctx, add); err != nil {
+			return nil, err
+		}
+		if syncErr := s.syncPrefixRulesLocked(ctx); syncErr != nil {
 			s.log.Warn("relays: sync prefix rules after country import", slog.Any("err", syncErr))
 		}
 	}
@@ -204,7 +222,7 @@ func (s *Service) ImportCountryRules(ctx context.Context, countryCode, relayHost
 	return &ImportCountryRulesResult{
 		CountryCode: code,
 		RelayHost:   host,
-		AddedCount:  added,
-		TotalRules:  len(existing) + added,
+		AddedCount:  len(add),
+		TotalRules:  len(existing) + len(add),
 	}, nil
 }

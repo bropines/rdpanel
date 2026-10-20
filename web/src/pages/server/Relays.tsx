@@ -853,7 +853,15 @@ function EditSection({ r }: { r: Relay }) {
         >
           <Input id="rd-mgmt-host" className="font-mono" value={mgmtHost} onChange={(e) => setMgmtHost(e.target.value)} placeholder="100.64.0.12:21117" />
         </Field>
-        <Field label={t("relays.weight")} htmlFor="rd-weight" hint={t("relays.weightHint")}>
+        <Field
+          label={t("relays.weight")}
+          htmlFor="rd-weight"
+          hint={
+            r.rotation_weight > 0 && r.rotation_weight !== r.weight
+              ? `${t("relays.weightHint")} ${t("relays.weightEffective", { w: r.rotation_weight })}`
+              : t("relays.weightHint")
+          }
+        >
           <Select value={weight} onValueChange={setWeight}>
             <SelectTrigger id="rd-weight">
               <SelectValue />

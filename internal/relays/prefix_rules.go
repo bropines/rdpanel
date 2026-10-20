@@ -3,14 +3,16 @@ package relays
 import (
 	"bytes"
 	"context"
-	"errors"
+	"database/sql"
 	"fmt"
 	"net/netip"
 	"os"
 	"path/filepath"
 	"strings"
 	"time"
+	"unicode"
 
+	"github.com/bropines/rdpanel/internal/hbbs/control"
 	"github.com/bropines/rdpanel/internal/store"
 )
 
@@ -24,28 +26,36 @@ type PrefixRule struct {
 	UpdatedAt time.Time `json:"updated_at"`
 }
 
-// Validate checks that CIDR and RelayHost are well-formed.
+// Validate checks and normalizes a rule the way hbbs reads relay_map.txt
+// (one "<cidr> <host>[,<host>...]" line per rule): the CIDR is stored masked
+// ("10.1.2.3/8" -> "10.0.0.0/8", a bare IP becomes /32 or /128) and every
+// relay host must be a single host[:port] without whitespace, so a rule can
+// never smuggle extra lines into the file.
 func (r *PrefixRule) Validate() error {
 	cidr := strings.TrimSpace(r.CIDR)
 	if cidr == "" {
-		return errors.New("cidr is required")
+		return fmt.Errorf("%w: cidr is required", store.ErrInvalid)
 	}
 	prefix, err := netip.ParsePrefix(cidr)
 	if err != nil {
 		// Also allow bare IP treated as /32 or /128
 		addr, aerr := netip.ParseAddr(cidr)
-		if aerr != nil {
-			return fmt.Errorf("invalid CIDR %q: %w", cidr, err)
+		if aerr != nil || addr.Zone() != "" {
+			return fmt.Errorf("%w: invalid CIDR %q", store.ErrInvalid, cidr)
 		}
 		prefix = netip.PrefixFrom(addr, addr.BitLen())
 	}
-	r.CIDR = prefix.String()
+	r.CIDR = prefix.Masked().String()
 
 	host := strings.TrimSpace(r.RelayHost)
 	if host == "" {
-		return errors.New("relay_host is required")
+		return fmt.Errorf("%w: relay_host is required", store.ErrInvalid)
 	}
-	r.RelayHost = host
+	hosts, err := control.NormalizeRelayServers(strings.Split(host, ","))
+	if err != nil || len(hosts) == 0 || strings.ContainsFunc(host, unicode.IsControl) {
+		return fmt.Errorf("%w: relay_host must be host[:port] (several separated by commas, no spaces)", store.ErrInvalid)
+	}
+	r.RelayHost = strings.Join(hosts, ",")
 	r.Comment = strings.TrimSpace(r.Comment)
 	return nil
 }
@@ -78,20 +88,30 @@ func (s *Store) ListPrefixRules(ctx context.Context) ([]PrefixRule, error) {
 
 // CreatePrefixRule validates and inserts a new prefix rule.
 func (s *Store) CreatePrefixRule(ctx context.Context, r *PrefixRule) error {
-	if err := r.Validate(); err != nil {
-		return err
+	return s.CreatePrefixRules(ctx, []*PrefixRule{r})
+}
+
+// CreatePrefixRules validates and inserts rules in one transaction (all or
+// nothing).
+func (s *Store) CreatePrefixRules(ctx context.Context, rules []*PrefixRule) error {
+	for _, r := range rules {
+		if err := r.Validate(); err != nil {
+			return err
+		}
 	}
 	now := time.Now().UTC()
-	r.CreatedAt = now
-	r.UpdatedAt = now
-
-	err := s.DB.QueryRowContext(ctx, `INSERT INTO relay_prefix_rules (cidr, relay_host, comment, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?) RETURNING id`,
-		r.CIDR, r.RelayHost, r.Comment, now.UnixMilli(), now.UnixMilli()).Scan(&r.ID)
-	if err != nil {
-		return mapErr(err)
-	}
-	return nil
+	return mapErr(s.DB.WithTx(ctx, func(tx *sql.Tx) error {
+		q := s.DB.Wrap(tx)
+		for _, r := range rules {
+			r.CreatedAt, r.UpdatedAt = now, now
+			if err := q.QueryRowContext(ctx, `INSERT INTO relay_prefix_rules (cidr, relay_host, comment, created_at, updated_at)
+				VALUES (?, ?, ?, ?, ?) RETURNING id`,
+				r.CIDR, r.RelayHost, r.Comment, now.UnixMilli(), now.UnixMilli()).Scan(&r.ID); err != nil {
+				return err
+			}
+		}
+		return nil
+	}))
 }
 
 // DeletePrefixRule deletes a prefix rule by id.
@@ -110,18 +130,18 @@ func (s *Store) DeletePrefixRule(ctx context.Context, id int64) error {
 	return nil
 }
 
-// FormatRelayMap formats prefix rules into the relay_map.txt line format (<cidr> <relay_host>).
+// FormatRelayMap formats prefix rules into the relay_map.txt line format
+// (<cidr> <relay_host>). Rules that do not validate (e.g. rows stored before
+// validation was tightened) are skipped rather than written verbatim.
 func FormatRelayMap(rules []PrefixRule) string {
 	var b strings.Builder
 	for _, r := range rules {
-		cidr := strings.TrimSpace(r.CIDR)
-		host := strings.TrimSpace(r.RelayHost)
-		if cidr == "" || host == "" {
+		if err := r.Validate(); err != nil {
 			continue
 		}
-		b.WriteString(cidr)
+		b.WriteString(r.CIDR)
 		b.WriteByte(' ')
-		b.WriteString(host)
+		b.WriteString(r.RelayHost)
 		b.WriteByte('\n')
 	}
 	return b.String()

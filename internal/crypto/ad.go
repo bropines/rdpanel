@@ -20,6 +20,7 @@ import "strconv"
 //	totp_secrets.secret_enc                  "totp:<user id>"
 //	settings["mail.smtp"].password_enc       "settings.smtp_password:0"
 //	settings["client.options"].ice_servers_enc "settings.ice_servers:0"
+//	settings["federation.peer.<id>.token"].token_enc "settings.federation_peer_token:<peer id>"
 //
 // Because the AD contains the row id, a row must be inserted first (to learn
 // its id) and the ciphertext written afterwards, or the id must be known in
@@ -84,3 +85,11 @@ const ScopeLDAPBindPassword = "settings.ldap_bind_password"
 
 // LDAPBindPasswordAD is the AD of the stored LDAP bind password.
 func LDAPBindPasswordAD() string { return AD(ScopeLDAPBindPassword, 0) }
+
+// ScopeFederationPeerToken seals the token this panel presents to a
+// federation peer, stored in the panel settings (key
+// "federation.peer.<peer id>.token"; the id is the federation_peers row).
+const ScopeFederationPeerToken = "settings.federation_peer_token"
+
+// FederationPeerTokenAD is the AD of a stored federation peer token.
+func FederationPeerTokenAD(peerID int64) string { return AD(ScopeFederationPeerToken, peerID) }

@@ -44,6 +44,10 @@ const (
 	ConfigLagLimit = 5 * time.Minute
 	// statusSaveEvery throttles last_status writes.
 	statusSaveEvery = 30 * time.Second
+	// liveStatsMaxAge is how long an agent's last status report (and a
+	// traffic sample) counts as current load: traffic sampling and auto
+	// weights ignore older ones (agents report every 10 s by default).
+	liveStatsMaxAge = 2 * time.Minute
 )
 
 // Panel settings keys (store.Settings).
@@ -104,6 +108,9 @@ type Config struct {
 	Now           func() time.Time
 	// ListDir is hbbs/hbbr's working directory (where relay_map.txt lives).
 	ListDir string
+	// GeoIP resolves country prefixes for ImportCountryRules (nil: the
+	// process-wide GetGeoIPEngine, which Server -> Relays refreshes).
+	GeoIP *GeoIPEngine
 }
 
 // Service is the relay manager and agent hub.
@@ -116,7 +123,8 @@ type Service struct {
 	kick chan struct{}
 	rate *ipRate
 
-	cfgMu sync.Mutex // serialises desired-version bumps
+	cfgMu    sync.Mutex // serialises desired-version bumps
+	prefixMu sync.Mutex // serialises prefix-rule imports and relay_map.txt rewrites
 
 	mu        sync.Mutex
 	fails     map[int64]int
@@ -124,7 +132,8 @@ type Service struct {
 	conns     map[int64]*agentConn
 	lastPush  string
 	statusAt  map[int64]time.Time
-	liveStats map[int64]agentproto.Status
+	liveStats map[int64]agentproto.Status // last status of connected agents
+	liveAt    map[int64]time.Time         // when liveStats[id] arrived
 
 	lastTraffic map[int64]trafficState
 	lastPurge   time.Time
@@ -169,6 +178,9 @@ func New(cfg Config) (*Service, error) {
 	if cfg.Image == "" {
 		cfg.Image = "ghcr.io/bropines/rdpanel:latest"
 	}
+	if cfg.GeoIP == nil {
+		cfg.GeoIP = GetGeoIPEngine()
+	}
 	m, err := newMetrics(cfg.Registerer)
 	if err != nil {
 		return nil, fmt.Errorf("relays: register metrics: %w", err)
@@ -178,7 +190,7 @@ func New(cfg Config) (*Service, error) {
 		rate:          newIPRate(1, 30, cfg.Now),
 		installScript: renderInstallScript(cfg.PublicURL, cfg.Image),
 		fails:         map[int64]int{}, probedAt: map[int64]time.Time{}, conns: map[int64]*agentConn{},
-		statusAt: map[int64]time.Time{}, liveStats: map[int64]agentproto.Status{},
+		statusAt: map[int64]time.Time{}, liveStats: map[int64]agentproto.Status{}, liveAt: map[int64]time.Time{},
 		lastTraffic: map[int64]trafficState{},
 	}, nil
 }
@@ -597,7 +609,7 @@ func (s *Service) updateMetrics(rs []Relay, rot Rotation) {
 		s.m.weight.WithLabelValues(r.Name).Set(float64(weights[r.ID]))
 		if r.Kind == KindAgent && r.Agent != nil {
 			s.m.configLag.WithLabelValues(r.Name).Set(float64(r.Agent.DesiredVersion - r.Agent.AckedVersion))
-			if st, ok := s.liveStats[r.ID]; ok {
+			if st, ok := s.freshLiveLocked(r.ID); ok {
 				s.m.active.WithLabelValues(r.Name).Set(float64(st.Usage.RelaysActive))
 			}
 		}
@@ -708,25 +720,25 @@ func (s *Service) views(rs []Relay, rot Rotation) []View {
 	return out
 }
 
-// List returns every relay and the computed rotation.
+// List returns every relay and the computed rotation. View.Weight is the
+// configured weight; the auto-balanced one only shows in RotationWeight (the
+// admin UI saves Weight back on edit).
 func (s *Service) List(ctx context.Context) ([]View, Rotation, error) {
 	rs, err := s.st.List(ctx)
 	if err != nil {
 		return nil, Rotation{}, err
 	}
-	rs = s.prepareRelaysForRotation(ctx, rs)
-	rot := ComputeRotation(rs)
+	rot := ComputeRotation(s.prepareRelaysForRotation(ctx, rs))
 	return s.views(rs, rot), rot, nil
 }
 
-// Get returns one relay.
+// Get returns one relay (weights as in List).
 func (s *Service) Get(ctx context.Context, id int64) (View, error) {
 	rs, err := s.st.List(ctx)
 	if err != nil {
 		return View{}, err
 	}
-	rs = s.prepareRelaysForRotation(ctx, rs)
-	rot := ComputeRotation(rs)
+	rot := ComputeRotation(s.prepareRelaysForRotation(ctx, rs))
 	for _, v := range s.views(rs, rot) {
 		if v.ID == id {
 			return v, nil
@@ -813,19 +825,43 @@ func (s *Service) SetOptions(ctx context.Context, o Options, by *int64) error {
 	return nil
 }
 
+// getActiveSessionsMap is the current load per relay for auto weights: fresh
+// status of connected agents and recent traffic samples only, so a relay
+// that went away does not keep its last session count.
 func (s *Service) getActiveSessionsMap() map[int64]int {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	now := s.now()
 	m := make(map[int64]int, len(s.liveStats)+len(s.lastTraffic))
-	for id, st := range s.liveStats {
-		m[id] = st.Usage.RelaysActive
+	for id := range s.liveStats {
+		if st, ok := s.freshLiveLocked(id); ok {
+			m[id] = st.Usage.RelaysActive
+		}
 	}
 	for id, ts := range s.lastTraffic {
-		if ts.activeSessions > m[id] {
+		if now.Sub(ts.at) <= liveStatsMaxAge && ts.activeSessions > m[id] {
 			m[id] = ts.activeSessions
 		}
 	}
 	return m
+}
+
+// freshLiveLocked returns the last status of agent id when the agent is
+// connected and the report is recent. Caller holds s.mu.
+func (s *Service) freshLiveLocked(id int64) (agentproto.Status, bool) {
+	st, ok := s.liveStats[id]
+	if !ok || s.conns[id] == nil || s.now().Sub(s.liveAt[id]) > liveStatsMaxAge {
+		return agentproto.Status{}, false
+	}
+	return st, true
+}
+
+// forgetLiveLocked drops the live state of relay id (agent gone or relay
+// deleted). Caller holds s.mu.
+func (s *Service) forgetLiveLocked(id int64) {
+	delete(s.liveStats, id)
+	delete(s.liveAt, id)
+	delete(s.lastTraffic, id)
 }
 
 // Create adds a static or agent relay. Agents get their enrollment material.
@@ -958,8 +994,7 @@ func (s *Service) Delete(ctx context.Context, id int64) error {
 	s.mu.Lock()
 	delete(s.fails, id)
 	delete(s.probedAt, id)
-	delete(s.liveStats, id)
-	delete(s.lastTraffic, id)
+	s.forgetLiveLocked(id)
 	s.mu.Unlock()
 	s.Notify()
 	return nil
@@ -1220,7 +1255,9 @@ func (s *Service) sampleTraffic(ctx context.Context, rs []Relay) {
 
 		switch r.Kind {
 		case KindAgent:
-			st, ok := s.liveStats[r.ID]
+			// Disconnected or silent agents contribute nothing: integrating
+			// their last reported rate would invent traffic.
+			st, ok := s.freshLiveLocked(r.ID)
 			if !ok {
 				continue
 			}
@@ -1313,6 +1350,9 @@ func (s *Service) sampleTraffic(ctx context.Context, rs []Relay) {
 	}
 }
 
+// GeoIP returns the engine behind country imports and the GeoIP endpoints.
+func (s *Service) GeoIP() *GeoIPEngine { return s.cfg.GeoIP }
+
 // ListPrefixRules returns all prefix routing rules ordered by id.
 func (s *Service) ListPrefixRules(ctx context.Context) ([]PrefixRule, error) {
 	return s.st.ListPrefixRules(ctx)
@@ -1340,8 +1380,16 @@ func (s *Service) DeletePrefixRule(ctx context.Context, id int64) error {
 	return nil
 }
 
-// SyncPrefixRules writes relay_map.txt to ListDir and sends reload-geo to hbbs if reachable.
+// SyncPrefixRules writes relay_map.txt to ListDir and sends reload-geo to hbbs
+// if reachable. Concurrent calls are serialised, so the file always reflects
+// the rules as of the last call (the write itself is atomic: temp + rename).
 func (s *Service) SyncPrefixRules(ctx context.Context) error {
+	s.prefixMu.Lock()
+	defer s.prefixMu.Unlock()
+	return s.syncPrefixRulesLocked(ctx)
+}
+
+func (s *Service) syncPrefixRulesLocked(ctx context.Context) error {
 	rules, err := s.st.ListPrefixRules(ctx)
 	if err != nil {
 		return err

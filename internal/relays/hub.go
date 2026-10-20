@@ -254,6 +254,7 @@ func (s *Service) handleConnect(w http.ResponseWriter, r *http.Request) {
 		s.mu.Lock()
 		if s.conns[rel.ID] == c {
 			delete(s.conns, rel.ID)
+			s.forgetLiveLocked(rel.ID)
 		}
 		s.mu.Unlock()
 		s.log.Info("relays: agent disconnected", slog.String("relay", rel.Name))
@@ -385,6 +386,7 @@ func (s *Service) handleMessage(ctx context.Context, c *agentConn, env agentprot
 		}
 		s.mu.Lock()
 		s.liveStats[c.id] = st
+		s.liveAt[c.id] = s.now()
 		save := s.now().Sub(s.statusAt[c.id]) >= statusSaveEvery
 		if save {
 			s.statusAt[c.id] = s.now()
