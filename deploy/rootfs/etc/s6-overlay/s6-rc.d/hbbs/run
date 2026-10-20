@@ -11,7 +11,7 @@
 #                        through the panel's reverse proxy (/ws/relay), not
 #                        remote relay agents in the rotation
 #      ALWAYS_USE_RELAY, MUST_LOGIN, TCP_KEEPALIVE, WEBRTC, RUSTDESK_API_JWT_KEY,
-#      RUST_LOG
+#      TRUSTED_PROXIES, WS_PEERS, RUST_LOG
 #                     -> read by hbbs itself from the environment (with-contenv
 #                        and as-service-user keep the container env)
 exec 2>&1
@@ -22,6 +22,12 @@ cd /data || exit 1
 
 set --
 if [ -n "${RELAY:-}" ]; then set -- "$@" -r "$RELAY"; fi
+# The reverse proxy the panel trusts for client IPs is the one in front of
+# hbbs' WebSocket port too.
+if [ -z "${TRUSTED_PROXIES:-}" ] && [ -n "${RDPANEL_TRUSTED_PROXIES:-}" ]; then
+	TRUSTED_PROXIES=$RDPANEL_TRUSTED_PROXIES
+	export TRUSTED_PROXIES
+fi
 if [ -z "${WS_RELAY_SERVERS+x}" ] && [ -n "${RELAY:-}" ]; then
 	WS_RELAY_SERVERS=${RELAY%%,*}
 	export WS_RELAY_SERVERS

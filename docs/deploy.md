@@ -280,6 +280,8 @@ Summary:
 | `ALWAYS_USE_RELAY` | hbbs | `N` | `Y` disables P2P |
 | `MUST_LOGIN` | hbbs | `N` | `Y` requires a panel login token for connections |
 | `TCP_KEEPALIVE` | hbbs | `N` | `Y` keeps TCP/WebSocket-mode clients online (see [WebSocket and TCP-mode clients](#websocket-and-tcp-mode-clients)) |
+| `TRUSTED_PROXIES` | hbbs | `RDPANEL_TRUSTED_PROXIES`, else loopback only | comma-separated IPs/CIDRs whose `X-Real-IP` / `X-Forwarded-For` hbbs believes for WebSocket clients; a reverse proxy in another container or on another host must be listed here, otherwise WebSocket clients appear with the proxy's address |
+| `WS_PEERS` | hbbs | `N` | `Y` forwards relay requests to devices registered over WebSocket/TCP instead of UDP only (fork behaviour before 0.11; off = upstream behaviour) |
 | `WS_RELAY_SERVERS` | hbbs | first `RELAY` entry | relays offered to browser (WebSocket) clients such as the [web client](web-client.md); they must be reachable as `wss://<host>/ws/relay`, so by default only the local hbbr behind the panel. Set empty to use the normal rotation |
 | `WEBRTC` | hbbs | `N` | `Y` forwards WebRTC signaling for RustDesk 1.5+ clients (see [WebRTC](webrtc.md)) |
 | `RUSTDESK_API_JWT_KEY` | panel, hbbs | generated `jwt.key` | HS256 key of client tokens (raw string) |

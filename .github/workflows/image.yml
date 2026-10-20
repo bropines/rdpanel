@@ -39,9 +39,10 @@ env:
   # The single pinned hbbs/hbbr source (push, tag and manual builds unless
   # server_ref overrides it); bump deliberately after testing a newer commit of
   # the bropines/rustdesk-server `rdpanel` branch.
-  # 5994ffc: rdpanel branch head (hbbr stats, hbbs prefix routing & reload-geo,
-  # RequestRelay forwarded to WebSocket peers); the v0.10.7 image uses it.
-  SERVER_REF: ${{ inputs.server_ref || '5994ffcba4757901eb0f7147e5055e90261b9de9' }}
+  # 35f675c: rdpanel branch head (hbbs WebSocket hardening: trusted proxies,
+  # per-connection send queues, registrations bound to RegisterPk, checked
+  # RequestRelay, message size caps; opt-in WS_PEERS and WS_RELAY_SERVERS).
+  SERVER_REF: ${{ inputs.server_ref || '35f675c21d6ea1cf0302901e50650d8847a1fc18' }}
 
 jobs:
   hbb:
