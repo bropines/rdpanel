@@ -1296,6 +1296,7 @@
     "weight": "Weight",
     "weightHint": "Share of new sessions (0-5); 0 keeps the relay out of rotation.",
     "weightShort": "weight {{w}}",
+    "weightEffective": "Effective in the rotation now: ×{{w}} (auto-balanced by load or scaled to fit hbbs).",
     "inRotation": "In rotation",
     "rotation": "Rotation",
     "rotationCol": "Rotation",

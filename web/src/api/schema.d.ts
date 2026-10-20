@@ -4330,6 +4330,7 @@ export interface components {
             /** @description Optional host[:port] used by the panel for reachability probes (defaults to public_host). */
             mgmt_host?: string | null;
             region?: string | null;
+            /** @description Configured weight (what PATCH sets). With auto weights on, the load-balanced value is rotation_weight. */
             weight: number;
             in_rotation: boolean;
             admin_state: components["schemas"]["RelayAdminState"];
@@ -4342,7 +4343,7 @@ export interface components {
             last_probe_error?: string | null;
             /** @description Whether the lightweight TCP connect to public_host succeeded during the last probe (when mgmt_host is configured). */
             public_reachable?: boolean | null;
-            /** @description Entries in hbbs' computed list (0 = not in rotation). */
+            /** @description Entries in hbbs' computed list (0 = not in rotation): the configured weight, or the auto-balanced one, scaled down when the list must fit hbbs' command. */
             rotation_weight: number;
             /** Format: date-time */
             created_at: string;

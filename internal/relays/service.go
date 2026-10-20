@@ -720,25 +720,25 @@ func (s *Service) views(rs []Relay, rot Rotation) []View {
 	return out
 }
 
-// List returns every relay and the computed rotation.
+// List returns every relay and the computed rotation. View.Weight is the
+// configured weight; the auto-balanced one only shows in RotationWeight (the
+// admin UI saves Weight back on edit).
 func (s *Service) List(ctx context.Context) ([]View, Rotation, error) {
 	rs, err := s.st.List(ctx)
 	if err != nil {
 		return nil, Rotation{}, err
 	}
-	rs = s.prepareRelaysForRotation(ctx, rs)
-	rot := ComputeRotation(rs)
+	rot := ComputeRotation(s.prepareRelaysForRotation(ctx, rs))
 	return s.views(rs, rot), rot, nil
 }
 
-// Get returns one relay.
+// Get returns one relay (weights as in List).
 func (s *Service) Get(ctx context.Context, id int64) (View, error) {
 	rs, err := s.st.List(ctx)
 	if err != nil {
 		return View{}, err
 	}
-	rs = s.prepareRelaysForRotation(ctx, rs)
-	rot := ComputeRotation(rs)
+	rot := ComputeRotation(s.prepareRelaysForRotation(ctx, rs))
 	for _, v := range s.views(rs, rot) {
 		if v.ID == id {
 			return v, nil

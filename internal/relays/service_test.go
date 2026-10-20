@@ -556,3 +556,56 @@ func TestLocalRelaySampleTrafficNoDeadlock(t *testing.T) {
 		t.Fatalf("expected recorded traffic, got %+v", samples)
 	}
 }
+
+// TestAutoWeightsKeepConfiguredWeight: with auto weights on, the API's weight
+// stays the configured one (the drawer saves it back); only rotation_weight
+// is load-balanced.
+func TestAutoWeightsKeepConfiguredWeight(t *testing.T) {
+	ctx := context.Background()
+	h := newHarness(t, nil)
+	if err := h.svc.SetOptions(ctx, Options{AutoWeights: true, AllowPrivateHosts: true}, nil); err != nil {
+		t.Fatal(err)
+	}
+	idle, _, err := h.svc.Create(ctx, CreateInput{Kind: KindStatic, Name: "idle", PublicHost: "idle.example.com", Weight: 2, InRotation: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	busy, _, err := h.svc.Create(ctx, CreateInput{Kind: KindStatic, Name: "busy", PublicHost: "busy.example.com", Weight: 3, InRotation: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, id := range []int64{idle.ID, busy.ID} {
+		if err := h.st.SetHealthOnly(ctx, id, HealthActive); err != nil {
+			t.Fatal(err)
+		}
+	}
+	h.svc.mu.Lock()
+	h.svc.lastTraffic[idle.ID] = trafficState{at: h.clk.now(), activeSessions: 0}
+	h.svc.lastTraffic[busy.ID] = trafficState{at: h.clk.now(), activeSessions: 10}
+	h.svc.mu.Unlock()
+
+	check := func(what string, wantRot map[int64]int) {
+		t.Helper()
+		views, _, err := h.svc.List(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, v := range views {
+			want := map[int64]int{idle.ID: 2, busy.ID: 3}[v.ID]
+			if v.Weight != want {
+				t.Errorf("%s: List %s weight %d, want the configured %d", what, v.Name, v.Weight, want)
+			}
+			if v.RotationWeight != wantRot[v.ID] {
+				t.Errorf("%s: List %s rotation_weight %d, want %d", what, v.Name, v.RotationWeight, wantRot[v.ID])
+			}
+			g, err := h.svc.Get(ctx, v.ID)
+			if err != nil || g.Weight != want || g.RotationWeight != wantRot[v.ID] {
+				t.Errorf("%s: Get %s = weight %d rotation %d (%v)", what, v.Name, g.Weight, g.RotationWeight, err)
+			}
+		}
+	}
+	check("loaded", map[int64]int{idle.ID: 5, busy.ID: 1})
+	// The load samples age out: back to the configured weights.
+	h.clk.add(liveStatsMaxAge + time.Second)
+	check("stale samples", map[int64]int{idle.ID: 2, busy.ID: 3})
+}
