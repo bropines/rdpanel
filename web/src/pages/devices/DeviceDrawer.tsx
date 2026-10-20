@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Apple, BookPlus, Laptop, Monitor, Plug, Power, Save, Smartphone, Terminal, Trash2 } from "lucide-react";
+import { Apple, BookPlus, Cast, Laptop, Monitor, Plug, Power, Save, Smartphone, Terminal, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
@@ -248,6 +248,16 @@ export function DeviceDrawer({
             </div>
           ) : (
             <>
+              <div>
+                <Button
+                  className="w-full"
+                  size="sm"
+                  onClick={() => window.open(`/connect?id=${encodeURIComponent(d.rustdesk_id)}`, "_blank")}
+                >
+                  <Cast className="mr-2 h-4 w-4" />
+                  {t("devices.webConnect")}
+                </Button>
+              </div>
               <section>
                 <SectionTitle>{t("devices.settings")}</SectionTitle>
                 <EditForm device={d} isAdmin={isAdmin} />

@@ -104,9 +104,21 @@ const idpRoute = createRoute({ getParentRoute: admin, path: "/identity-providers
 const serverRoute = createRoute({ getParentRoute: admin, path: "/server", validateSearch: S, component: lazyRouteComponent(() => import("@/pages/server/ServerPage"), "ServerPage") });
 const settingsRoute = createRoute({ getParentRoute: admin, path: "/settings", validateSearch: S, component: lazyRouteComponent(() => import("@/pages/SettingsPage"), "SettingsPage") });
 
+const connectRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/connect",
+  beforeLoad: async ({ context, location }) => ({ me: await requireSession(context.queryClient, location) }),
+  validateSearch: (s: Record<string, unknown>): { id?: string; pwd?: string } => ({
+    id: typeof s.id === "string" ? s.id : undefined,
+    pwd: typeof s.pwd === "string" ? s.pwd : undefined,
+  }),
+  component: lazyRouteComponent(() => import("@/pages/webclient/WebClientPage"), "WebClientPage"),
+});
+
 const routeTree = rootRoute.addChildren([
   loginRoute,
   resetPasswordRoute,
+  connectRoute,
   appRoute.addChildren([
     dashboardRoute,
     profileRoute,

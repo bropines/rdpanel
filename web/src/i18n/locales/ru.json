@@ -372,6 +372,7 @@
     "assignOwner": "Назначить владельца",
     "assignGroup": "Назначить группу",
     "assignStrategy": "Назначить стратегию",
+    "webConnect": "Подключиться в браузере",
     "addToBook": "В адресную книгу",
     "kick": "Отключить",
     "kickTitle": "Отключить сеансы на {{name}}?",
@@ -1783,6 +1784,32 @@
       "assertionFailed": "Ошибка",
       "expected": "Ожидалось",
       "actual": "Фактически"
+    }
+  },
+  "webclient": {
+    "title": "Веб-управление",
+    "noPeer": "Устройство не выбрано",
+    "connect": "Подключиться",
+    "disconnect": "Отключиться",
+    "enterDevice": "Введите ID устройства для подключения",
+    "clipboard": "Буфер обмена",
+    "clipboardModalDesc": "Вставьте текст для отправки в буфер обмена удалённого устройства.",
+    "clipboardReceived": "Буфер обмена обновлён",
+    "passwordRequired": "Требуется пароль доступа",
+    "passwordDesc": "Удалённое устройство требует авторизацию для запуска сессии управления.",
+    "unsupportedTitle": "WebCodecs не поддерживается",
+    "unsupportedDesc": "Ваш браузер не поддерживает WebCodecs API для аппаратного декодирования видеопотока с низкой задержкой. Рекомендуется использовать Chrome, Edge, Safari 16.4+ или Firefox 130+.",
+    "state": {
+      "idle": "Ожидание",
+      "connecting_rendezvous": "Подключение к серверу…",
+      "requesting_relay": "Запрос релея…",
+      "connecting_relay": "Подключение к релею…",
+      "pairing_relay": "Ожидание пира…",
+      "handshaking": "Шифрованное рукопожатие…",
+      "authenticating": "Авторизация…",
+      "streaming": "Подключено",
+      "error": "Ошибка подключения",
+      "closed": "Соединение закрыто"
     }
   }
 }

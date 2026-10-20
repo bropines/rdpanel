@@ -61,6 +61,7 @@
     "sonner": "^2.0.7",
     "swagger-ui-dist": "^5.33.3",
     "tailwind-merge": "^2.6.0",
+    "tweetnacl": "^1.0.3",
     "zod": "^4.1.0"
   },
   "devDependencies": {
