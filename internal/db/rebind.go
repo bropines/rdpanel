@@ -2,7 +2,8 @@ package db
 
 import (
 	"errors"
-	"fmt"
+	"sort"
+	"strconv"
 	"strings"
 )
 
@@ -19,22 +20,81 @@ var ErrMixedPlaceholders = errors.New("db: query mixes ? and ?N placeholders")
 // Single-quoted literals ('...'), double-quoted identifiers ("..."), line
 // comments (-- ...) and block comments (/* ... */) are copied verbatim.
 func Rebind(query string) (string, error) {
-	return rewrite(query, false)
+	q, _, _, err := rewrite(query, false, nil)
+	return q, err
 }
 
-// postgresSQL adapts a query written for SQLite (the reference dialect of the
-// repositories) to PostgreSQL: placeholders are rebound as in Rebind, and LIKE
-// becomes ILIKE because SQLite's LIKE is case-insensitive (ASCII) while
-// PostgreSQL's is not; searches must behave the same on both engines.
-func postgresSQL(query string) (string, error) {
-	return rewrite(query, true)
+// postgresQuery adapts a query written for SQLite (the reference dialect of
+// the repositories) and its arguments to PostgreSQL:
+//
+//   - placeholders are rebound as in Rebind;
+//   - LIKE becomes ILIKE: SQLite's LIKE is case-insensitive (ASCII),
+//     PostgreSQL's is not, and searches must behave the same on both;
+//   - arguments no numbered placeholder refers to are dropped (and the
+//     placeholders renumbered), as are all arguments of a query without
+//     placeholders: SQLite ignores them, PostgreSQL cannot infer their type
+//     and rejects the statement;
+//   - Go booleans are bound as 0/1 (see postgresArgs).
+func postgresQuery(query string, args []any) (string, []any, error) {
+	q, used, plain, err := rewrite(query, true, nil)
+	if err != nil {
+		return "", nil, err
+	}
+	if len(used) == 0 && plain == 0 {
+		return q, nil, nil
+	}
+	if renumber := unusedArgs(used, len(args)); renumber != nil {
+		if q, _, _, err = rewrite(query, true, renumber); err != nil {
+			return "", nil, err
+		}
+		kept := make([]any, 0, len(renumber))
+		for i, a := range args {
+			if _, ok := renumber[i+1]; ok {
+				kept = append(kept, a)
+			}
+		}
+		args = kept
+	}
+	return q, postgresArgs(args), nil
 }
 
-func rewrite(query string, ilike bool) (string, error) {
+// unusedArgs returns the renumbering (old index -> new index) that drops the
+// arguments numbered placeholders do not reference, or nil when every
+// argument is referenced (or the query has no numbered placeholders).
+func unusedArgs(used map[int]bool, nargs int) map[int]int {
+	if len(used) == 0 {
+		return nil
+	}
+	all := true
+	for i := 1; i <= nargs; i++ {
+		all = all && used[i]
+	}
+	if all {
+		return nil
+	}
+	idx := make([]int, 0, len(used))
+	for i := range used {
+		idx = append(idx, i)
+	}
+	sort.Ints(idx)
+	renumber := make(map[int]int, len(idx))
+	for n, i := range idx {
+		renumber[i] = n + 1
+	}
+	return renumber
+}
+
+// rewrite performs the placeholder (and optionally LIKE) translation. It
+// returns the numbered placeholder indices seen and the number of plain
+// placeholders; renumber, when non-nil, maps numbered indices to new ones.
+func rewrite(query string, ilike bool, renumber map[int]int) (string, map[int]bool, int, error) {
 	var b strings.Builder
 	b.Grow(len(query) + 16)
 
-	var plain, numbered bool
+	var (
+		plain int
+		used  map[int]bool
+	)
 	next := 1
 	n := len(query)
 	for i := 0; i < n; {
@@ -81,15 +141,25 @@ func rewrite(query string, ilike bool) (string, error) {
 			}
 			b.WriteByte('$')
 			if j > i+1 {
-				numbered = true
-				b.WriteString(query[i+1 : j])
+				num, err := strconv.Atoi(query[i+1 : j])
+				if err != nil {
+					return "", nil, 0, err
+				}
+				if used == nil {
+					used = map[int]bool{}
+				}
+				used[num] = true
+				if to, ok := renumber[num]; ok {
+					num = to
+				}
+				b.WriteString(strconv.Itoa(num))
 			} else {
-				plain = true
-				fmt.Fprintf(&b, "%d", next)
+				plain++
+				b.WriteString(strconv.Itoa(next))
 				next++
 			}
-			if plain && numbered {
-				return "", ErrMixedPlaceholders
+			if plain > 0 && used != nil {
+				return "", nil, 0, ErrMixedPlaceholders
 			}
 			i = j
 		case ilike && (c == 'l' || c == 'L') && isKeywordAt(query, i, "like"):
@@ -108,7 +178,7 @@ func rewrite(query string, ilike bool) (string, error) {
 			i++
 		}
 	}
-	return b.String(), nil
+	return b.String(), used, plain, nil
 }
 
 // isKeywordAt reports whether the identifier starting at i is exactly kw

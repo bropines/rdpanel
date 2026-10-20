@@ -5,7 +5,7 @@
 // Repository SQL is written for SQLite. On PostgreSQL every query issued
 // through DB or a Querier from DB.Wrap is adapted on the fly: placeholders are
 // rebound, LIKE becomes ILIKE and Go booleans are bound as 0/1 (see
-// postgresSQL and postgresArgs). The PostgreSQL schema (migrations_pg) mirrors
+// postgresQuery). The PostgreSQL schema (migrations_pg) mirrors
 // the SQLite one: BIGINT for INTEGER, BYTEA for BLOB, CITEXT for NOCASE
 // columns and an ICU collation named "nocase" so COLLATE NOCASE works as is.
 package db
@@ -33,6 +33,22 @@ const (
 	DialectSQLite   Dialect = "sqlite"
 	DialectPostgres Dialect = "postgres"
 )
+
+// InJSONArray returns the condition "expr IN (...)" over the elements of a
+// JSON array bound to a single parameter (json_each on SQLite,
+// jsonb_array_elements_text on PostgreSQL), so long lists such as the online
+// device ids need one bind instead of one per element. On PostgreSQL the
+// elements are cast to pgType (e.g. "bigint"; "" keeps text).
+func (d Dialect) InJSONArray(expr, pgType string) string {
+	if d != DialectPostgres {
+		return expr + " IN (SELECT value FROM json_each(?))"
+	}
+	v := "value"
+	if pgType != "" {
+		v = "CAST(value AS " + pgType + ")"
+	}
+	return expr + " IN (SELECT " + v + " FROM jsonb_array_elements_text(CAST(? AS jsonb)) AS j (value))"
+}
 
 // Querier is the subset of *sql.DB / *sql.Tx used by repositories, so the same
 // repository code runs inside or outside a transaction.
@@ -172,8 +188,16 @@ func OpenPostgres(ctx context.Context, dsn string, opts PostgresOptions) (*DB, e
 // minPostgresVersion is the oldest supported server (server_version_num).
 const minPostgresVersion = 130000
 
+// txLockKey is the PostgreSQL advisory lock serializing WithTx transactions:
+// an arbitrary constant (0x7264706e6c, "rdpnl"); advisory locks are per
+// database.
+const txLockKey = "491311361644"
+
+// txLockTimeout bounds lock waits inside WithTx transactions on PostgreSQL.
+const txLockTimeout = "30s"
+
 // dialectQuerier adapts SQLite-flavoured repository queries to PostgreSQL
-// (see postgresSQL and postgresArgs). SQLite needs no adaptation, so Wrap only
+// (see postgresQuery). SQLite needs no adaptation, so Wrap only
 // uses it for PostgreSQL.
 type dialectQuerier struct {
 	q    Querier
@@ -187,33 +211,29 @@ func (dialectQuerier) Dialect() Dialect { return DialectPostgres }
 func (dq dialectQuerier) InTx() bool { return dq.inTx }
 
 func (dq dialectQuerier) ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error) {
-	query, err := postgresSQL(query)
+	query, args, err := postgresQuery(query, args)
 	if err != nil {
 		return nil, err
 	}
-	return dq.q.ExecContext(ctx, query, postgresArgs(args)...)
+	return dq.q.ExecContext(ctx, query, args...)
 }
 
 func (dq dialectQuerier) QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error) {
-	query, err := postgresSQL(query)
+	query, args, err := postgresQuery(query, args)
 	if err != nil {
 		return nil, err
 	}
-	return dq.q.QueryContext(ctx, query, postgresArgs(args)...)
+	return dq.q.QueryContext(ctx, query, args...)
 }
 
 // QueryRowContext panics on a query mixing placeholder styles (a programming
 // error): *sql.Row cannot carry an error constructed outside database/sql.
 func (dq dialectQuerier) QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row {
-	return dq.q.QueryRowContext(ctx, mustPostgresSQL(query), postgresArgs(args)...)
-}
-
-func mustPostgresSQL(query string) string {
-	q, err := postgresSQL(query)
+	q, args, err := postgresQuery(query, args)
 	if err != nil {
 		panic(fmt.Errorf("%w: %s", err, query))
 	}
-	return q
+	return dq.q.QueryRowContext(ctx, q, args...)
 }
 
 // postgresArgs converts Go booleans to 0/1: the schema keeps SQLite's INTEGER
@@ -279,12 +299,27 @@ func (d *DB) QueryRowContext(ctx context.Context, query string, args ...any) *sq
 	return d.DB.QueryRowContext(ctx, query, args...)
 }
 
+// Exec is ExecContext with the background context.
+func (d *DB) Exec(query string, args ...any) (sql.Result, error) {
+	return d.ExecContext(context.Background(), query, args...)
+}
+
+// Query is QueryContext with the background context.
+func (d *DB) Query(query string, args ...any) (*sql.Rows, error) {
+	return d.QueryContext(context.Background(), query, args...)
+}
+
+// QueryRow is QueryRowContext with the background context.
+func (d *DB) QueryRow(query string, args ...any) *sql.Row {
+	return d.QueryRowContext(context.Background(), query, args...)
+}
+
 // PrepareContext prepares a statement, adapting the query to PostgreSQL when
 // needed. Arguments of the returned statement are passed to the driver as-is
 // (no bool conversion); prefer ExecContext/QueryContext.
 func (d *DB) PrepareContext(ctx context.Context, query string) (*sql.Stmt, error) {
 	if d.Dialect() == DialectPostgres {
-		q, err := postgresSQL(query)
+		q, _, err := postgresQuery(query, nil)
 		if err != nil {
 			return nil, err
 		}
@@ -333,6 +368,31 @@ func InTx(q Querier) bool {
 	return false
 }
 
+// Savepoint runs fn so that a failing statement in it (typically a unique
+// violation the caller recovers from) leaves the enclosing transaction
+// usable: PostgreSQL aborts the whole transaction on any error, SQLite does
+// not. On PostgreSQL inside a transaction fn runs under a SAVEPOINT that is
+// rolled back when fn fails; otherwise fn is simply called.
+func Savepoint(ctx context.Context, q Querier, fn func() error) error {
+	if DialectOf(q) != DialectPostgres || !InTx(q) {
+		return fn()
+	}
+	if _, err := q.ExecContext(ctx, `SAVEPOINT rdpanel_sp`); err != nil {
+		return fmt.Errorf("db: savepoint: %w", err)
+	}
+	if err := fn(); err != nil {
+		if _, rerr := q.ExecContext(ctx, `ROLLBACK TO SAVEPOINT rdpanel_sp`); rerr != nil {
+			return errors.Join(err, fmt.Errorf("db: rollback to savepoint: %w", rerr))
+		}
+		_, _ = q.ExecContext(ctx, `RELEASE SAVEPOINT rdpanel_sp`)
+		return err
+	}
+	if _, err := q.ExecContext(ctx, `RELEASE SAVEPOINT rdpanel_sp`); err != nil {
+		return fmt.Errorf("db: release savepoint: %w", err)
+	}
+	return nil
+}
+
 // SyncIDSequence moves the id sequence of table past its largest id after rows
 // were inserted with explicit ids (legacy ids preserved on import). Only
 // PostgreSQL needs it: SQLite's AUTOINCREMENT tracks explicit ids itself.
@@ -368,10 +428,15 @@ func (d *DB) verify(ctx context.Context) error {
 // Path returns the SQLite database file path ("" for PostgreSQL).
 func (d *DB) Path() string { return d.path }
 
-// WithTx runs fn inside a transaction (BEGIN IMMEDIATE on SQLite, a READ
-// COMMITTED transaction on PostgreSQL). It commits when fn returns nil and
+// WithTx runs fn inside a transaction. It commits when fn returns nil and
 // rolls back otherwise (also on panic, which is re-raised). Pass tx through
 // Wrap before running repository queries on it.
+//
+// Transactions run one at a time, on both engines: SQLite takes its write
+// lock at BEGIN IMMEDIATE, and on PostgreSQL every transaction first takes
+// the same transaction-scoped advisory lock. Repositories rely on this for
+// read-check-write sequences (e.g. "name not taken, then insert") that READ
+// COMMITTED alone would let interleave.
 func (d *DB) WithTx(ctx context.Context, fn func(tx *sql.Tx) error) (err error) {
 	tx, err := d.BeginTx(ctx, nil)
 	if err != nil {
@@ -386,6 +451,14 @@ func (d *DB) WithTx(ctx context.Context, fn func(tx *sql.Tx) error) (err error) 
 			_ = tx.Rollback()
 		}
 	}()
+	if d.Dialect() == DialectPostgres {
+		// lock_timeout plays the part of SQLite's busy_timeout: a transaction
+		// that waits too long fails instead of hanging.
+		if _, err = tx.ExecContext(ctx, `SELECT set_config('lock_timeout', '`+txLockTimeout+`', true),
+			pg_advisory_xact_lock(`+txLockKey+`)`); err != nil {
+			return fmt.Errorf("db: transaction lock: %w", err)
+		}
+	}
 	if err = fn(tx); err != nil {
 		return err
 	}

@@ -103,7 +103,7 @@ func TestRebindRejectsMixedPlaceholders(t *testing.T) {
 	}
 }
 
-func TestPostgresSQL(t *testing.T) {
+func TestPostgresQuery(t *testing.T) {
 	tests := []struct{ in, want string }{
 		{"SELECT 1 WHERE a LIKE ? ESCAPE '\\' OR b like ?", "SELECT 1 WHERE a ILIKE $1 ESCAPE '\\' OR b ILIKE $2"},
 		{"SELECT 1 WHERE a NOT LIKE ?1", "SELECT 1 WHERE a NOT ILIKE $1"},
@@ -113,13 +113,41 @@ func TestPostgresSQL(t *testing.T) {
 		{"SELECT 1 WHERE x ILIKE ?", "SELECT 1 WHERE x ILIKE $1"},
 	}
 	for _, tc := range tests {
-		got, err := postgresSQL(tc.in)
+		got, _, err := postgresQuery(tc.in, nil)
 		if err != nil {
 			t.Fatal(err)
 		}
 		if got != tc.want {
-			t.Errorf("postgresSQL(%q)\ngot:  %q\nwant: %q", tc.in, got, tc.want)
+			t.Errorf("postgresQuery(%q)\ngot:  %q\nwant: %q", tc.in, got, tc.want)
 		}
+	}
+	if _, _, err := postgresQuery("SELECT ?1, ?", []any{1, 2}); !errors.Is(err, ErrMixedPlaceholders) {
+		t.Errorf("mixed placeholders: %v", err)
+	}
+}
+
+// TestPostgresQueryDropsUnusedArgs: SQLite ignores arguments no ?N refers to
+// (a query builder may bind ?1 for a clause it then leaves out); PostgreSQL
+// cannot type them, so they are dropped and the rest renumbered.
+func TestPostgresQueryDropsUnusedArgs(t *testing.T) {
+	q, args, err := postgresQuery("SELECT count(*) FROM b WHERE b.id = ?2 AND b.owner = ?4 OR b.x = ?2", []any{"viewer", 7, "unused", true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := "SELECT count(*) FROM b WHERE b.id = $1 AND b.owner = $2 OR b.x = $1"; q != want {
+		t.Errorf("query %q, want %q", q, want)
+	}
+	if want := []any{7, int64(1)}; !reflect.DeepEqual(args, want) {
+		t.Errorf("args %#v, want %#v", args, want)
+	}
+	// No placeholder at all (a builder bound ?1 for a clause it left out).
+	if q, args, _ = postgresQuery("SELECT count(*) FROM b", []any{"viewer"}); q != "SELECT count(*) FROM b" || args != nil {
+		t.Errorf("got %q %v", q, args)
+	}
+	// All referenced: unchanged.
+	q, args, _ = postgresQuery("SELECT ?2, ?1", []any{1, 2})
+	if q != "SELECT $2, $1" || !reflect.DeepEqual(args, []any{1, 2}) {
+		t.Errorf("got %q %v", q, args)
 	}
 }
 

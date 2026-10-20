@@ -7,7 +7,9 @@ import (
 	"reflect"
 	"sort"
 	"strings"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/pressly/goose/v3"
 
@@ -311,5 +313,59 @@ func TestPostgresConstraintsAndDialect(t *testing.T) {
 		return nil
 	}); err != nil {
 		t.Fatal(err)
+	}
+}
+
+// TestPostgresTransactions: WithTx transactions are serialized (as SQLite's
+// BEGIN IMMEDIATE does), Savepoint keeps a transaction usable after a
+// recovered constraint error, and InJSONArray binds a list as one parameter.
+func TestPostgresTransactions(t *testing.T) {
+	pgOnly(t)
+	ctx := context.Background()
+	d := dbtest.Open(t)
+
+	var firstDone atomic.Bool
+	started := make(chan struct{})
+	errc := make(chan error, 1)
+	go func() {
+		errc <- d.WithTx(ctx, func(tx *sql.Tx) error {
+			close(started)
+			time.Sleep(300 * time.Millisecond)
+			firstDone.Store(true)
+			return nil
+		})
+	}()
+	<-started
+	if err := d.WithTx(ctx, func(tx *sql.Tx) error {
+		if !firstDone.Load() {
+			t.Error("second transaction ran while the first was open")
+		}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := <-errc; err != nil {
+		t.Fatal(err)
+	}
+
+	err := d.WithTx(ctx, func(tx *sql.Tx) error {
+		q := d.Wrap(tx)
+		insert := func(name string) error {
+			_, err := q.ExecContext(ctx, `INSERT INTO user_groups (name, created_at, updated_at) VALUES (?, 1, 1)`, name)
+			return err
+		}
+		if err := insert("ops"); err != nil {
+			return err
+		}
+		if err := db.Savepoint(ctx, q, func() error { return insert("OPS") }); !db.IsUniqueViolation(err) {
+			t.Errorf("savepoint error = %v, want unique violation", err)
+		}
+		return insert("dev")
+	})
+	if err != nil {
+		t.Fatalf("transaction after a recovered error: %v", err)
+	}
+	if got := strs(t, d, `SELECT name FROM user_groups WHERE `+db.DialectPostgres.InJSONArray("id", "bigint"), `[1, 2, 3]`); !reflect.DeepEqual(got, []string{"dev", "ops"}) {
+		t.Fatalf("groups: %v", got)
 	}
 }
