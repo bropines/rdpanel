@@ -32,6 +32,7 @@ type ControlRole struct {
 // ControlRoles repository.
 type ControlRoles struct {
 	q   db.Querier
+	d   *db.DB
 	now func() time.Time
 }
 
@@ -84,30 +85,29 @@ func (r *ControlRoles) Create(ctx context.Context, cr *ControlRole) error {
 	cr.CreatedAt = fromMs(now)
 	cr.UpdatedAt = fromMs(now)
 
-	isDef := 0
-	if cr.IsDefault {
-		isDef = 1
-		if _, err := r.q.ExecContext(ctx, `UPDATE control_roles SET is_default = 0`); err != nil {
+	// One transaction, insert first: a failed insert (e.g. a duplicate name)
+	// leaves the current default in place.
+	return atomic(ctx, r.d, r.q, func(q db.Querier) error {
+		err := q.QueryRowContext(ctx, `
+			INSERT INTO control_roles (
+				name, note,
+				allow_keyboard_mouse, allow_clipboard, allow_file_transfer,
+				allow_audio, allow_tcp_tunneling, allow_terminal, allow_restart,
+				is_default, created_at, updated_at
+			) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`,
+			cr.Name, cr.Note,
+			boolInt(cr.AllowKeyboardMouse), boolInt(cr.AllowClipboard), boolInt(cr.AllowFileTransfer),
+			boolInt(cr.AllowAudio), boolInt(cr.AllowTCPTunneling), boolInt(cr.AllowTerminal), boolInt(cr.AllowRestart),
+			boolInt(cr.IsDefault), now, now,
+		).Scan(&cr.ID)
+		if err != nil {
 			return mapErr(err)
 		}
-	}
-
-	err := r.q.QueryRowContext(ctx, `
-		INSERT INTO control_roles (
-			name, note,
-			allow_keyboard_mouse, allow_clipboard, allow_file_transfer,
-			allow_audio, allow_tcp_tunneling, allow_terminal, allow_restart,
-			is_default, created_at, updated_at
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`,
-		cr.Name, cr.Note,
-		boolInt(cr.AllowKeyboardMouse), boolInt(cr.AllowClipboard), boolInt(cr.AllowFileTransfer),
-		boolInt(cr.AllowAudio), boolInt(cr.AllowTCPTunneling), boolInt(cr.AllowTerminal), boolInt(cr.AllowRestart),
-		isDef, now, now,
-	).Scan(&cr.ID)
-	if err != nil {
-		return mapErr(err)
-	}
-	return nil
+		if cr.IsDefault {
+			return clearOtherDefaults(ctx, q, "control_roles", cr.ID)
+		}
+		return nil
+	})
 }
 
 // Get finds a role by ID.
@@ -162,47 +162,63 @@ func (r *ControlRoles) Update(ctx context.Context, cr *ControlRole) error {
 	now := toMs(r.now())
 	cr.UpdatedAt = fromMs(now)
 
-	isDef := 0
-	if cr.IsDefault {
-		isDef = 1
-		if _, err := r.q.ExecContext(ctx, `UPDATE control_roles SET is_default = 0 WHERE id <> ?`, cr.ID); err != nil {
-			return mapErr(err)
+	// One transaction, the row first: updating a missing id (or a duplicate
+	// name) leaves the current default in place.
+	return atomic(ctx, r.d, r.q, func(q db.Querier) error {
+		if err := expectOne(q.ExecContext(ctx, `
+			UPDATE control_roles SET
+				name = ?, note = ?,
+				allow_keyboard_mouse = ?, allow_clipboard = ?, allow_file_transfer = ?,
+				allow_audio = ?, allow_tcp_tunneling = ?, allow_terminal = ?, allow_restart = ?,
+				is_default = ?, updated_at = ?
+			WHERE id = ?`,
+			cr.Name, cr.Note,
+			boolInt(cr.AllowKeyboardMouse), boolInt(cr.AllowClipboard), boolInt(cr.AllowFileTransfer),
+			boolInt(cr.AllowAudio), boolInt(cr.AllowTCPTunneling), boolInt(cr.AllowTerminal), boolInt(cr.AllowRestart),
+			boolInt(cr.IsDefault), now, cr.ID,
+		)); err != nil {
+			return err
 		}
-	}
-
-	return expectOne(r.q.ExecContext(ctx, `
-		UPDATE control_roles SET
-			name = ?, note = ?,
-			allow_keyboard_mouse = ?, allow_clipboard = ?, allow_file_transfer = ?,
-			allow_audio = ?, allow_tcp_tunneling = ?, allow_terminal = ?, allow_restart = ?,
-			is_default = ?, updated_at = ?
-		WHERE id = ?`,
-		cr.Name, cr.Note,
-		boolInt(cr.AllowKeyboardMouse), boolInt(cr.AllowClipboard), boolInt(cr.AllowFileTransfer),
-		boolInt(cr.AllowAudio), boolInt(cr.AllowTCPTunneling), boolInt(cr.AllowTerminal), boolInt(cr.AllowRestart),
-		isDef, now, cr.ID,
-	))
+		if cr.IsDefault {
+			return clearOtherDefaults(ctx, q, "control_roles", cr.ID)
+		}
+		return nil
+	})
 }
 
-// SetDefault marks role id as default.
+// SetDefault marks role id as default. An unknown id is ErrNotFound and
+// changes nothing.
 func (r *ControlRoles) SetDefault(ctx context.Context, id int64) error {
 	now := toMs(r.now())
-	if _, err := r.q.ExecContext(ctx, `UPDATE control_roles SET is_default = 0`); err != nil {
-		return mapErr(err)
-	}
-	return expectOne(r.q.ExecContext(ctx, `UPDATE control_roles SET is_default = 1, updated_at = ? WHERE id = ?`, now, id))
+	return atomic(ctx, r.d, r.q, func(q db.Querier) error {
+		if err := expectOne(q.ExecContext(ctx, `UPDATE control_roles SET is_default = 1, updated_at = ? WHERE id = ?`, now, id)); err != nil {
+			return err
+		}
+		return clearOtherDefaults(ctx, q, "control_roles", id)
+	})
 }
 
-// Delete removes role id. The default role cannot be deleted.
+// ErrRoleInUse is returned (wrapping ErrReferenced) when deleting a control
+// role that rules still reference: deleting it would silently switch those
+// rules to the default role.
+var ErrRoleInUse = fmt.Errorf("%w: control role is referenced by connection rules", ErrReferenced)
+
+// Delete removes role id. The default role (ErrInvalid) and a role that any
+// rule references, enabled or not (ErrRoleInUse), cannot be deleted.
 func (r *ControlRoles) Delete(ctx context.Context, id int64) error {
-	cr, err := r.Get(ctx, id)
-	if err != nil {
-		return err
-	}
-	if cr.IsDefault {
-		return fmt.Errorf("%w: cannot delete default control role", ErrInvalid)
-	}
-	return expectOne(r.q.ExecContext(ctx, `DELETE FROM control_roles WHERE id = ?`, id))
+	return atomic(ctx, r.d, r.q, func(q db.Querier) error {
+		cr, err := scanControlRole(q.QueryRowContext(ctx, `SELECT `+controlRoleColsWithCount+` FROM control_roles cr WHERE cr.id = ?`, id))
+		if err != nil {
+			return err
+		}
+		if cr.IsDefault {
+			return fmt.Errorf("%w: cannot delete default control role", ErrInvalid)
+		}
+		if cr.RuleCount > 0 {
+			return ErrRoleInUse
+		}
+		return expectOne(q.ExecContext(ctx, `DELETE FROM control_roles WHERE id = ?`, id))
+	})
 }
 
 // ACLAction represents permission decision.
@@ -410,20 +426,140 @@ func (r *ConnectionACLs) Delete(ctx context.Context, id int64) error {
 	return expectOne(r.q.ExecContext(ctx, `DELETE FROM connection_acls WHERE id = ?`, id))
 }
 
-// Evaluate checks connection permission between userID and deviceID.
+// ACLSubject is one (user, device) pair for DecideACL.
+type ACLSubject struct {
+	UserID        int64
+	UserGroupID   *int64
+	DeviceID      int64
+	DeviceGroupID *int64
+	// OwnerAccess: the user owns the device, or the device's owner is a
+	// member of the user's "shared" user group. Such access is allowed unless
+	// a rule denies it.
+	OwnerAccess bool
+}
+
+// DecideACL is the connection decision for s under rules (in priority order;
+// disabled rules are skipped): the first rule matching both the user and the
+// device decides. Without a match, owner access is allowed and everything
+// else denied (default deny), or allowed when no rule is enabled at all.
+func DecideACL(rules []*ConnectionACL, s ACLSubject) (ACLDecision, *ConnectionACL) {
+	active := false
+	for _, rule := range rules {
+		if !rule.Enabled {
+			continue
+		}
+		active = true
+		if !rule.matchesUser(s.UserID, s.UserGroupID) || !rule.matchesDevice(s.DeviceID, s.DeviceGroupID) {
+			continue
+		}
+		if rule.Action == ACLActionDeny {
+			return ACLDecisionDeny, rule
+		}
+		return ACLDecisionAllow, rule
+	}
+	switch {
+	case s.OwnerAccess:
+		return ACLDecisionOwner, nil
+	case !active:
+		return ACLDecisionNoRules, nil
+	}
+	return ACLDecisionDeny, nil
+}
+
+func (a *ConnectionACL) matchesUser(userID int64, groupID *int64) bool {
+	switch {
+	case a.UserID == nil && a.UserGroupID == nil:
+		return true // all users
+	case a.UserID != nil:
+		return *a.UserID == userID
+	}
+	return groupID != nil && *a.UserGroupID == *groupID
+}
+
+func (a *ConnectionACL) matchesDevice(deviceID int64, groupID *int64) bool {
+	switch {
+	case a.DeviceID == nil && a.DeviceGroupID == nil:
+		return true // all devices
+	case a.DeviceID != nil:
+		return *a.DeviceID == deviceID
+	}
+	return groupID != nil && *a.DeviceGroupID == *groupID
+}
+
+// HasEnabledRules reports whether any connection rule is enabled (without
+// one, every connection is allowed).
+func (r *ConnectionACLs) HasEnabledRules(ctx context.Context) (bool, error) {
+	var n int
+	err := r.q.QueryRowContext(ctx, `SELECT count(*) FROM (SELECT 1 FROM connection_acls WHERE enabled = 1 LIMIT 1) x`).Scan(&n)
+	return n > 0, mapErr(err)
+}
+
+// UserACL decides the connections of one user; it loads the rules and the
+// user's group once (see ForUser).
+type UserACL struct {
+	userID  int64
+	groupID *int64
+	// peers are the members of the user's group when it is "shared".
+	peers map[int64]bool
+	rules []*ConnectionACL
+}
+
+// ForUser loads what deciding userID's connections needs: the user's group,
+// the members of that group when it is "shared", and all rules.
+func (r *ConnectionACLs) ForUser(ctx context.Context, userID int64) (*UserACL, error) {
+	var (
+		groupID    sql.NullInt64
+		visibility sql.NullString
+	)
+	err := r.q.QueryRowContext(ctx, `SELECT u.user_group_id, g.visibility FROM users u
+		LEFT JOIN user_groups g ON g.id = u.user_group_id WHERE u.id = ?`, userID).Scan(&groupID, &visibility)
+	if err != nil {
+		return nil, fmt.Errorf("user lookup: %w", mapErr(err))
+	}
+	u := &UserACL{userID: userID, groupID: ptrID(groupID)}
+	if groupID.Valid && GroupVisibility(visibility.String) == VisibilityShared {
+		rows, err := r.q.QueryContext(ctx, `SELECT id FROM users WHERE user_group_id = ?`, groupID.Int64)
+		if err != nil {
+			return nil, mapErr(err)
+		}
+		defer rows.Close()
+		u.peers = map[int64]bool{}
+		for rows.Next() {
+			var id int64
+			if err := rows.Scan(&id); err != nil {
+				return nil, mapErr(err)
+			}
+			u.peers[id] = true
+		}
+		if err := rows.Err(); err != nil {
+			return nil, mapErr(err)
+		}
+	}
+	if u.rules, err = r.List(ctx); err != nil {
+		return nil, err
+	}
+	return u, nil
+}
+
+// Decide returns the decision for a connection of the user to d.
+func (u *UserACL) Decide(d *Device) (ACLDecision, *ConnectionACL) {
+	owner := d.OwnerUserID != nil && (*d.OwnerUserID == u.userID || u.peers[*d.OwnerUserID])
+	return DecideACL(u.rules, ACLSubject{UserID: u.userID, UserGroupID: u.groupID, DeviceID: d.ID,
+		DeviceGroupID: d.DeviceGroupID, OwnerAccess: owner})
+}
+
+// Evaluate checks connection permission between userID and deviceID and
+// returns the effective control role of allowed connections (the rule's
+// role, else the default role).
 func (r *ConnectionACLs) Evaluate(
 	ctx context.Context,
 	userID int64,
 	deviceID int64,
 ) (ACLDecision, *ConnectionACL, *ControlRole, error) {
-	// 1. Fetch user group
-	var userGroupID sql.NullInt64
-	err := r.q.QueryRowContext(ctx, `SELECT user_group_id FROM users WHERE id = ?`, userID).Scan(&userGroupID)
+	u, err := r.ForUser(ctx, userID)
 	if err != nil {
-		return "", nil, nil, fmt.Errorf("user lookup: %w", mapErr(err))
+		return "", nil, nil, err
 	}
-
-	// 2. Fetch device details
 	var (
 		ownerUserID   sql.NullInt64
 		deviceGroupID sql.NullInt64
@@ -433,102 +569,42 @@ func (r *ConnectionACLs) Evaluate(
 	if err != nil {
 		return "", nil, nil, fmt.Errorf("device lookup: %w", mapErr(err))
 	}
-
-	isOwner := ownerUserID.Valid && ownerUserID.Int64 == userID
-
-	// 3. Query all enabled rules ordered by priority ASC, id ASC
-	rules, err := r.List(ctx)
-	if err != nil {
-		return "", nil, nil, err
+	dec, rule := u.Decide(&Device{ID: deviceID, OwnerUserID: ptrID(ownerUserID), DeviceGroupID: ptrID(deviceGroupID)})
+	if dec == ACLDecisionDeny {
+		return dec, rule, nil, nil
 	}
-
-	var activeRules []*ConnectionACL
-	for _, rule := range rules {
-		if rule.Enabled {
-			activeRules = append(activeRules, rule)
+	roles := &ControlRoles{q: r.q, now: r.now}
+	var role *ControlRole
+	if rule != nil && rule.ControlRoleID != nil {
+		if role, err = roles.Get(ctx, *rule.ControlRoleID); err != nil && !errors.Is(err, ErrNotFound) {
+			return "", nil, nil, err
 		}
 	}
-
-	// Helper to fetch role or fallback to default
-	getRole := func(roleID *int64) (*ControlRole, error) {
-		crRepo := &ControlRoles{q: r.q, now: r.now}
-		if roleID != nil {
-			cr, err := crRepo.Get(ctx, *roleID)
-			if err == nil {
-				return cr, nil
-			}
+	if role == nil {
+		if role, err = roles.GetDefault(ctx); err != nil && !errors.Is(err, ErrNotFound) {
+			return "", nil, nil, err
 		}
-		return crRepo.GetDefault(ctx)
 	}
-
-	// 4. If no enabled rules exist on the system:
-	if len(activeRules) == 0 {
-		role, _ := getRole(nil)
-		if isOwner {
-			return ACLDecisionOwner, nil, role, nil
-		}
-		return ACLDecisionNoRules, nil, role, nil
-	}
-
-	// 5. Evaluate rules in priority order
-	for _, rule := range activeRules {
-		// User matching
-		userMatches := false
-		if rule.UserID == nil && rule.UserGroupID == nil {
-			userMatches = true // Wildcard all users
-		} else if rule.UserID != nil && *rule.UserID == userID {
-			userMatches = true // Specific user
-		} else if rule.UserGroupID != nil && userGroupID.Valid && *rule.UserGroupID == userGroupID.Int64 {
-			userMatches = true // User group
-		}
-		if !userMatches {
-			continue
-		}
-
-		// Device matching
-		deviceMatches := false
-		if rule.DeviceID == nil && rule.DeviceGroupID == nil {
-			deviceMatches = true // Wildcard all devices
-		} else if rule.DeviceID != nil && *rule.DeviceID == deviceID {
-			deviceMatches = true // Specific device
-		} else if rule.DeviceGroupID != nil && deviceGroupID.Valid && *rule.DeviceGroupID == deviceGroupID.Int64 {
-			deviceMatches = true // Device group
-		}
-		if !deviceMatches {
-			continue
-		}
-
-		// Matched rule found!
-		if rule.Action == ACLActionDeny {
-			return ACLDecisionDeny, rule, nil, nil
-		}
-
-		role, _ := getRole(rule.ControlRoleID)
-		return ACLDecisionAllow, rule, role, nil
-	}
-
-	// 6. If no rule matched:
-	// Owners retain access if not explicitly denied
-	role, _ := getRole(nil)
-	if isOwner {
-		return ACLDecisionOwner, nil, role, nil
-	}
-
-	// In an environment with configured ACL rules, unmatched non-owned access is denied
-	return ACLDecisionDeny, nil, nil, nil
+	return dec, rule, role, nil
 }
 
-// FilterAccessibleDevices filters devices to only those permitted for userID.
+// FilterAccessibleDevices filters devices to only those permitted for userID
+// (the rules are loaded once).
 func (r *ConnectionACLs) FilterAccessibleDevices(ctx context.Context, userID int64, devices []*Device) ([]*Device, error) {
+	u, err := r.ForUser(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	return u.Filter(devices), nil
+}
+
+// Filter returns the devices the user may connect to.
+func (u *UserACL) Filter(devices []*Device) []*Device {
 	out := make([]*Device, 0, len(devices))
 	for _, d := range devices {
-		dec, _, _, err := r.Evaluate(ctx, userID, d.ID)
-		if err != nil {
-			return nil, err
-		}
-		if dec != ACLDecisionDeny {
+		if dec, _ := u.Decide(d); dec != ACLDecisionDeny {
 			out = append(out, d)
 		}
 	}
-	return out, nil
+	return out
 }
