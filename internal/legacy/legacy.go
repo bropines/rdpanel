@@ -213,10 +213,18 @@ func OpenSource(path string) (*sql.DB, error) {
 	return src, nil
 }
 
+// ErrUnsupportedTarget is returned when the target panel database is not
+// SQLite: the importer relies on SQLite specifics (explicit ids with
+// sqlite_sequence bookkeeping), so importing into PostgreSQL is not supported.
+var ErrUnsupportedTarget = errors.New("migrate-legacy: importing into PostgreSQL is not supported; the target must be a SQLite panel database")
+
 // Run imports the legacy database at opts.SourcePath into target (already
 // migrated). The returned report is non-nil whenever the source could be
 // opened, also on error. Nothing is committed on error or in dry-run mode.
 func Run(ctx context.Context, target *db.DB, opts Options) (*Report, error) {
+	if target.Dialect() != db.DialectSQLite {
+		return nil, ErrUnsupportedTarget
+	}
 	if opts.AEAD == nil {
 		return nil, errors.New("legacy: AEAD is required")
 	}

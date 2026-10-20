@@ -42,7 +42,7 @@ func newLegacyFile(t *testing.T) string {
 }
 
 func TestCLIMigrateLegacy(t *testing.T) {
-	env, dir := testEnv(t, nil)
+	env, dir := testEnv(t, map[string]string{"RDPANEL_DB_TYPE": "sqlite"}) // the importer is SQLite-only
 	src := newLegacyFile(t)
 	report := filepath.Join(dir, "report.json")
 	ctx := context.Background()
@@ -78,5 +78,17 @@ func TestCLIMigrateLegacy(t *testing.T) {
 	}
 	if code, _, errOut = runCLI("migrate-legacy", "--from", src); code != 1 || !strings.Contains(errOut, "not empty") {
 		t.Fatalf("second import: %d %s", code, errOut)
+	}
+}
+
+// TestCLIMigrateLegacyRefusesPostgres: the importer is SQLite-only and must
+// fail before touching a PostgreSQL target (the DSN is never dialled here).
+func TestCLIMigrateLegacyRefusesPostgres(t *testing.T) {
+	env, _ := testEnv(t, map[string]string{"RDPANEL_DATABASE_URL": "postgres://u:p@127.0.0.1:1/x"})
+	var out, errb bytes.Buffer
+	code := Main(context.Background(), []string{"migrate-legacy", "--from", newLegacyFile(t)}, env,
+		Stdio{In: strings.NewReader(""), Out: &out, Err: &errb})
+	if code != 1 || !strings.Contains(errb.String(), "PostgreSQL is not supported") {
+		t.Fatalf("exit %d\n%s\n%s", code, out.String(), errb.String())
 	}
 }

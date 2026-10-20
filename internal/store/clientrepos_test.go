@@ -5,26 +5,17 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"path/filepath"
 	"reflect"
 	"testing"
 	"time"
 
 	"github.com/bropines/rdpanel/internal/crypto"
-	"github.com/bropines/rdpanel/internal/db"
+	"github.com/bropines/rdpanel/internal/db/dbtest"
 )
 
 func newSecretStore(t *testing.T) (*Store, *testClock) {
 	t.Helper()
-	ctx := context.Background()
-	d, err := db.Open(ctx, filepath.Join(t.TempDir(), "panel.db"), db.Options{})
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = d.Close() })
-	if _, err := d.Migrate(ctx); err != nil {
-		t.Fatal(err)
-	}
+	d := dbtest.Open(t)
 	aead, err := crypto.NewAEAD(bytes.Repeat([]byte{7}, crypto.KeySize))
 	if err != nil {
 		t.Fatal(err)

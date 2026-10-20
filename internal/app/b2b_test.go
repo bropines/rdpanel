@@ -3,11 +3,10 @@ package app
 import (
 	"context"
 	"net/http"
-	"path/filepath"
 	"testing"
 
 	"github.com/bropines/rdpanel/internal/adminapi"
-	"github.com/bropines/rdpanel/internal/db"
+	"github.com/bropines/rdpanel/internal/db/dbtest"
 	"github.com/bropines/rdpanel/internal/hbbs/control"
 	"github.com/bropines/rdpanel/internal/hbbs/hbbstest"
 	"github.com/bropines/rdpanel/internal/store"
@@ -15,14 +14,7 @@ import (
 
 func TestCollectPunchRequests(t *testing.T) {
 	ctx := context.Background()
-	d, err := db.Open(ctx, filepath.Join(t.TempDir(), "panel.db"), db.Options{})
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer d.Close()
-	if _, err := d.Migrate(ctx); err != nil {
-		t.Fatal(err)
-	}
+	d := dbtest.Open(t)
 	st := store.New(d)
 	fake := hbbstest.NewFakeAdmin(t)
 	ctl, err := control.New(control.Config{HBBSAddr: fake.Addr(), HBBRAddr: fake.Addr()})

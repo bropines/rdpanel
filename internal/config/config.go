@@ -43,9 +43,13 @@ type Config struct {
 	DBType string `yaml:"db_type"`
 	// DBPath is the SQLite database file. Default: <DataDir>/panel.db.
 	DBPath string `yaml:"db_path"`
-	// DatabaseURL is the database connection string. Used for PostgreSQL, e.g.
-	// postgres://user:pass@host:5432/dbname?sslmode=disable.
-	DatabaseURL string `yaml:"database_url"`
+	// DatabaseURL is the PostgreSQL connection string, e.g.
+	// postgres://user:pass@host:5432/dbname?sslmode=require. It usually
+	// carries a password, so it is a Secret (redacted when printed).
+	DatabaseURL Secret `yaml:"database_url"`
+	// DatabaseURLFile is read when DatabaseURL is empty (Docker/Kubernetes
+	// secrets).
+	DatabaseURLFile string `yaml:"database_url_file"`
 	// SecretKey is a base64-encoded 32-byte AEAD key for secrets at rest. When
 	// empty, the key is loaded from (or generated into) SecretKeyFile.
 	SecretKey Secret `yaml:"secret_key"`
@@ -427,7 +431,8 @@ func (c *Config) envVars() []envVar {
 		{"RDPANEL_DATA_DIR", str(&c.DataDir)},
 		{"RDPANEL_DB_TYPE", str(&c.DBType)},
 		{"RDPANEL_DB_PATH", str(&c.DBPath)},
-		{"RDPANEL_DATABASE_URL", str(&c.DatabaseURL)},
+		{"RDPANEL_DATABASE_URL", func(v string) error { c.DatabaseURL = Secret(strings.TrimSpace(v)); return nil }},
+		{"RDPANEL_DATABASE_URL_FILE", str(&c.DatabaseURLFile)},
 		{"RDPANEL_SECRET_KEY", sec(&c.SecretKey)},
 		{"RDPANEL_SECRET_KEY_FILE", str(&c.SecretKeyFile)},
 		{"RUSTDESK_API_JWT_KEY", sec(&c.Auth.JWTKey)},
@@ -504,6 +509,13 @@ func (c *Config) applyEnv(lookup LookupFunc) error {
 
 // loadSecretFiles reads *_FILE secrets that are not set directly.
 func (c *Config) loadSecretFiles() error {
+	if !c.DatabaseURL.IsSet() && c.DatabaseURLFile != "" {
+		raw, err := os.ReadFile(c.DatabaseURLFile)
+		if err != nil {
+			return fmt.Errorf("config: database_url_file: %w", err)
+		}
+		c.DatabaseURL = Secret(strings.TrimSpace(string(raw)))
+	}
 	if !c.SMTP.Password.IsSet() && c.SMTP.PasswordFile != "" {
 		raw, err := os.ReadFile(c.SMTP.PasswordFile)
 		if err != nil {
@@ -517,7 +529,7 @@ func (c *Config) loadSecretFiles() error {
 func (c *Config) fillDerived() {
 	c.DBType = strings.ToLower(strings.TrimSpace(c.DBType))
 	if c.DBType == "" {
-		if strings.HasPrefix(c.DatabaseURL, "postgres://") || strings.HasPrefix(c.DatabaseURL, "postgresql://") {
+		if u := c.DatabaseURL.Reveal(); strings.HasPrefix(u, "postgres://") || strings.HasPrefix(u, "postgresql://") {
 			c.DBType = "postgres"
 		} else {
 			c.DBType = "sqlite"
@@ -597,8 +609,8 @@ func (c *Config) Validate() error {
 	switch c.DBType {
 	case "sqlite":
 	case "postgres":
-		if c.DatabaseURL == "" {
-			add("database_url (or RDPANEL_DATABASE_URL) is required when db_type is postgres")
+		if !c.DatabaseURL.IsSet() {
+			add("database_url (or RDPANEL_DATABASE_URL / RDPANEL_DATABASE_URL_FILE) is required when db_type is postgres")
 		}
 	default:
 		add("db_type %q: must be sqlite or postgres", c.DBType)

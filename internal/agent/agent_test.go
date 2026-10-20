@@ -14,7 +14,7 @@ import (
 	"net/http/httptest"
 
 	"github.com/bropines/rdpanel/internal/agent"
-	"github.com/bropines/rdpanel/internal/db"
+	"github.com/bropines/rdpanel/internal/db/dbtest"
 	"github.com/bropines/rdpanel/internal/events"
 	"github.com/bropines/rdpanel/internal/hbbs/control"
 	"github.com/bropines/rdpanel/internal/hbbs/hbbstest"
@@ -92,14 +92,7 @@ func eventually(t *testing.T, what string, fn func() bool) {
 func TestAgentHubEndToEnd(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	d, err := db.Open(ctx, filepath.Join(t.TempDir(), "panel.db"), db.Options{})
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer d.Close()
-	if _, err := d.Migrate(ctx); err != nil {
-		t.Fatal(err)
-	}
+	d := dbtest.Open(t)
 	panel := store.New(d)
 	_ = panel.Settings.Set(ctx, relays.SettingAllowPrivateHosts, true, nil)
 	ten := 10.0
@@ -239,11 +232,7 @@ func TestAgentHubEndToEnd(t *testing.T) {
 func TestAgentRevokedStopsHBBR(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	d, _ := db.Open(ctx, filepath.Join(t.TempDir(), "panel.db"), db.Options{})
-	defer d.Close()
-	if _, err := d.Migrate(ctx); err != nil {
-		t.Fatal(err)
-	}
+	d := dbtest.Open(t)
 	panel := store.New(d)
 	_ = panel.Settings.Set(ctx, relays.SettingRequireApproval, false, nil)
 	prof := &profile{}

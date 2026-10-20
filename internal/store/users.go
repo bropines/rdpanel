@@ -124,21 +124,15 @@ func (r *Users) Create(ctx context.Context, u *User) error {
 		u.CreatedAt = now
 	}
 	u.UpdatedAt = now
-	var id sql.NullInt64
-	if u.ID != 0 {
-		id = sql.NullInt64{Int64: u.ID, Valid: true}
-	}
-	err := r.q.QueryRowContext(ctx, `INSERT INTO users (id, username, email, display_name, avatar_url, note,
+	return insertWithID(ctx, r.q, "users", `username, email, display_name, avatar_url, note,
 		password_hash, password_algo, role, status, user_group_id, totp_required, password_changed_at,
-		last_login_at, created_at, updated_at, email_verified_at, email_2fa_enabled, locale, is_ldap, ldap_dn)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`,
-		id, strings.TrimSpace(u.Username), nullStr(u.Email), u.DisplayName, u.AvatarURL, u.Note,
+		last_login_at, created_at, updated_at, email_verified_at, email_2fa_enabled, locale, is_ldap, ldap_dn`, &u.ID,
+		strings.TrimSpace(u.Username), nullStr(u.Email), u.DisplayName, u.AvatarURL, u.Note,
 		nullStr(u.PasswordHash), nullStr(u.PasswordAlgo), u.Role, u.Status, nullID(u.UserGroupID),
 		boolInt(u.TOTPRequired), nullMs(u.PasswordChangedAt), nullMs(u.LastLoginAt),
 		toMs(u.CreatedAt), toMs(u.UpdatedAt), nullMs(u.EmailVerifiedAt),
 		boolInt(u.Email2FAEnabled && u.EmailVerifiedAt != nil), nullStr(u.Locale),
-		boolInt(u.IsLDAP), nullStr(u.LDAPDN)).Scan(&u.ID)
-	return mapErr(err)
+		boolInt(u.IsLDAP), nullStr(u.LDAPDN))
 }
 
 // GetByID returns the user with id.

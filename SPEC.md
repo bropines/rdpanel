@@ -27,7 +27,8 @@ Goals
 
 Non-goals (v1)
 - Bundling the RustDesk Flutter web client (AGPL) — not shipped. A link-out to an external web client URL is allowed.
-- Multi-instance / Postgres (keep the DB layer portable, but only SQLite is tested in v1).
+- Multi-instance deployments. PostgreSQL is an optional backend for a single instance (SQLite stays
+  the default; CI runs the database test suites on both, see docs/deploy.md).
 - LDAP, linux.do provider, self-registration (keep data model ready; UI hidden).
 
 ## 2. Architecture

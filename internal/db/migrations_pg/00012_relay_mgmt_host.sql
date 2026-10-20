@@ -7,8 +7,8 @@
 ALTER TABLE relays ADD COLUMN mgmt_host TEXT NULL CHECK (
     mgmt_host IS NULL OR (
         length(mgmt_host) BETWEEN 1 AND 255
-        AND instr(mgmt_host, ',') = 0
-        AND instr(mgmt_host, ' ') = 0
+        AND strpos(mgmt_host, ',') = 0
+        AND strpos(mgmt_host, ' ') = 0
     )
 );
 

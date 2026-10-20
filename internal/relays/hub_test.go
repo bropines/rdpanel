@@ -203,7 +203,16 @@ func TestHubSupersedeAndRevoke(t *testing.T) {
 	}
 	// Audit trail.
 	var actions string
-	_ = f.st.DB.QueryRow(`SELECT group_concat(action, ',') FROM (SELECT action FROM admin_audit ORDER BY id)`).Scan(&actions)
+	rows, err := f.st.DB.Query(`SELECT action FROM admin_audit ORDER BY id`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for rows.Next() {
+		var a string
+		_ = rows.Scan(&a)
+		actions += a + ","
+	}
+	rows.Close()
 	for _, want := range []string{"relay.agent.enroll", "relay.agent.connect", "relay.agent.superseded", "relay.agent.config_error"} {
 		if !strings.Contains(actions, want) {
 			t.Errorf("audit lacks %s: %s", want, actions)

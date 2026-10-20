@@ -44,9 +44,38 @@ jobs:
         run: go test -race -count=1 ./...
       - name: staticcheck
         if: matrix.go == '1.26'
-        run: go run honnef.co/go/tools/cmd/staticcheck@latest ./...
+        # Same pinned version as `make lint` (STATICCHECK_VERSION in the Makefile).
+        run: go run "honnef.co/go/tools/cmd/staticcheck@$(sed -n 's/^STATICCHECK_VERSION *?= *//p' Makefile)" ./...
       - name: build (static)
         run: CGO_ENABLED=0 go build -trimpath -o /tmp/rdpanel ./cmd/rdpanel
+
+  go-postgres:
+    # The database-backed suites again, on PostgreSQL: internal/db/dbtest
+    # gives every test a fresh database cloned from a migrated template when
+    # RDPANEL_TEST_PG_DSN is set (SQLite otherwise). The PostgreSQL-only
+    # schema checks in internal/db run here too.
+    name: go (postgres 16)
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_PASSWORD: rdpanel
+          POSTGRES_DB: rdpanel
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 2s --health-timeout 5s --health-retries 30
+    env:
+      RDPANEL_TEST_PG_DSN: postgres://postgres:rdpanel@127.0.0.1:5432/rdpanel?sslmode=disable
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.26"
+          cache: true
+      - name: go test (race, postgres)
+        run: go test -race -count=1 ./...
 
   govulncheck:
     # Scans with the toolchain releases are built with; stdlib advisories fixed

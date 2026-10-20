@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"strings"
 	"time"
+
+	"github.com/bropines/rdpanel/internal/db"
 )
 
 // OS families reported by the admin API (components.schemas.OsFamily).
@@ -103,15 +105,15 @@ type DeviceSearch struct {
 // DeviceSortKeys are the accepted DeviceSearch.Sort values.
 var DeviceSortKeys = []string{"rustdesk_id", "hostname", "alias", "os", "client_version", "last_seen_at", "created_at", "online"}
 
-func (p *DeviceSearch) onlineExpr() (string, []any) {
+func (p *DeviceSearch) onlineExpr(dl db.Dialect) (string, []any) {
 	if p.OnlineIDs != nil {
 		raw, _ := json.Marshal(p.OnlineIDs)
-		return "(d.rustdesk_id IN (SELECT value FROM json_each(?)))", []any{string(raw)}
+		return "(" + dl.InJSONArray("d.rustdesk_id", "") + ")", []any{string(raw)}
 	}
 	return "(coalesce(d.last_heartbeat_at, 0) >= ?)", []any{toMs(p.HeartbeatSince)}
 }
 
-func (p *DeviceSearch) where() (string, []any) {
+func (p *DeviceSearch) where(dl db.Dialect) (string, []any) {
 	var (
 		conds []string
 		args  []any
@@ -150,7 +152,7 @@ func (p *DeviceSearch) where() (string, []any) {
 			OR d.os_username LIKE ? ESCAPE '\' OR d.note LIKE ? ESCAPE '\')`, like, like, like, like, like)
 	}
 	if p.Online != nil {
-		expr, a := p.onlineExpr()
+		expr, a := p.onlineExpr(dl)
 		if *p.Online {
 			add(expr, a...)
 		} else {
@@ -163,7 +165,7 @@ func (p *DeviceSearch) where() (string, []any) {
 	return " WHERE " + strings.Join(conds, " AND "), args
 }
 
-func (p *DeviceSearch) orderBy() (string, []any, error) {
+func (p *DeviceSearch) orderBy(dl db.Dialect) (string, []any, error) {
 	var (
 		expr string
 		args []any
@@ -184,7 +186,7 @@ func (p *DeviceSearch) orderBy() (string, []any, error) {
 	case "created_at":
 		expr = "d.created_at"
 	case "online":
-		expr, args = p.onlineExpr()
+		expr, args = p.onlineExpr(dl)
 	default:
 		return "", nil, fmt.Errorf("%w: sort %q", ErrInvalid, p.Sort)
 	}
@@ -197,8 +199,8 @@ func (p *DeviceSearch) orderBy() (string, []any, error) {
 
 // Search returns a page of devices matching p and the total match count.
 func (r *Devices) Search(ctx context.Context, p DeviceSearch) ([]*Device, int, error) {
-	cond, args := p.where()
-	order, oargs, err := p.orderBy()
+	cond, args := p.where(db.DialectOf(r.q))
+	order, oargs, err := p.orderBy(db.DialectOf(r.q))
 	if err != nil {
 		return nil, 0, err
 	}
@@ -226,8 +228,8 @@ func (r *Devices) Search(ctx context.Context, p DeviceSearch) ([]*Device, int, e
 // SearchEach calls fn for every device matching p (Limit/Offset ignored), in
 // p's order, stopping at the first error.
 func (r *Devices) SearchEach(ctx context.Context, p DeviceSearch, fn func(*Device) error) error {
-	cond, args := p.where()
-	order, oargs, err := p.orderBy()
+	cond, args := p.where(db.DialectOf(r.q))
+	order, oargs, err := p.orderBy(db.DialectOf(r.q))
 	if err != nil {
 		return err
 	}
@@ -250,7 +252,7 @@ func (r *Devices) SearchEach(ctx context.Context, p DeviceSearch, fn func(*Devic
 
 // Count returns the number of devices matching p.
 func (r *Devices) Count(ctx context.Context, p DeviceSearch) (int, error) {
-	cond, args := p.where()
+	cond, args := p.where(db.DialectOf(r.q))
 	var n int
 	err := r.q.QueryRowContext(ctx, `SELECT count(*) FROM devices d`+cond, args...).Scan(&n)
 	return n, mapErr(err)
@@ -265,7 +267,7 @@ type Facet struct {
 // Facets returns the OS families and client versions (non-empty) of the
 // devices matching p, by count descending.
 func (r *Devices) Facets(ctx context.Context, p DeviceSearch) (total int, oses, versions []Facet, err error) {
-	cond, args := p.where()
+	cond, args := p.where(db.DialectOf(r.q))
 	if err = r.q.QueryRowContext(ctx, `SELECT count(*) FROM devices d`+cond, args...).Scan(&total); err != nil {
 		return 0, nil, nil, mapErr(err)
 	}
