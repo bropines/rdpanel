@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Apple, BookPlus, Cast, Laptop, Monitor, Plug, Power, Save, Smartphone, Terminal, Trash2 } from "lucide-react";
+import { Apple, BookPlus, Cast, FolderOpen, Laptop, Monitor, Plug, Power, Save, Smartphone, SquareTerminal, Terminal, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
@@ -248,23 +248,36 @@ export function DeviceDrawer({
             </div>
           ) : (
             <>
-              <div>
-                <Button
-                  className="w-full"
-                  size="sm"
-                  onClick={(e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    const url = `/connect?id=${encodeURIComponent(d.rustdesk_id)}`;
-                    const win = window.open(url, "_blank");
-                    if (!win) {
-                      window.location.href = url;
-                    }
-                  }}
-                >
-                  <Cast className="mr-2 h-4 w-4" />
-                  {t("devices.webConnect")}
-                </Button>
+              <div className="grid grid-cols-[1fr_auto_auto] gap-1.5">
+                {([undefined, "files", "terminal"] as const).map((mode) => (
+                  <Button
+                    key={mode ?? "desktop"}
+                    size="sm"
+                    variant={mode ? "outline" : "default"}
+                    title={mode ? t(mode === "files" ? "devices.webFiles" : "devices.webTerminal") : undefined}
+                    aria-label={mode ? t(mode === "files" ? "devices.webFiles" : "devices.webTerminal") : undefined}
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      const url = `/connect?id=${encodeURIComponent(d.rustdesk_id)}${mode ? `&mode=${mode}` : ""}`;
+                      const win = window.open(url, "_blank");
+                      if (!win) {
+                        window.location.href = url;
+                      }
+                    }}
+                  >
+                    {mode === "files" ? (
+                      <FolderOpen className="h-4 w-4" />
+                    ) : mode === "terminal" ? (
+                      <SquareTerminal className="h-4 w-4" />
+                    ) : (
+                      <>
+                        <Cast className="mr-2 h-4 w-4" />
+                        {t("devices.webConnect")}
+                      </>
+                    )}
+                  </Button>
+                ))}
               </div>
               <section>
                 <SectionTitle>{t("devices.settings")}</SectionTitle>
