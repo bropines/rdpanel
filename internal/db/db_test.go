@@ -418,6 +418,32 @@ func TestPostgresHelpers(t *testing.T) {
 	}
 }
 
+// A transaction wrapped for Postgres must still be seen as a transaction, or
+// store.Tx/atomic open a second, independent transaction inside it.
+func TestIsTxSeesWrappedTransactions(t *testing.T) {
+	d := openTest(t)
+	tx, err := d.BeginTx(context.Background(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tx.Rollback()
+	pg := &DB{dialect: DialectPostgres}
+	for name, q := range map[string]Querier{
+		"sqlite tx":         d.Wrap(tx),
+		"postgres tx":       pg.Wrap(tx),
+		"postgres tx twice": pg.Wrap(pg.Wrap(tx)),
+	} {
+		if !IsTx(q) {
+			t.Errorf("%s: not a transaction", name)
+		}
+	}
+	for name, q := range map[string]Querier{"sqlite db": d.Wrap(d), "postgres db": pg.Wrap(d.DB), "db": d} {
+		if IsTx(q) {
+			t.Errorf("%s: seen as a transaction", name)
+		}
+	}
+}
+
 func TestDialectAndWrap(t *testing.T) {
 	dSqlite := &DB{dialect: DialectSQLite}
 	if dSqlite.Dialect() != DialectSQLite {

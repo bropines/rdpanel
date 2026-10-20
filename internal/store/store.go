@@ -142,7 +142,7 @@ func (s *Store) NewID() string { return s.opts.newID() }
 // Tx runs fn with a Store bound to a single transaction. Calling Tx on a
 // transactional Store runs fn in the existing transaction (no nesting).
 func (s *Store) Tx(ctx context.Context, fn func(tx *Store) error) error {
-	if _, inTx := s.q.(*sql.Tx); inTx {
+	if db.IsTx(s.q) {
 		return fn(s)
 	}
 	return s.db.WithTx(ctx, func(tx *sql.Tx) error {
@@ -153,7 +153,7 @@ func (s *Store) Tx(ctx context.Context, fn func(tx *Store) error) error {
 // atomic runs fn with q bound to a transaction: the current one when q already
 // is a transaction, otherwise a new one on d.
 func atomic(ctx context.Context, d *db.DB, q db.Querier, fn func(q db.Querier) error) error {
-	if _, inTx := q.(*sql.Tx); inTx || d == nil {
+	if db.IsTx(q) || d == nil {
 		return fn(q)
 	}
 	return d.WithTx(ctx, func(tx *sql.Tx) error { return fn(d.Wrap(tx)) })
