@@ -355,6 +355,8 @@ function passkeyLoginAs(credentialId: string | undefined, userId?: number): db.M
 
 /* ── handlers ─────────────────────────────────────────────────────────── */
 
+const mockShells = new Map<string, { service_id: string; hostname: string; tabs: number; created_at: string; updated_at: string }[]>();
+
 export const handlers = [
   // Small latency so skeletons are visible but the UI stays snappy.
   http.all(`${B}/*`, async () => {
@@ -695,6 +697,23 @@ export const handlers = [
   }),
   // Web client: point VITE_MOCK_WEBCLIENT_ID_URL / _RELAY_URL / _KEY at a real
   // server to try the client against live devices from the mock build.
+  http.get(`${B}/webclient/shells/:peer`, ({ params }) => HttpResponse.json({ items: mockShells.get(String(params.peer)) ?? [] })),
+  http.put(`${B}/webclient/shells/:peer`, async ({ params, request }) => {
+    const b = (await request.json()) as { service_id: string; hostname?: string; tabs?: number };
+    const now = new Date().toISOString();
+    const list = (mockShells.get(String(params.peer)) ?? []).filter((x) => x.service_id !== b.service_id);
+    const old = mockShells.get(String(params.peer))?.find((x) => x.service_id === b.service_id);
+    mockShells.set(String(params.peer), [
+      { service_id: b.service_id, hostname: b.hostname ?? "", tabs: b.tabs ?? 1, created_at: old?.created_at ?? now, updated_at: now },
+      ...list,
+    ]);
+    return new HttpResponse(null, { status: 204 });
+  }),
+  http.post(`${B}/webclient/shells/:peer/forget`, async ({ params, request }) => {
+    const b = (await request.json()) as { service_id: string };
+    mockShells.set(String(params.peer), (mockShells.get(String(params.peer)) ?? []).filter((x) => x.service_id !== b.service_id));
+    return new HttpResponse(null, { status: 204 });
+  }),
   http.get(`${B}/clients`, () =>
     HttpResponse.json({
       enabled: true,

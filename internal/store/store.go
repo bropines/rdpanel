@@ -61,6 +61,8 @@ type Store struct {
 	ConnectionACLs *ConnectionACLs
 	// LDAPSettings manages directory service configuration.
 	LDAPSettings *LDAPSettingsRepo
+	// TerminalShells remembers web client terminal sessions kept on devices.
+	TerminalShells *TerminalShells
 }
 
 // Option configures a Store.
@@ -100,6 +102,7 @@ func (s *Store) WithClock(now func() time.Time) *Store {
 func build(d *db.DB, q db.Querier, o options) *Store {
 	now := o.now
 	s := &Store{db: d, q: q, opts: o}
+	s.TerminalShells = &TerminalShells{q: q, now: now, aead: o.aead}
 	s.Users = &Users{q: q, now: now}
 	s.UserGroups = &UserGroups{q: q, now: now}
 	s.AuthTokens = &AuthTokens{q: q, now: now}

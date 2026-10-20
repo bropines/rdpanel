@@ -4,7 +4,7 @@ import { ArrowLeft, FolderOpen, Loader2, ShieldAlert, SquareTerminal } from "luc
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { decodeBase64, encodeBase64, isWebCodecsAvailable, RDWEB_VERSION, type ServerConfig } from "rdweb";
-import { RemoteDesktop, RDPANEL_STORAGE_KEY, loadRecent, migrateStorage, type RemoteDesktopCredentials } from "rdweb/react";
+import { RemoteDesktop, RDPANEL_STORAGE_KEY, loadRecent, migrateStorage, type RemoteDesktopCredentials, type ShellStore } from "rdweb/react";
 
 import { webClientApi, type WebClientConfig, type WebClientCredentials } from "@/api/system";
 import { Button } from "@/components/ui/button";
@@ -184,10 +184,30 @@ function Session({
         : null,
     [own, credentials],
   );
+  // Terminal sessions on our own server are remembered in the account (any browser).
+  const shellStore = useMemo<ShellStore | undefined>(
+    () =>
+      own
+        ? {
+            list: async () =>
+              (await webClientApi.shells(peerId)).items.map((x) => ({
+                serviceId: x.service_id,
+                hostname: x.hostname || undefined,
+                tabs: x.tabs,
+                createdAt: Date.parse(x.created_at),
+                updatedAt: Date.parse(x.updated_at),
+              })),
+            save: (sh) => webClientApi.saveShell(peerId, { service_id: sh.serviceId, hostname: sh.hostname ?? "", tabs: sh.tabs }),
+            remove: (id) => webClientApi.forgetShell(peerId, id),
+          }
+        : undefined,
+    [own, peerId],
+  );
   return (
     <RemoteDesktop
       peerId={peerId}
       server={server}
+      shellStore={shellStore}
       lang={i18n.language.startsWith("ru") ? "ru" : "en"}
       mode={mode}
       storageKey={RDPANEL_STORAGE_KEY}

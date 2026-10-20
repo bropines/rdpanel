@@ -951,6 +951,50 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/webclient/shells/{peer}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                peer: string;
+            };
+            cookie?: never;
+        };
+        /**
+         * Terminal sessions a device keeps running for the caller.
+         * @description The web client terminal asks devices to keep its shells when the connection drops and remembers each
+         *     session's service id here, so the caller can reattach from any browser. Only the caller's own sessions;
+         *     the service id is sealed at rest. At most 10 per device.
+         */
+        get: operations["listWebClientShells"];
+        /** Remember (or update) a terminal session on a device. */
+        put: operations["saveWebClientShell"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/webclient/shells/{peer}/forget": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                peer: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Forget a remembered terminal session (its shells ended or were closed). */
+        post: operations["forgetWebClientShell"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/clients": {
         parameters: {
             query?: never;
@@ -3648,6 +3692,21 @@ export interface components {
             servers: components["schemas"]["WebClientServer"][];
             /** @description Users may enter their own servers (RDPANEL_WEBCLIENT_CUSTOM_SERVERS) */
             custom_servers: boolean;
+        };
+        WebClientShell: {
+            /** @description The device's terminal service id (reattach capability) */
+            service_id: string;
+            hostname: string;
+            tabs: number;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+        };
+        WebClientShellSave: {
+            service_id: string;
+            hostname?: string;
+            tabs?: number;
         };
         ClientDownloads: {
             /** @description Client downloads are on (RDPANEL_CLIENT_DOWNLOADS_ENABLED) */
@@ -6600,6 +6659,89 @@ export interface operations {
                 };
                 content?: never;
             };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    listWebClientShells: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                peer: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Remembered sessions, newest first. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        items: components["schemas"]["WebClientShell"][];
+                    };
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    saveWebClientShell: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                peer: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["WebClientShellSave"];
+            };
+        };
+        responses: {
+            /** @description Saved. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    forgetWebClientShell: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                peer: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    service_id: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Forgotten (also when it was unknown). */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["ValidationFailed"];
             401: components["responses"]["Unauthorized"];
             404: components["responses"]["NotFound"];
         };

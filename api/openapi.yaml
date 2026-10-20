@@ -1139,6 +1139,75 @@ paths:
         "401": { $ref: "#/components/responses/Unauthorized" }
         "404": { $ref: "#/components/responses/NotFound" }
 
+  /webclient/shells/{peer}:
+    parameters:
+      - name: peer
+        in: path
+        required: true
+        schema: { type: string }
+    get:
+      tags: [about]
+      operationId: listWebClientShells
+      summary: Terminal sessions a device keeps running for the caller.
+      description: |
+        The web client terminal asks devices to keep its shells when the connection drops and remembers each
+        session's service id here, so the caller can reattach from any browser. Only the caller's own sessions;
+        the service id is sealed at rest. At most 10 per device.
+      responses:
+        "200":
+          description: Remembered sessions, newest first.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: "#/components/schemas/WebClientShell" }
+        "400": { $ref: "#/components/responses/ValidationFailed" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    put:
+      tags: [about]
+      operationId: saveWebClientShell
+      summary: Remember (or update) a terminal session on a device.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/WebClientShellSave" }
+      responses:
+        "204": { description: Saved. }
+        "400": { $ref: "#/components/responses/ValidationFailed" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /webclient/shells/{peer}/forget:
+    parameters:
+      - name: peer
+        in: path
+        required: true
+        schema: { type: string }
+    post:
+      tags: [about]
+      operationId: forgetWebClientShell
+      summary: Forget a remembered terminal session (its shells ended or were closed).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [service_id]
+              properties:
+                service_id: { type: string }
+      responses:
+        "204": { description: Forgotten (also when it was unknown). }
+        "400": { $ref: "#/components/responses/ValidationFailed" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
   /clients:
     get:
       tags: [about]
@@ -4963,6 +5032,24 @@ components:
           description: Other servers the admin offers (RDPANEL_WEBCLIENT_SERVERS). Their sessions get no panel token or web id.
           items: { $ref: "#/components/schemas/WebClientServer" }
         custom_servers: { type: boolean, description: "Users may enter their own servers (RDPANEL_WEBCLIENT_CUSTOM_SERVERS)" }
+
+    WebClientShell:
+      type: object
+      required: [service_id, hostname, tabs, created_at, updated_at]
+      properties:
+        service_id: { type: string, description: "The device's terminal service id (reattach capability)" }
+        hostname: { type: string }
+        tabs: { type: integer }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+
+    WebClientShellSave:
+      type: object
+      required: [service_id]
+      properties:
+        service_id: { type: string, minLength: 1, maxLength: 200 }
+        hostname: { type: string, maxLength: 255 }
+        tabs: { type: integer, minimum: 0, maximum: 64 }
 
     ClientDownloads:
       type: object
