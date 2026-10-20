@@ -16,6 +16,7 @@ import "strconv"
 //	address_books.default_password_enc       "address_book.password:<book id>"
 //	identity_providers.client_secret_enc     "identity_provider.client_secret:<provider id>"
 //	share_links.password_enc                 "share_link.password:<link id>"
+//	server_share_links.token_enc             "server_share_link.token:<link id>"
 //	oauth_states.pkce_verifier_enc           "oauth_state.pkce_verifier:<state id>"
 //	totp_secrets.secret_enc                  "totp:<user id>"
 //	settings["mail.smtp"].password_enc       "settings.smtp_password:0"
@@ -31,6 +32,7 @@ const (
 	ScopeAddressBookDefaultPassword   = "address_book.password"
 	ScopeIdentityProviderClientSecret = "identity_provider.client_secret"
 	ScopeShareLinkPassword            = "share_link.password"
+	ScopeServerShareLinkToken         = "server_share_link.token"
 	ScopeOAuthStatePKCEVerifier       = "oauth_state.pkce_verifier"
 	ScopeTOTPSecret                   = "totp"
 )
@@ -58,6 +60,9 @@ func IdentityProviderClientSecretAD(providerID int64) string {
 
 // ShareLinkPasswordAD is the AD of share_links.password_enc.
 func ShareLinkPasswordAD(linkID int64) string { return AD(ScopeShareLinkPassword, linkID) }
+
+// ServerShareLinkTokenAD is the AD of server_share_links.token_enc.
+func ServerShareLinkTokenAD(linkID int64) string { return AD(ScopeServerShareLinkToken, linkID) }
 
 // OAuthStatePKCEVerifierAD is the AD of oauth_states.pkce_verifier_enc.
 func OAuthStatePKCEVerifierAD(stateID int64) string { return AD(ScopeOAuthStatePKCEVerifier, stateID) }

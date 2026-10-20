@@ -31,7 +31,8 @@ info:
     `totp_enrollment_required`, `reauth_failed`, `oidc_not_configured`,
     `provider_unavailable`, `last_admin`, `server_unavailable`, `passkey_failed`,
     `passkeys_unavailable`, `no_passkeys`, `passkey_limit`, `reauth_required`,
-    `insufficient_scope`, `cookie_session_required`, `api_token_limit`, `role_in_use`).
+    `insufficient_scope`, `cookie_session_required`, `api_token_limit`, `role_in_use`,
+    `share_link_limit`, `gone`).
 
     **Route guards.** Resource routes require a full session; while an admin-forced
     2FA enrolment is pending only `/auth/*` and `/me/security/*` are reachable
@@ -98,6 +99,11 @@ tags:
   - name: federation
   - name: strategies
   - name: settings
+  - name: share
+    description: |
+      Public server share links (`RDPANEL_SHARE_LINKS_ENABLED`, off by default): pages at
+      `<public_url>/s/<token>` with this server's connection settings and the preconfigured
+      client, for anyone with the link. The public endpoints live under `/s` (no session).
   - name: lookup
   - name: events
   - name: docs
@@ -1179,6 +1185,72 @@ paths:
         "404": { $ref: "#/components/responses/NotFound" }
         "409": { $ref: "#/components/responses/Conflict" }
         "502": { $ref: "#/components/responses/BadGateway" }
+
+  /share-links:
+    get:
+      tags: [share]
+      operationId: listShareLinks
+      summary: Server share links (mine, or every user's for admins).
+      description: |
+        Admins, and users whose user group has `can_share_links` (403 otherwise; 404 while
+        `RDPANEL_SHARE_LINKS_ENABLED` is off). Revoked links are not listed; expired and
+        exhausted ones are, with their status. `scope=all` (admins only) lists every user's links.
+      parameters:
+        - name: scope
+          in: query
+          schema: { type: string, enum: [mine, all], default: mine }
+      responses:
+        "200":
+          description: Links, newest first (at most 500).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ShareLinkList" }
+        "400": { $ref: "#/components/responses/ValidationFailed" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    post:
+      tags: [share]
+      operationId: createShareLink
+      summary: Create a public link to this server's settings and preconfigured client.
+      description: |
+        Permanent (no `expires_in` / `expires_at`) or temporary; `max_downloads` limits the
+        preconfigured installer downloads, after which the link stops working. The token
+        has 128 random bits; only its sha256 and an AEAD-sealed copy (so `url` can be shown
+        again) are stored. At most 100 open links per user (409 `share_link_limit`).
+        Recorded in the admin audit log (`share_link.create`).
+      parameters:
+        - $ref: "#/components/parameters/CsrfHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ShareLinkInput" }
+      responses:
+        "201":
+          description: Created.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ShareLink" }
+        "400": { $ref: "#/components/responses/ValidationFailed" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+  /share-links/{link_id}:
+    delete:
+      tags: [share]
+      operationId: revokeShareLink
+      summary: Revoke a share link (own; admins any).
+      description: The public page answers 410 from then on. Recorded in the admin audit log (`share_link.revoke`).
+      parameters:
+        - $ref: "#/components/parameters/CsrfHeader"
+        - { name: link_id, in: path, required: true, schema: { type: integer, format: int64 } }
+      responses:
+        "204": { description: Revoked. }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
 
   /lookup/users:
     get:
@@ -4009,6 +4081,90 @@ paths:
               schema: { type: object }
         "401": { $ref: "#/components/responses/Unauthorized" }
 
+  /{token}:
+    servers:
+      - url: /s
+    get:
+      tags: [share]
+      operationId: getSharePage
+      summary: Public share page (HTML, no session).
+      description: |
+        Mounted at `/s/{token}` (not under `/api`). Serves the share page (`web/share.html`)
+        and counts a view. Unknown tokens answer 404, revoked, expired, exhausted links and
+        links whose owner may no longer share 410, both with the same page ("This link is no
+        longer valid"). Unknown tokens count towards a per-IP backoff; all `/s/*` routes are
+        rate limited per IP and sent with `Cache-Control: no-store`, `X-Robots-Tag: noindex`
+        and `Referrer-Policy: no-referrer`. Everything under `/s` is 404 while
+        `RDPANEL_SHARE_LINKS_ENABLED` is off.
+      security: []
+      parameters:
+        - $ref: "#/components/parameters/ShareToken"
+      responses:
+        "200":
+          description: The page.
+          content:
+            text/html: { schema: { type: string } }
+        "404":
+          description: Unknown link (the same page, which says the link is not valid).
+          content:
+            text/html: { schema: { type: string } }
+        "410":
+          description: The link is no longer valid (the same page).
+          content:
+            text/html: { schema: { type: string } }
+        "429": { $ref: "#/components/responses/RateLimited" }
+  /{token}/info:
+    servers:
+      - url: /s
+    get:
+      tags: [share]
+      operationId: getShareInfo
+      summary: Data of the public share page (no session).
+      description: |
+        Mounted at `/s/{token}/info`. Only this server's connection settings, the page texts
+        set by an admin and the official client downloads; nothing about the link itself.
+      security: []
+      parameters:
+        - $ref: "#/components/parameters/ShareToken"
+      responses:
+        "200":
+          description: Connection settings and downloads.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SharePublicInfo" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "410": { $ref: "#/components/responses/Gone" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+  /{token}/windows/{arch}:
+    servers:
+      - url: /s
+    get:
+      tags: [share]
+      operationId: downloadShareWindowsClient
+      summary: The official Windows installer named so that it uses this server (no session).
+      description: |
+        Mounted at `/s/{token}/windows/{arch}`; the same file as `/clients/windows/{arch}`.
+        A request that starts a download (no `Range`, or one from byte 0) counts one download
+        of the link and is refused (410) once `max_downloads` is reached; resumed ranges are
+        served while the link is otherwise valid.
+      security: []
+      parameters:
+        - $ref: "#/components/parameters/ShareToken"
+        - name: arch
+          in: path
+          required: true
+          schema: { type: string, enum: [x64, arm64] }
+      responses:
+        "200":
+          description: The installer.
+          content:
+            application/vnd.microsoft.portable-executable: { schema: { type: string, format: binary } }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "410": { $ref: "#/components/responses/Gone" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+        "502": { $ref: "#/components/responses/BadGateway" }
+
 components:
   securitySchemes:
     sessionCookie:
@@ -4021,6 +4177,12 @@ components:
       bearerFormat: rdp_ + 40 base62 characters
       description: Personal API token (see `/me/api-tokens` and docs/api.md).
   parameters:
+    ShareToken:
+      name: token
+      in: path
+      required: true
+      description: Share link token (22 base64url characters).
+      schema: { type: string, pattern: "^[A-Za-z0-9_-]{22}$" }
     ApiTokenId:
       name: token_id
       in: path
@@ -4197,6 +4359,11 @@ components:
         Retry-After:
           schema: { type: integer }
           description: Seconds to wait.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    Gone:
+      description: The share link was revoked, expired or used up (error code `gone`).
       content:
         application/json:
           schema: { $ref: "#/components/schemas/Error" }
@@ -4705,6 +4872,9 @@ components:
         must_enroll_totp:
           type: boolean
           description: True when 2FA is required for this account but not yet enrolled.
+        can_share_links:
+          type: boolean
+          description: Share links are on (RDPANEL_SHARE_LINKS_ENABLED) and this user may create them.
     Session:
       type: object
       description: An active panel session or client token of a user.
@@ -4995,6 +5165,69 @@ components:
         url: { type: string, description: "GitHub download URL" }
         sha256: { type: string, description: "GitHub's digest (hex), when published" }
 
+    ShareLinkStatus:
+      type: string
+      enum: [active, expired, exhausted, revoked, suspended]
+      description: |
+        `exhausted`: `max_downloads` reached; `suspended`: the owner is disabled or no longer
+        allowed to share (no admin role, user group without `can_share_links`).
+    ShareLink:
+      type: object
+      required: [id, label, url, status, expires_at, max_downloads, views, downloads, last_used_at, created_at, owner]
+      properties:
+        id: { type: integer, format: int64 }
+        label: { type: string, maxLength: 64 }
+        url: { type: [string, "null"], description: "Public URL (<public_url>/s/<token>); null when it cannot be decrypted" }
+        status: { $ref: "#/components/schemas/ShareLinkStatus" }
+        expires_at: { type: [string, "null"], format: date-time, description: "null = permanent" }
+        max_downloads: { type: [integer, "null"], description: "null = unlimited installer downloads" }
+        views: { type: integer, format: int64, description: Openings of the public page }
+        downloads: { type: integer, format: int64, description: Preconfigured Windows installer downloads }
+        last_used_at: { type: [string, "null"], format: date-time }
+        created_at: { type: string, format: date-time }
+        owner: { $ref: "#/components/schemas/UserRef" }
+    ShareLinkInput:
+      type: object
+      additionalProperties: false
+      description: Neither `expires_in` nor `expires_at` = permanent (until revoked).
+      properties:
+        label: { type: string, maxLength: 64 }
+        expires_in: { type: string, enum: ["1h", "24h", "7d", "30d"] }
+        expires_at: { type: string, format: date-time, description: "Custom expiry, 1 minute to 1 year ahead" }
+        max_downloads: { type: integer, minimum: 1, maximum: 100000 }
+    ShareLinkList:
+      type: object
+      required: [items]
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/ShareLink" } }
+    SharePublicInfo:
+      type: object
+      required: [title, description, id_server, relay_server, api_server, public_key, config_string, windows, assets]
+      properties:
+        title: { type: string, description: "Page title set by an admin; empty = the default (\"Connect to <host>\")" }
+        description: { type: string, description: Plain text set by an admin (render escaped) }
+        id_server: { type: string }
+        relay_server: { type: string }
+        api_server: { type: string }
+        public_key: { type: string }
+        config_string: { type: string, description: "RustDesk config string (import, --config, QR code as config=…)" }
+        windows_file_name: { type: string, description: "Name of the preconfigured installer; absent when unavailable" }
+        windows:
+          type: array
+          description: Preconfigured Windows installers offered at `/s/{token}/windows/{arch}`.
+          items:
+            type: object
+            required: [arch, size]
+            properties:
+              arch: { type: string, enum: [x64, arm64] }
+              size: { type: integer, format: int64 }
+        version: { type: string, description: RustDesk release offered }
+        release_url: { type: string }
+        assets:
+          type: array
+          description: Official packages for the other platforms (GitHub download URLs).
+          items: { $ref: "#/components/schemas/ClientAsset" }
+
     WebClientServer:
       type: object
       required: [name, id_url, relay_url, key]
@@ -5211,12 +5444,13 @@ components:
       description: "`self`: members see only their own devices; `shared`: members see each other in the client."
     UserGroup:
       type: object
-      required: [id, name, visibility, note, member_count, created_at, updated_at]
+      required: [id, name, visibility, note, can_share_links, member_count, created_at, updated_at]
       properties:
         id: { type: integer, format: int64 }
         name: { type: string }
         visibility: { $ref: "#/components/schemas/GroupVisibility" }
         note: { type: string }
+        can_share_links: { type: boolean, description: "Members may create public server share links (RDPANEL_SHARE_LINKS_ENABLED)" }
         member_count: { type: integer }
         created_at: { type: string, format: date-time }
         updated_at: { type: string, format: date-time }
@@ -5228,6 +5462,7 @@ components:
         name: { type: string, minLength: 1, maxLength: 128 }
         visibility: { $ref: "#/components/schemas/GroupVisibility" }
         note: { type: string, maxLength: 4096 }
+        can_share_links: { type: boolean, default: false }
     UserGroupPatch:
       type: object
       additionalProperties: false
@@ -5235,6 +5470,7 @@ components:
         name: { type: string, minLength: 1, maxLength: 128 }
         visibility: { $ref: "#/components/schemas/GroupVisibility" }
         note: { type: string, maxLength: 4096 }
+        can_share_links: { type: boolean }
     UserGroupPage:
       allOf:
         - $ref: "#/components/schemas/PageMeta"
@@ -6092,7 +6328,7 @@ components:
 
     PanelSettings:
       type: object
-      required: [public_url, admin_url, branding, auth, retention, rate_limits, trusted_proxies]
+      required: [public_url, admin_url, branding, share_links, auth, retention, rate_limits, trusted_proxies]
       properties:
         public_url:
           type: string
@@ -6108,6 +6344,14 @@ components:
             welcome_markdown: { type: string, maxLength: 20000 }
             has_logo: { type: boolean }
             web_client_url: { type: [string, "null"] }
+        share_links:
+          type: object
+          description: Public server share links and the texts of their page (plain text, shown escaped).
+          required: [enabled, page_title, description]
+          properties:
+            enabled: { type: boolean, description: "Read-only (RDPANEL_SHARE_LINKS_ENABLED)." }
+            page_title: { type: string, maxLength: 80, description: "Empty = \"Connect to <host>\"" }
+            description: { type: string, maxLength: 500 }
         auth:
           type: object
           description: Enforced at runtime (lifetimes apply to new sessions/tokens).
@@ -6159,6 +6403,12 @@ components:
             title: { type: string, maxLength: 64 }
             welcome_markdown: { type: string, maxLength: 20000 }
             web_client_url: { type: [string, "null"] }
+        share_links:
+          type: object
+          additionalProperties: false
+          properties:
+            page_title: { type: string, maxLength: 80 }
+            description: { type: string, maxLength: 500 }
         auth:
           type: object
           additionalProperties: false

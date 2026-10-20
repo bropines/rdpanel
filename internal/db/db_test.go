@@ -47,7 +47,8 @@ var wantTables = []string{
 	"federation_peers", "federated_relays", // 00016_federation
 	"client_strategies",                // 00017_strategies
 	"connection_acls", "control_roles", // 00018_acl
-	"ldap_settings", // 00019_ldap
+	"ldap_settings",      // 00019_ldap
+	"server_share_links", // 00022_server_share_links
 }
 
 func tables(t *testing.T, d *DB) []string {
@@ -365,8 +366,8 @@ func TestMigrationsPG(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(entries) != 20 {
-		t.Fatalf("expected 20 migrations in migrations_pg, got %d", len(entries))
+	if len(entries) < 20 {
+		t.Fatalf("expected at least 20 migrations in migrations_pg, got %d", len(entries))
 	}
 
 	sqliteEntries, err := fs.ReadDir(Migrations(), ".")
@@ -377,10 +378,17 @@ func TestMigrationsPG(t *testing.T) {
 		t.Fatalf("migration count mismatch: pg=%d sqlite=%d", len(entries), len(sqliteEntries))
 	}
 
+	// Versions increase strictly (branches may reserve numbers, so gaps are
+	// allowed) and both dialects have the same files.
+	prev := 0
 	for i, entry := range entries {
-		expectedPrefix := fmt.Sprintf("%05d_", i+1)
-		if !strings.HasPrefix(entry.Name(), expectedPrefix) {
-			t.Errorf("entry %d: %q does not start with %q", i, entry.Name(), expectedPrefix)
+		var v int
+		if _, err := fmt.Sscanf(entry.Name(), "%05d_", &v); err != nil || len(entry.Name()) < 6 || entry.Name()[5] != '_' || v <= prev {
+			t.Errorf("entry %d: %q is not a version above %05d", i, entry.Name(), prev)
+		}
+		prev = v
+		if sqliteEntries[i].Name() != entry.Name() {
+			t.Errorf("entry %d: pg %q, sqlite %q", i, entry.Name(), sqliteEntries[i].Name())
 		}
 		if !strings.HasSuffix(entry.Name(), ".sql") {
 			t.Errorf("entry %q does not end with .sql", entry.Name())

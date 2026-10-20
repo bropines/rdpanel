@@ -995,6 +995,56 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/share-links": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Server share links (mine, or every user's for admins).
+         * @description Admins, and users whose user group has `can_share_links` (403 otherwise; 404 while
+         *     `RDPANEL_SHARE_LINKS_ENABLED` is off). Revoked links are not listed; expired and
+         *     exhausted ones are, with their status. `scope=all` (admins only) lists every user's links.
+         */
+        get: operations["listShareLinks"];
+        put?: never;
+        /**
+         * Create a public link to this server's settings and preconfigured client.
+         * @description Permanent (no `expires_in` / `expires_at`) or temporary; `max_downloads` limits the
+         *     preconfigured installer downloads, after which the link stops working. The token
+         *     has 128 random bits; only its sha256 and an AEAD-sealed copy (so `url` can be shown
+         *     again) are stored. At most 100 open links per user (409 `share_link_limit`).
+         *     Recorded in the admin audit log (`share_link.create`).
+         */
+        post: operations["createShareLink"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/share-links/{link_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Revoke a share link (own; admins any).
+         * @description The public page answers 410 from then on. Recorded in the admin audit log (`share_link.revoke`).
+         */
+        delete: operations["revokeShareLink"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/lookup/users": {
         parameters: {
             query?: never;
@@ -2951,6 +3001,76 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/{token}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Public share page (HTML, no session).
+         * @description Mounted at `/s/{token}` (not under `/api`). Serves the share page (`web/share.html`)
+         *     and counts a view. Unknown tokens answer 404, revoked, expired, exhausted links and
+         *     links whose owner may no longer share 410, both with the same page ("This link is no
+         *     longer valid"). Unknown tokens count towards a per-IP backoff; all `/s/*` routes are
+         *     rate limited per IP and sent with `Cache-Control: no-store`, `X-Robots-Tag: noindex`
+         *     and `Referrer-Policy: no-referrer`. Everything under `/s` is 404 while
+         *     `RDPANEL_SHARE_LINKS_ENABLED` is off.
+         */
+        get: operations["getSharePage"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/{token}/info": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Data of the public share page (no session).
+         * @description Mounted at `/s/{token}/info`. Only this server's connection settings, the page texts
+         *     set by an admin and the official client downloads; nothing about the link itself.
+         */
+        get: operations["getShareInfo"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/{token}/windows/{arch}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The official Windows installer named so that it uses this server (no session).
+         * @description Mounted at `/s/{token}/windows/{arch}`; the same file as `/clients/windows/{arch}`.
+         *     A request that starts a download (no `Range`, or one from byte 0) counts one download
+         *     of the link and is refused (410) once `max_downloads` is reached; resumed ranges are
+         *     served while the link is otherwise valid.
+         */
+        get: operations["downloadShareWindowsClient"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -3406,6 +3526,8 @@ export interface components {
             csrf_token: string;
             /** @description True when 2FA is required for this account but not yet enrolled. */
             must_enroll_totp?: boolean;
+            /** @description Share links are on (RDPANEL_SHARE_LINKS_ENABLED) and this user may create them. */
+            can_share_links?: boolean;
         };
         /** @description An active panel session or client token of a user. */
         Session: {
@@ -3682,6 +3804,83 @@ export interface components {
             /** @description GitHub's digest (hex), when published */
             sha256?: string;
         };
+        /**
+         * @description `exhausted`: `max_downloads` reached; `suspended`: the owner is disabled or no longer
+         *     allowed to share (no admin role, user group without `can_share_links`).
+         * @enum {string}
+         */
+        ShareLinkStatus: "active" | "expired" | "exhausted" | "revoked" | "suspended";
+        ShareLink: {
+            /** Format: int64 */
+            id: number;
+            label: string;
+            /** @description Public URL (<public_url>/s/<token>); null when it cannot be decrypted */
+            url: string | null;
+            status: components["schemas"]["ShareLinkStatus"];
+            /**
+             * Format: date-time
+             * @description null = permanent
+             */
+            expires_at: string | null;
+            /** @description null = unlimited installer downloads */
+            max_downloads: number | null;
+            /**
+             * Format: int64
+             * @description Openings of the public page
+             */
+            views: number;
+            /**
+             * Format: int64
+             * @description Preconfigured Windows installer downloads
+             */
+            downloads: number;
+            /** Format: date-time */
+            last_used_at: string | null;
+            /** Format: date-time */
+            created_at: string;
+            owner: components["schemas"]["UserRef"];
+        };
+        /** @description Neither `expires_in` nor `expires_at` = permanent (until revoked). */
+        ShareLinkInput: {
+            label?: string;
+            /** @enum {string} */
+            expires_in?: "1h" | "24h" | "7d" | "30d";
+            /**
+             * Format: date-time
+             * @description Custom expiry, 1 minute to 1 year ahead
+             */
+            expires_at?: string;
+            max_downloads?: number;
+        };
+        ShareLinkList: {
+            items: components["schemas"]["ShareLink"][];
+        };
+        SharePublicInfo: {
+            /** @description Page title set by an admin; empty = the default ("Connect to <host>") */
+            title: string;
+            /** @description Plain text set by an admin (render escaped) */
+            description: string;
+            id_server: string;
+            relay_server: string;
+            api_server: string;
+            public_key: string;
+            /** @description RustDesk config string (import, --config, QR code as config=…) */
+            config_string: string;
+            /** @description Name of the preconfigured installer; absent when unavailable */
+            windows_file_name?: string;
+            /** @description Preconfigured Windows installers offered at `/s/{token}/windows/{arch}`. */
+            windows: {
+                /** @enum {string} */
+                arch: "x64" | "arm64";
+                /** Format: int64 */
+                size: number;
+            }[];
+            /** @description RustDesk release offered */
+            version?: string;
+            release_url?: string;
+            /** @description Official packages for the other platforms (GitHub download URLs). */
+            assets: components["schemas"]["ClientAsset"][];
+        };
         WebClientServer: {
             name: string;
             /** @description hbbs WebSocket URL (wss://host/ws/id) */
@@ -3886,6 +4085,8 @@ export interface components {
             name: string;
             visibility: components["schemas"]["GroupVisibility"];
             note: string;
+            /** @description Members may create public server share links (RDPANEL_SHARE_LINKS_ENABLED) */
+            can_share_links: boolean;
             member_count: number;
             /** Format: date-time */
             created_at: string;
@@ -3896,11 +4097,14 @@ export interface components {
             name: string;
             visibility?: components["schemas"]["GroupVisibility"];
             note?: string;
+            /** @default false */
+            can_share_links: boolean;
         };
         UserGroupPatch: {
             name?: string;
             visibility?: components["schemas"]["GroupVisibility"];
             note?: string;
+            can_share_links?: boolean;
         };
         UserGroupPage: components["schemas"]["PageMeta"] & {
             items: components["schemas"]["UserGroup"][];
@@ -4693,6 +4897,14 @@ export interface components {
                 has_logo: boolean;
                 web_client_url: string | null;
             };
+            /** @description Public server share links and the texts of their page (plain text, shown escaped). */
+            share_links: {
+                /** @description Read-only (RDPANEL_SHARE_LINKS_ENABLED). */
+                enabled: boolean;
+                /** @description Empty = "Connect to <host>" */
+                page_title: string;
+                description: string;
+            };
             /** @description Enforced at runtime (lifetimes apply to new sessions/tokens). */
             auth: {
                 /** @description False refuses password sign-in for the user role (panel and client); admins keep it. */
@@ -4737,6 +4949,10 @@ export interface components {
                 title?: string;
                 welcome_markdown?: string;
                 web_client_url?: string | null;
+            };
+            share_links?: {
+                page_title?: string;
+                description?: string;
             };
             auth?: {
                 password_login_enabled?: boolean;
@@ -5090,6 +5306,15 @@ export interface components {
                 "application/json": components["schemas"]["Error"];
             };
         };
+        /** @description The share link was revoked, expired or used up (error code `gone`). */
+        Gone: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["Error"];
+            };
+        };
         /** @description Upstream server or peer unreachable. */
         BadGateway: {
             headers: {
@@ -5101,6 +5326,8 @@ export interface components {
         };
     };
     parameters: {
+        /** @description Share link token (22 base64url characters). */
+        ShareToken: string;
         ApiTokenId: number;
         RelayId: number;
         /** @description Must equal the rdpanel_csrf cookie. */
@@ -6649,6 +6876,90 @@ export interface operations {
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
             502: components["responses"]["BadGateway"];
+        };
+    };
+    listShareLinks: {
+        parameters: {
+            query?: {
+                scope?: "mine" | "all";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Links, newest first (at most 500). */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ShareLinkList"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    createShareLink: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Must equal the rdpanel_csrf cookie. */
+                "X-CSRF-Token": components["parameters"]["CsrfHeader"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ShareLinkInput"];
+            };
+        };
+        responses: {
+            /** @description Created. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ShareLink"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    revokeShareLink: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Must equal the rdpanel_csrf cookie. */
+                "X-CSRF-Token": components["parameters"]["CsrfHeader"];
+            };
+            path: {
+                link_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Revoked. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
         };
     };
     lookupUsers: {
@@ -10750,6 +11061,103 @@ export interface operations {
                 };
             };
             401: components["responses"]["Unauthorized"];
+        };
+    };
+    getSharePage: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Share link token (22 base64url characters). */
+                token: components["parameters"]["ShareToken"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The page. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/html": string;
+                };
+            };
+            /** @description Unknown link (the same page, which says the link is not valid). */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/html": string;
+                };
+            };
+            /** @description The link is no longer valid (the same page). */
+            410: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/html": string;
+                };
+            };
+            429: components["responses"]["RateLimited"];
+        };
+    };
+    getShareInfo: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Share link token (22 base64url characters). */
+                token: components["parameters"]["ShareToken"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Connection settings and downloads. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SharePublicInfo"];
+                };
+            };
+            404: components["responses"]["NotFound"];
+            410: components["responses"]["Gone"];
+            429: components["responses"]["RateLimited"];
+        };
+    };
+    downloadShareWindowsClient: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Share link token (22 base64url characters). */
+                token: components["parameters"]["ShareToken"];
+                arch: "x64" | "arm64";
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The installer. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/vnd.microsoft.portable-executable": string;
+                };
+            };
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            410: components["responses"]["Gone"];
+            429: components["responses"]["RateLimited"];
+            502: components["responses"]["BadGateway"];
         };
     };
 }

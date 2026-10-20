@@ -44,8 +44,9 @@ func (s *SPA) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		s.serveIndex(w, r)
 		return
 	}
-	// The Swagger UI page is served (and gated) by the backend at /api/v1/docs.
-	if name == "api-docs.html" {
+	// The Swagger UI page is served (and gated) by the backend at /api/v1/docs,
+	// the public share page at /s/<token>.
+	if name == "api-docs.html" || name == "share.html" {
 		http.NotFound(w, r)
 		return
 	}

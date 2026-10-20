@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"runtime/debug"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -13,7 +14,8 @@ import (
 )
 
 // Logger logs one line per request. Query strings are deliberately omitted:
-// they can carry bearer material (OIDC codes, share tokens).
+// they can carry bearer material (OIDC codes, share tokens); so is the token
+// segment of public share link paths (see RedactPath).
 func Logger(log *slog.Logger) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -33,7 +35,7 @@ func Logger(log *slog.Logger) func(http.Handler) http.Handler {
 			}
 			log.LogAttrs(r.Context(), level, "http request",
 				slog.String("method", r.Method),
-				slog.String("path", r.URL.Path),
+				slog.String("path", RedactPath(r.URL.Path)),
 				slog.String("route", routePattern(r)),
 				slog.Int("status", status),
 				slog.Int("bytes", ww.BytesWritten()),
@@ -43,6 +45,20 @@ func Logger(log *slog.Logger) func(http.Handler) http.Handler {
 			)
 		})
 	}
+}
+
+// RedactPath hides bearer material carried in a request path for logs: the
+// token of public share links (/s/<token>/... becomes /s/[token]/...).
+// Their static files (/s/assets/..., /s/favicon.svg) are kept.
+func RedactPath(p string) string {
+	rest, ok := strings.CutPrefix(p, "/s/")
+	if !ok || rest == "" || strings.HasPrefix(rest, "assets/") || rest == "favicon.svg" {
+		return p
+	}
+	if i := strings.IndexByte(rest, '/'); i >= 0 {
+		return "/s/[token]" + rest[i:]
+	}
+	return "/s/[token]"
 }
 
 // Recoverer turns panics into a 500 JSON error and logs the stack.
@@ -60,7 +76,7 @@ func Recoverer(log *slog.Logger) func(http.Handler) http.Handler {
 				}
 				log.ErrorContext(r.Context(), "panic in handler",
 					slog.Any("panic", rec),
-					slog.String("path", r.URL.Path),
+					slog.String("path", RedactPath(r.URL.Path)),
 					slog.String("stack", string(debug.Stack())),
 					slog.String("request_id", middleware.GetReqID(r.Context())),
 				)

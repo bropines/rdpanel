@@ -78,6 +78,18 @@ type Config struct {
 	WebClient WebClientConfig `yaml:"webclient"`
 	// ClientDownloads configures the "Install client" page.
 	ClientDownloads ClientDownloadsConfig `yaml:"client_downloads"`
+	// ShareLinks configures public server share links (/s/<token>).
+	ShareLinks ShareLinksConfig `yaml:"share_links"`
+}
+
+// ShareLinksConfig controls public server share links: pages at
+// <public_url>/s/<token> where anyone with the link gets the client set up
+// for this server and its connection settings. Off by default: /s/* answers
+// 404 and the panel hides the feature.
+type ShareLinksConfig struct {
+	// Enabled serves /s/* and lets admins (and user groups an admin allows)
+	// create links.
+	Enabled bool `yaml:"enabled"`
 }
 
 // ClientDownloadsConfig configures the "Install client" page: the official
@@ -542,6 +554,7 @@ func (c *Config) envVars() []envVar {
 		{"RDPANEL_WEBCLIENT_CUSTOM_SERVERS", boolean(&c.WebClient.CustomServers)},
 		{"RDPANEL_CLIENT_DOWNLOADS_ENABLED", boolean(&c.ClientDownloads.Enabled)},
 		{"RDPANEL_CLIENT_DOWNLOADS_VERSION", str(&c.ClientDownloads.Version)},
+		{"RDPANEL_SHARE_LINKS_ENABLED", boolean(&c.ShareLinks.Enabled)},
 		{"RDPANEL_FEDERATION_ENABLED", boolean(&c.Federation.Enabled)},
 		{"RDPANEL_FEDERATION_TOKEN", sec(&c.Federation.Token)},
 	}

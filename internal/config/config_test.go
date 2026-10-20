@@ -474,3 +474,22 @@ func TestClientDownloadsEnv(t *testing.T) {
 		t.Fatal("a version that is not a release tag must be rejected")
 	}
 }
+
+func TestShareLinksConfig(t *testing.T) {
+	cfg, err := Load(env(map[string]string{}))
+	if err != nil || cfg.ShareLinks.Enabled {
+		t.Fatalf("share links must default to off: %+v %v", cfg.ShareLinks, err)
+	}
+	cfg, err = Load(env(map[string]string{"RDPANEL_SHARE_LINKS_ENABLED": "true"}))
+	if err != nil || !cfg.ShareLinks.Enabled {
+		t.Fatalf("env: %+v %v", cfg.ShareLinks, err)
+	}
+	f := filepath.Join(t.TempDir(), "rdpanel.yaml")
+	if err := os.WriteFile(f, []byte("share_links:\n  enabled: true\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err = Load(env(map[string]string{"RDPANEL_CONFIG": f}))
+	if err != nil || !cfg.ShareLinks.Enabled {
+		t.Fatalf("yaml: %+v %v", cfg.ShareLinks, err)
+	}
+}
