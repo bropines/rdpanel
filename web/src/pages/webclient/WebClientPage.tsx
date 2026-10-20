@@ -41,6 +41,7 @@ import {
   type CloseInfo,
   type InputMode,
   type PeerSummary,
+  type AudioState,
   type ScaleMode,
   type ServerConfig,
   type SessionSettings,
@@ -354,6 +355,7 @@ function RemoteSession({
   const [resolution, setResolution] = useState("current");
   const [privacyOn, setPrivacyOn] = useState(false);
   const [blockOn, setBlockOn] = useState(false);
+  const [audioState, setAudioState] = useState<AudioState>("off");
   const [permKeyboard, setPermKeyboard] = useState(true);
   // Panel features (login token, web id, account passwords) only exist on our own server.
   const own = !other;
@@ -389,6 +391,7 @@ function RemoteSession({
       }
     }
     let abPasswordTried = !credentials?.password;
+    let audioHintShown = false;
     let session: Session;
     try {
       session = new Session({
@@ -456,6 +459,13 @@ function RemoteSession({
       session.on("peer", ({ peer }) => setPeer(peer)),
       session.on("display", ({ display }) => setCurrentDisplay(display.index)),
       session.on("stats", setStats),
+      session.on("audio", ({ state }) => {
+        setAudioState(state);
+        if (state === "blocked" && !audioHintShown) {
+          audioHintShown = true;
+          toast(t("webclient.sound.blocked"));
+        }
+      }),
       session.on("permission", ({ name, enabled }) => {
         if (name === "keyboard") setPermKeyboard(enabled);
       }),
@@ -593,6 +603,14 @@ function RemoteSession({
   const off = !connected;
   const st = prefs.settings;
   const actions: ToolbarAction[] = [
+    {
+      id: "sound",
+      label: t("webclient.sound.enable"),
+      icon: VolumeX,
+      hidden: audioState !== "blocked",
+      forced: true,
+      run: () => s?.resumeAudio(),
+    },
     { id: "settings", label: t("webclient.settings.title"), icon: Settings2, disabled: off, run: () => setSettingsOpen(true) },
     { id: "files", label: t("webclient.files.title"), icon: FolderOpen, disabled: off || s?.permission.file === false, run: () => setFilesOpen(true) },
     {

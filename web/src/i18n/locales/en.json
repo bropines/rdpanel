@@ -1952,6 +1952,10 @@
       "relayPlaceholder": "same as the server",
       "key": "Public key",
       "requirements": "The server needs wss://<host>/ws/id → hbbs (21118) and wss://<host>/ws/relay → hbbr (21119) behind a TLS reverse proxy. The key is its id_ed25519.pub."
+    },
+    "sound": {
+      "enable": "Enable sound",
+      "blocked": "The browser blocked sound: click the screen or the sound button."
     }
   }
 }
