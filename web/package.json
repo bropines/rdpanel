@@ -54,6 +54,7 @@
     "lucide-react": "^0.544.0",
     "marked": "^18.1.1",
     "qrcode": "^1.5.4",
+    "rdweb": "https://github.com/bropines/rdweb/releases/download/v0.1.0/rdweb-0.1.0.tgz",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-hook-form": "^7.62.0",
@@ -61,7 +62,6 @@
     "sonner": "^2.0.7",
     "swagger-ui-dist": "^5.33.3",
     "tailwind-merge": "^2.6.0",
-    "tweetnacl": "^1.0.3",
     "zod": "^4.1.0"
   },
   "devDependencies": {

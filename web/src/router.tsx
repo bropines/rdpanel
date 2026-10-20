@@ -108,9 +108,9 @@ const connectRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/connect",
   beforeLoad: async ({ context, location }) => ({ me: await requireSession(context.queryClient, location) }),
-  validateSearch: (s: Record<string, unknown>): { id?: string; pwd?: string } => ({
-    id: s.id !== undefined && s.id !== null && String(s.id).trim() !== "" ? String(s.id).trim() : undefined,
-    pwd: s.pwd !== undefined && s.pwd !== null && String(s.pwd) !== "" ? String(s.pwd) : undefined,
+  // Only the device id: passwords never travel in URLs (history, logs, Referer).
+  validateSearch: (s: Record<string, unknown>): { id?: string } => ({
+    id: s.id !== undefined && s.id !== null && String(s.id).trim() !== "" ? String(s.id).replace(/\s+/g, "") : undefined,
   }),
   component: lazyRouteComponent(() => import("@/pages/webclient/WebClientPage"), "WebClientPage"),
 });

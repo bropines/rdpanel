@@ -33,6 +33,7 @@ import (
 	"github.com/bropines/rdpanel/internal/updatecheck"
 	"github.com/bropines/rdpanel/internal/web"
 	"github.com/bropines/rdpanel/internal/webhook"
+	"github.com/bropines/rdpanel/internal/websessions"
 	webdist "github.com/bropines/rdpanel/web"
 )
 
@@ -71,6 +72,8 @@ type App struct {
 	// Kicks queues admin "disconnect" requests delivered by client heartbeats;
 	// shared by the client API (Take) and the admin API (Kick).
 	Kicks *clientapi.MemKickQueue
+	// WebSessions maps web client session ids to panel users (ACL checks).
+	WebSessions *websessions.Registry
 	// ClientOptions are pushed to clients in heartbeat strategies; shared by
 	// the client API (StrategyFor) and the admin API (/server/client-options).
 	ClientOptions *clientopts.Service
@@ -120,6 +123,7 @@ func New(ctx context.Context, cfg *config.Config, log *slog.Logger, opts ...Opti
 	a.Store = store.New(a.DB, store.WithSecrets(a.AEAD))
 	a.Limiter = auth.NewBackoff(auth.DefaultBackoffConfig, nil)
 	a.Kicks = clientapi.NewMemKickQueue(0, nil)
+	a.WebSessions = websessions.New(nil)
 	a.ClientOptions = clientopts.New(a.Store, a.AEAD, nil)
 	a.TOTP = adminapi.NewTOTPService(a.Store, a.AEAD)
 	a.Mail = mailauth.New(mailauth.Options{Store: a.Store, AEAD: a.AEAD, Config: cfg, Log: log.With("component", "mail")})

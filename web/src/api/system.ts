@@ -10,6 +10,14 @@ export const dashboardApi = {
   branding: () => api.request<Branding>("/branding"),
 };
 
+/* ── Web client ───────────────────────────────────────────────────────── */
+
+export type WebClientConfig = Schemas["WebClientConfig"];
+
+export const webClientApi = {
+  config: () => api.request<WebClientConfig>("/webclient/config"),
+};
+
 /* ── About ────────────────────────────────────────────────────────────── */
 
 export type About = Schemas["About"];

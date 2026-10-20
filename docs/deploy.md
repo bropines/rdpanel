@@ -280,6 +280,7 @@ Summary:
 | `ALWAYS_USE_RELAY` | hbbs | `N` | `Y` disables P2P |
 | `MUST_LOGIN` | hbbs | `N` | `Y` requires a panel login token for connections |
 | `TCP_KEEPALIVE` | hbbs | `N` | `Y` keeps TCP/WebSocket-mode clients online (see [WebSocket and TCP-mode clients](#websocket-and-tcp-mode-clients)) |
+| `WS_RELAY_SERVERS` | hbbs | first `RELAY` entry | relays offered to browser (WebSocket) clients such as the [web client](web-client.md); they must be reachable as `wss://<host>/ws/relay`, so by default only the local hbbr behind the panel. Set empty to use the normal rotation |
 | `WEBRTC` | hbbs | `N` | `Y` forwards WebRTC signaling for RustDesk 1.5+ clients (see [WebRTC](webrtc.md)) |
 | `RUSTDESK_API_JWT_KEY` | panel, hbbs | generated `jwt.key` | HS256 key of client tokens (raw string) |
 | `KEY_PRIV`, `KEY_PUB` | key-secret | — | initial key pair (also docker secrets `key_priv`/`key_pub`) |
@@ -305,6 +306,7 @@ Summary:
 | `RDPANEL_LOGS_BUFFER`, `RDPANEL_LOGS_DIR` | panel, log pipelines | `2000`, `/run/rdpanel/logs` | Server → Logs: lines kept per source (`0` = off) and the s6-log capture dir (see [Server logs](#server-logs)) |
 | `RDPANEL_UPDATE_CHECK` | panel | `true` | About page release check against the GitHub API (see [below](#about-page-and-update-check)); `false` = no outbound request |
 | `RDPANEL_API_DOCS` | panel | `auth` | Swagger UI at `/api/v1/docs` + spec: `auth`, `public` or `off` (see [api.md](api.md#interactive-docs)); being under `/api/v1/`, a public vhost that 404s `/api/v1/*` keeps it internal |
+| `RDPANEL_WEBCLIENT_ENABLED`, `_ADMIN_ONLY`, `_ID_URL`, `_RELAY_URL` | panel | on, off, same origin `/ws/id`, `/ws/relay` | browser web client (see [web-client.md](web-client.md)); the reverse proxy must forward `/ws/id` → 21118 and `/ws/relay` → 21119 with WebSocket upgrade |
 | `RDPANEL_FEDERATION_ENABLED`, `RDPANEL_FEDERATION_TOKEN` | panel | off, — | opt-in panel federation; the token (≥ 16 characters) is what peers present to this panel (see [Panel federation](#panel-federation)) |
 | `RDPANEL_WEBHOOK_URL`, `_SECRET` | panel | off | alerts for critical events (relay degraded/offline, hbbs down) sent via HTTP POST with optional HMAC-SHA256 signature over timestamp and body ([configuration.md → Webhooks](configuration.md#webhooks)) |
 | `RDPANEL_SMTP_HOST`, `_PORT`, `_ENCRYPTION`, `_USERNAME`, `_PASSWORD`, `_PASSWORD_FILE`, `_FROM`, `_INSECURE_SKIP_VERIFY` | panel | off | outgoing e-mail (see [E-mail](#e-mail-verification-codes-and-password-reset)); otherwise configurable in Settings → E-mail |

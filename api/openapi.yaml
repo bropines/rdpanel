@@ -1070,6 +1070,24 @@ paths:
               schema: { $ref: "#/components/schemas/About" }
         "401": { $ref: "#/components/responses/Unauthorized" }
 
+  /webclient/config:
+    get:
+      tags: [about]
+      operationId: getWebClientConfig
+      summary: Connection settings for the browser remote desktop client.
+      description: |
+        Any signed-in user (admins only with `RDPANEL_WEBCLIENT_ADMIN_ONLY=true`). Empty URLs mean "same origin
+        as the panel" (`/ws/id`, `/ws/relay`). `token` is a short-lived hbbs login token for servers running with
+        `MUST_LOGIN=Y`; it is null when no JWT key is configured. `enabled` is false when the web client is off
+        or not offered to this user.
+      responses:
+        "200":
+          description: Web client settings.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/WebClientConfig" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
   /lookup/users:
     get:
       tags: [lookup]
@@ -4816,6 +4834,19 @@ components:
         commit: { type: string }
         build_date: { type: string }
         go: { type: string }
+    WebClientConfig:
+      type: object
+      required: [enabled, rendezvous_url, relay_url, public_key, token, token_expires_at, display_name, my_id]
+      properties:
+        enabled: { type: boolean }
+        rendezvous_url: { type: string, description: "hbbs WebSocket URL; empty = same origin /ws/id" }
+        relay_url: { type: string, description: "hbbr WebSocket URL; empty = same origin /ws/relay" }
+        public_key: { type: string, description: "Server public key (id_ed25519.pub); empty when unreadable" }
+        token: { type: [string, "null"], description: "Short-lived hbbs login token (MUST_LOGIN)" }
+        token_expires_at: { type: [string, "null"], format: date-time }
+        display_name: { type: string, description: "Name shown to the remote user" }
+        my_id: { type: string, description: "Session id announced to the device (web-…); lets connection rules apply to this user. Valid 12 h." }
+
     About:
       type: object
       required: [name, version, hbb, update, server]

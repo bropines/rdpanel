@@ -48,7 +48,7 @@ func (a *App) Handler() http.Handler {
 		httpx.Logger(a.Log),
 		httpx.Recoverer(a.Log),
 		a.httpMetrics.Middleware,
-		web.SecurityHeaders(cfg.HTTPS()),
+		web.SecurityHeaders(cfg.HTTPS(), cfg.WebClient.IDURL, cfg.WebClient.RelayURL),
 	)
 
 	r.Get("/healthz", a.handleHealthz)
@@ -61,10 +61,11 @@ func (a *App) Handler() http.Handler {
 		adminDeps := adminapi.Deps{
 			Log: a.Log.With("component", "adminapi"), Config: cfg, Store: a.Store, AEAD: a.AEAD,
 			JWT: a.JWT, Hasher: a.Hasher, Limiter: a.Limiter, Metrics: a.Registry, TOTP: a.TOTP, Mail: a.Mail,
-			LDAP:       a.LDAP,
-			Telemetry:  a.Telemetry,
-			DeviceRate: adminapi.DeviceRateInfo{Rate: clientapi.DefaultDeviceRate.Rate, Burst: clientapi.DefaultDeviceRate.Burst},
-			StartedAt:  a.StartedAt, Schema: a.DB,
+			LDAP:        a.LDAP,
+			WebSessions: a.WebSessions,
+			Telemetry:   a.Telemetry,
+			DeviceRate:  adminapi.DeviceRateInfo{Rate: clientapi.DefaultDeviceRate.Rate, Burst: clientapi.DefaultDeviceRate.Burst},
+			StartedAt:   a.StartedAt, Schema: a.DB,
 			ClientOptions: a.ClientOptions,
 			Federation:    a.Federation,
 			Logs:          a.Logs, LogSources: a.logSources(), LogCapture: a.logCapture(),
@@ -112,7 +113,8 @@ func (a *App) Handler() http.Handler {
 			Log: a.Log.With("component", "clientapi"), Config: cfg, Store: a.Store, AEAD: a.AEAD,
 			JWT: a.JWT, Hasher: a.Hasher, Limiter: a.Limiter, Metrics: a.Registry, Kicks: a.Kicks,
 			TOTP: clientTOTP{a.TOTP}, Email: a.Mail, LDAP: a.LDAP, Telemetry: a.Telemetry,
-			Strategies: a.ClientOptions,
+			WebSessions: a.WebSessions,
+			Strategies:  a.ClientOptions,
 		})
 	})
 
@@ -142,10 +144,15 @@ func (a *App) webWSProxy(targetAddr string) http.Handler {
 	proxy := &httputil.ReverseProxy{
 		Rewrite: func(pr *httputil.ProxyRequest) {
 			pr.SetURL(targetURL)
-			pr.Out.Header["X-Forwarded-For"] = pr.In.Header["X-Forwarded-For"]
-			pr.SetXForwarded()
+			// hbbs/hbbr take the peer address from these headers: send only
+			// the client IP we resolved (trusted proxies only), never a
+			// client-supplied X-Forwarded-For chain.
+			pr.Out.Header.Del("X-Forwarded-For")
+			pr.Out.Header.Del("X-Real-IP")
+			pr.Out.Header.Del("Forwarded")
 			if ip := httpx.ClientIP(pr.In); ip.IsValid() {
 				pr.Out.Header.Set("X-Real-IP", ip.String())
+				pr.Out.Header.Set("X-Forwarded-For", ip.String())
 			}
 		},
 		ErrorHandler: func(w http.ResponseWriter, r *http.Request, err error) {

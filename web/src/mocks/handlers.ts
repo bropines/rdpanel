@@ -693,6 +693,21 @@ export const handlers = [
       version: { panel: "0.1.0-mock", commit: "6045ece0b1", build_date: "2026-10-15", go: "go1.23" },
     } satisfies S["Dashboard"]);
   }),
+  // Web client: point VITE_MOCK_WEBCLIENT_ID_URL / _RELAY_URL / _KEY at a real
+  // server to try the client against live devices from the mock build.
+  http.get(`${B}/webclient/config`, () =>
+    HttpResponse.json({
+      enabled: true,
+      rendezvous_url: import.meta.env.VITE_MOCK_WEBCLIENT_ID_URL ?? "",
+      relay_url: import.meta.env.VITE_MOCK_WEBCLIENT_RELAY_URL ?? "",
+      public_key: import.meta.env.VITE_MOCK_WEBCLIENT_KEY ?? "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+      token: null,
+      token_expires_at: null,
+      display_name: "admin",
+      my_id: "web-0000000001",
+    }),
+  ),
+
   http.get(`${B}/about`, () => {
     const u = requireAuth();
     if (u instanceof Response) return u;
