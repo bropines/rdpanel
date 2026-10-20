@@ -32,6 +32,10 @@ func (m *mockLDAPClient) Search(req *ldapv3.SearchRequest) (*ldapv3.SearchResult
 	return &ldapv3.SearchResult{}, nil
 }
 
+func (m *mockLDAPClient) SearchWithPaging(req *ldapv3.SearchRequest, _ uint32) (*ldapv3.SearchResult, error) {
+	return m.Search(req)
+}
+
 func (m *mockLDAPClient) Close() error {
 	if m.closeFn != nil {
 		return m.closeFn()
@@ -300,5 +304,22 @@ func TestLDAPTestKeepsSavedBindPasswordOnSavedServer(t *testing.T) {
 	if len(dials) != 2 || dials[0].password != "SavedSecret" || dials[1].url != "ldaps://other.example.corp:636" ||
 		dials[1].password != "typed-secret" {
 		t.Fatalf("dials: %+v", dials)
+	}
+}
+
+// The username is substituted into the user filter once: a filter with more
+// than one %s is rejected when saved or tested.
+func TestLDAPUserFilterSingleSubstitution(t *testing.T) {
+	e := newB2Env(t, b2opts{})
+	admin, _ := e.as("ldap_admin", store.RoleAdmin)
+	bad := "(|(uid=%s)(mail=%s))"
+	code, m, _ := admin.do("PUT", "/settings/ldap", map[string]any{"user_filter": bad})
+	wantErr(t, "save filter", code, http.StatusBadRequest, m, "validation_failed")
+	code, m, _ = admin.do("POST", "/settings/ldap/test", map[string]any{"settings": map[string]any{"user_filter": bad}})
+	wantErr(t, "test filter", code, http.StatusBadRequest, m, "validation_failed")
+	code, m, _ = admin.do("PUT", "/settings/ldap", map[string]any{"user_filter": "(&(objectClass=person)(uid=%s))"})
+	want(t, "save valid filter", code, http.StatusOK, m)
+	if m["user_filter"] != "(&(objectClass=person)(uid=%s))" {
+		t.Fatalf("saved filter: %v", m["user_filter"])
 	}
 }

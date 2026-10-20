@@ -17,8 +17,17 @@ import (
 type Client interface {
 	Bind(username, password string) error
 	Search(searchRequest *ldapv3.SearchRequest) (*ldapv3.SearchResult, error)
+	SearchWithPaging(searchRequest *ldapv3.SearchRequest, pagingSize uint32) (*ldapv3.SearchResult, error)
 	Close() error
 }
+
+// syncPageSize is the page size of the directory sync search (Active
+// Directory caps a single, unpaged result at MaxPageSize, 1000 by default).
+const syncPageSize = 500
+
+// ValidUserFilter reports whether a user filter template has at most one %s
+// (the escaped username is substituted once).
+func ValidUserFilter(filter string) bool { return strings.Count(filter, "%s") <= 1 }
 
 // Dialer establishes an LDAP connection and, when cfg.BindDN is set, binds
 // as that service account with bindPassword. go-ldap refuses empty-password
@@ -109,11 +118,8 @@ func formatUserFilter(filterTemplate, username string) string {
 	if filterTemplate == "" {
 		filterTemplate = "(&(objectClass=user)(sAMAccountName=%s))"
 	}
-	escaped := ldapv3.EscapeFilter(username)
-	if strings.Contains(filterTemplate, "%s") {
-		return fmt.Sprintf(filterTemplate, escaped)
-	}
-	return filterTemplate
+	// Not fmt.Sprintf: any other '%' in the filter would be read as a verb.
+	return strings.Replace(filterTemplate, "%s", ldapv3.EscapeFilter(username), 1)
 }
 
 // formatSyncFilter generates a filter that matches all users for directory sync.

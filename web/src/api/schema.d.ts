@@ -3003,6 +3003,7 @@ export interface components {
             bind_password?: string;
             base_dn?: string;
             user_search_base?: string;
+            /** @description LDAP filter for the login search; `%s` (at most once, 400 otherwise) is replaced by the escaped username. */
             user_filter?: string;
             username_attribute?: string;
             display_name_attribute?: string;

@@ -18,7 +18,16 @@ import (
 type mockClient struct {
 	bindFn   func(username, password string) error
 	searchFn func(req *ldapv3.SearchRequest) (*ldapv3.SearchResult, error)
-	closeFn  func() error
+	// pagedFn serves SearchWithPaging (default: searchFn).
+	pagedFn func(req *ldapv3.SearchRequest, pageSize uint32) (*ldapv3.SearchResult, error)
+	closeFn func() error
+}
+
+func (m *mockClient) SearchWithPaging(req *ldapv3.SearchRequest, pageSize uint32) (*ldapv3.SearchResult, error) {
+	if m.pagedFn != nil {
+		return m.pagedFn(req, pageSize)
+	}
+	return m.Search(req)
 }
 
 func (m *mockClient) Bind(username, password string) error {
@@ -410,6 +419,10 @@ func TestAuthenticateWithServiceAccount(t *testing.T) {
 type directory struct {
 	entries   map[string]*ldapv3.Entry
 	passwords map[string]string
+	// sizeLimit (> 0) fails unpaged searches with more results, like Active
+	// Directory's MaxPageSize; pageSizes records the paged searches.
+	sizeLimit int
+	pageSizes []uint32
 }
 
 func newDirectory() *directory {
@@ -433,15 +446,27 @@ func (d *directory) dialer(*store.LDAPSettings, string) (Client, error) {
 			return nil
 		},
 		searchFn: func(req *ldapv3.SearchRequest) (*ldapv3.SearchResult, error) {
-			res := &ldapv3.SearchResult{}
-			for name, e := range d.entries {
-				if strings.Contains(req.Filter, "=*)") || strings.Contains(strings.ToLower(req.Filter), "="+name+")") {
-					res.Entries = append(res.Entries, e)
-				}
+			res := d.search(req)
+			if d.sizeLimit > 0 && len(res.Entries) > d.sizeLimit {
+				return nil, errors.New(`LDAP Result Code 4 "Size Limit Exceeded"`)
 			}
 			return res, nil
 		},
+		pagedFn: func(req *ldapv3.SearchRequest, pageSize uint32) (*ldapv3.SearchResult, error) {
+			d.pageSizes = append(d.pageSizes, pageSize)
+			return d.search(req), nil
+		},
 	}, nil
+}
+
+func (d *directory) search(req *ldapv3.SearchRequest) *ldapv3.SearchResult {
+	res := &ldapv3.SearchResult{}
+	for name, e := range d.entries {
+		if strings.Contains(req.Filter, "=*)") || strings.Contains(strings.ToLower(req.Filter), "="+name+")") {
+			res.Entries = append(res.Entries, e)
+		}
+	}
+	return res
 }
 
 func enableLDAP(t *testing.T, svc *Service, st *store.Store) {
@@ -502,5 +527,49 @@ func TestAuthenticateNeverLinksLocalAccount(t *testing.T) {
 	u, err := svc.Authenticate(ctx, "eve", "eve-pass")
 	if err != nil || u.LDAPDN != "uid=eve,ou=moved,dc=example,dc=com" {
 		t.Fatalf("relink moved LDAP user: %+v %v", u, err)
+	}
+}
+
+// The sync pages through directories larger than the server's size limit and
+// creates only usernames the panel accepts.
+func TestSyncPagedAndValidUsernames(t *testing.T) {
+	svc, st, _ := setupTestService(t)
+	ctx := context.Background()
+	enableLDAP(t, svc, st)
+	dir := newDirectory()
+	dir.sizeLimit = 2
+	svc.SetDialer(dir.dialer)
+	for _, name := range []string{"u1", "u2", "u3", "bad user!"} {
+		dir.add(name, "uid="+name+",dc=example,dc=com", "pw")
+	}
+
+	res, err := svc.Sync(ctx)
+	if err != nil || res.Status != "success" || res.SyncedCount != 3 {
+		t.Fatalf("sync: %+v %v", res, err)
+	}
+	if len(dir.pageSizes) != 1 || dir.pageSizes[0] != syncPageSize {
+		t.Fatalf("paged searches: %v", dir.pageSizes)
+	}
+	if _, err := st.Users.GetByUsername(ctx, "bad user!"); !errors.Is(err, store.ErrNotFound) {
+		t.Fatalf("invalid username provisioned: %v", err)
+	}
+	if _, err := svc.Authenticate(ctx, "bad user!", "pw"); !errors.Is(err, ErrInvalidUsername) {
+		t.Fatalf("login with an invalid directory username: %v", err)
+	}
+}
+
+func TestValidUserFilter(t *testing.T) {
+	for f, want := range map[string]bool{
+		"(&(objectClass=user)(sAMAccountName=%s))": true,
+		"(objectClass=person)":                     true,
+		"(|(uid=%s)(mail=%s))":                     false,
+	} {
+		if got := ValidUserFilter(f); got != want {
+			t.Errorf("ValidUserFilter(%q) = %v", f, got)
+		}
+	}
+	// A literal '%' is not a format verb.
+	if got := formatUserFilter("(&(cn=%s)(description=100%))", "a*b"); got != `(&(cn=a\2ab)(description=100%))` {
+		t.Errorf("formatUserFilter: %q", got)
 	}
 }

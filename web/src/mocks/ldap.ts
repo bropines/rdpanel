@@ -43,6 +43,18 @@ export const ldapHandlers = [
 
   http.put(`${B}/settings/ldap`, async ({ request }) => {
     const body = (await request.json()) as S["LDAPSettingsInput"];
+    if (body.user_filter !== undefined && body.user_filter.split("%s").length > 2) {
+      return HttpResponse.json(
+        {
+          error: {
+            code: "validation_failed",
+            message: "invalid user_filter",
+            fields: { user_filter: "must contain %s (the username) at most once" },
+          },
+        },
+        { status: 400 },
+      );
+    }
     mockLDAPSettings = {
       ...mockLDAPSettings,
       ...body,

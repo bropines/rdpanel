@@ -72,6 +72,9 @@ func toLDAPSettingsDTO(s *store.LDAPSettings) ldapSettingsDTO {
 	}
 }
 
+// userFilterRule is the validation message for user_filter.
+const userFilterRule = "must contain %s (the username) at most once"
+
 type ldapSettingsInput struct {
 	Enabled              *bool            `json:"enabled"`
 	ServerURL            *string          `json:"server_url"`
@@ -148,6 +151,10 @@ func (a *resources) handleUpdateLDAPSettings(w http.ResponseWriter, r *http.Requ
 		f := strings.TrimSpace(*in.UserFilter)
 		if f == "" {
 			f = "(&(objectClass=user)(sAMAccountName=%s))"
+		}
+		if !ldap.ValidUserFilter(f) {
+			validationFailed(w, "invalid user_filter", map[string]string{"user_filter": userFilterRule})
+			return
 		}
 		cfg.UserFilter = f
 	}
@@ -262,6 +269,10 @@ func (a *resources) handleTestLDAP(w http.ResponseWriter, r *http.Request) {
 		}
 		if in.UserFilter != nil {
 			cfg.UserFilter = strings.TrimSpace(*in.UserFilter)
+			if !ldap.ValidUserFilter(cfg.UserFilter) {
+				validationFailed(w, "invalid user_filter", map[string]string{"user_filter": userFilterRule})
+				return
+			}
 		}
 		if in.UsernameAttribute != nil {
 			cfg.UsernameAttribute = strings.TrimSpace(*in.UsernameAttribute)

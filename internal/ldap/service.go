@@ -26,6 +26,9 @@ var (
 	// otherwise a directory entry named e.g. "admin" would take over the local
 	// admin.
 	ErrLocalAccount = errors.New("ldap entry collides with a local account")
+	// ErrInvalidUsername means the directory username does not satisfy the
+	// panel's username rules (store.ValidUsername), so no account is created.
+	ErrInvalidUsername = errors.New("ldap username is not a valid panel username")
 )
 
 // TestRequest configures a test connection and/or lookup attempt.
@@ -265,6 +268,10 @@ func (s *Service) Authenticate(ctx context.Context, username, password string) (
 	if !cfg.AutoRegister {
 		return nil, ErrAutoRegisterOff
 	}
+	if !store.ValidUsername(entryUsername) {
+		s.logger.Warn("ldap login refused: the directory username is not a valid panel username", "dn", userDN)
+		return nil, ErrInvalidUsername
+	}
 
 	newUser := &store.User{
 		Username:    entryUsername,
@@ -490,13 +497,15 @@ func (s *Service) Sync(ctx context.Context) (*SyncResult, error) {
 
 	searchReq := ldapv3.NewSearchRequest(
 		searchBase,
-		ldapv3.ScopeWholeSubtree, ldapv3.NeverDerefAliases, 5000, 30, false,
+		ldapv3.ScopeWholeSubtree, ldapv3.NeverDerefAliases, 0, 30, false,
 		syncFilter,
 		attrs,
 		nil,
 	)
 
-	sr, err := conn.Search(searchReq)
+	// Paged: a directory with more users than the server's page/size limit
+	// (1000 on Active Directory) fails an unpaged search.
+	sr, err := conn.SearchWithPaging(searchReq, syncPageSize)
 	if err != nil {
 		errMsg := fmt.Sprintf("search: %v", err)
 		_ = s.store.LDAPSettings.UpdateSyncResult(ctx, s.now(), "error: "+errMsg, 0)
@@ -547,6 +556,10 @@ func (s *Service) Sync(ctx context.Context) (*SyncResult, error) {
 			}
 			count++
 		} else if cfg.AutoRegister {
+			if !store.ValidUsername(username) {
+				s.logger.Warn("ldap sync: skipping entry whose username is not a valid panel username", "dn", entry.DN)
+				continue
+			}
 			newUser := &store.User{
 				Username:    username,
 				DisplayName: displayName,
