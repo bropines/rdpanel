@@ -12,6 +12,7 @@ import {
   Minimize2,
   PowerOff,
   RefreshCw,
+  Settings,
   ShieldAlert,
 } from 'lucide-react';
 import { useEffect, useRef, useState, useCallback } from 'react';
@@ -26,6 +27,32 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { VideoStreamDecoder } from '@/webclient/decoder';
 import { WebClientSession } from '@/webclient/session';
 import type { SessionState, VideoStats, WebClientEvent } from '@/webclient/types';
+
+interface CustomServerSettings {
+  idServer?: string;
+  relayServer?: string;
+  serverKey?: string;
+}
+
+const SETTINGS_STORAGE_KEY = 'rdpanel_webclient_server_settings';
+
+function loadStoredSettings(): CustomServerSettings {
+  try {
+    const raw = localStorage.getItem(SETTINGS_STORAGE_KEY);
+    if (raw) return JSON.parse(raw);
+  } catch {
+    // ignore
+  }
+  return {};
+}
+
+function saveStoredSettings(settings: CustomServerSettings) {
+  try {
+    localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(settings));
+  } catch {
+    // ignore
+  }
+}
 
 export function WebClientPage() {
   const { t } = useTranslation();
@@ -48,6 +75,12 @@ export function WebClientPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [passwordDialogOpen, setPasswordDialogOpen] = useState(false);
   const [promptPassword, setPromptPassword] = useState('');
+
+  const [serverSettings, setServerSettings] = useState<CustomServerSettings>(loadStoredSettings);
+  const [settingsDialogOpen, setSettingsDialogOpen] = useState(false);
+  const [editIdServer, setEditIdServer] = useState('');
+  const [editRelayServer, setEditRelayServer] = useState('');
+  const [editServerKey, setEditServerKey] = useState('');
 
   const [state, setState] = useState<SessionState>('idle');
   const [stateDetail, setStateDetail] = useState<string>('');
@@ -73,22 +106,27 @@ export function WebClientPage() {
   const getWsUrls = useCallback(() => {
     const isHttps = window.location.protocol === 'https:';
     const proto = isHttps ? 'wss:' : 'ws:';
-    const host = window.location.host;
-
-    // Connect via reverse-proxied /ws/id and /ws/relay endpoints on current host.
-    // This uses port 443 with the existing TLS certificate, avoiding Mixed Content.
-    const wsIdUrl = `${proto}//${host}/ws/id`;
-    const wsRelayUrl = `${proto}//${host}/ws/relay`;
+    const currentHost = window.location.host;
 
     const data = serverConfigQuery.data;
+
+    const defaultRelay = data?.relay_server || 'desk-ru.bropines.ru:21117';
+    const defaultKey = data?.public_key || '';
+
+    const idHost = serverSettings.idServer?.trim() || currentHost;
+    const relayServer = serverSettings.relayServer?.trim() || defaultRelay;
+    const serverKeyB64 = serverSettings.serverKey?.trim() || defaultKey;
+
+    const wsIdUrl = `${proto}//${idHost}/ws/id`;
+    const wsRelayUrl = `${proto}//${idHost}/ws/relay`;
 
     return {
       wsIdUrl,
       wsRelayUrl,
-      relayServer: data?.relay_server || 'desk-ru.bropines.ru:21117',
-      serverKeyB64: data?.public_key || '',
+      relayServer,
+      serverKeyB64,
     };
-  }, [serverConfigQuery.data]);
+  }, [serverConfigQuery.data, serverSettings]);
 
   const startConnection = useCallback((targetId: string, pwd?: string) => {
     if (!targetId || !canvasRef.current) return;
@@ -312,6 +350,20 @@ export function WebClientPage() {
             </>
           )}
 
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => {
+              setEditIdServer(serverSettings.idServer || '');
+              setEditRelayServer(serverSettings.relayServer || '');
+              setEditServerKey(serverSettings.serverKey || '');
+              setSettingsDialogOpen(true);
+            }}
+            title={t('webclient.serverSettings', 'Server Settings')}
+          >
+            <Settings className="h-4 w-4" />
+          </Button>
+
           {state === 'streaming' ? (
             <Button
               variant="destructive"
@@ -394,6 +446,21 @@ export function WebClientPage() {
                 >
                   {t('webclient.connect', 'Connect')}
                 </Button>
+                <div className="flex items-center justify-center pt-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEditIdServer(serverSettings.idServer || '');
+                      setEditRelayServer(serverSettings.relayServer || '');
+                      setEditServerKey(serverSettings.serverKey || '');
+                      setSettingsDialogOpen(true);
+                    }}
+                    className="text-xs text-neutral-400 hover:text-white flex items-center gap-1.5 transition-colors"
+                  >
+                    <Settings className="h-3.5 w-3.5" />
+                    <span>{t('webclient.serverSettings', 'Server Settings')}</span>
+                  </button>
+                </div>
               </div>
             )}
           </div>
@@ -493,6 +560,94 @@ export function WebClientPage() {
             >
               {t('common.send', 'Send to Remote')}
             </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Server Settings Modal */}
+      <Dialog open={settingsDialogOpen} onOpenChange={setSettingsDialogOpen}>
+        <DialogContent className="sm:max-w-md bg-neutral-900 border-neutral-800 text-white">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Settings className="h-5 w-5 text-primary" />
+              {t('webclient.serverSettings', 'Server Settings')}
+            </DialogTitle>
+            <DialogDescription className="text-neutral-400">
+              {t('webclient.serverSettingsDesc', 'Configure custom rendezvous, relay server, and key for RustDesk connections.')}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div>
+              <label className="text-xs text-neutral-400 mb-1 block">
+                {t('webclient.idServer', 'ID / Rendezvous Server')}
+              </label>
+              <Input
+                value={editIdServer}
+                onChange={(e) => setEditIdServer(e.target.value)}
+                placeholder={typeof window !== 'undefined' ? window.location.host : ''}
+                className="bg-neutral-950 border-neutral-800 text-white font-mono text-xs"
+              />
+            </div>
+            <div>
+              <label className="text-xs text-neutral-400 mb-1 block">
+                {t('webclient.relayServer', 'Relay Server')}
+              </label>
+              <Input
+                value={editRelayServer}
+                onChange={(e) => setEditRelayServer(e.target.value)}
+                placeholder={serverConfigQuery.data?.relay_server || 'desk-ru.bropines.ru:21117'}
+                className="bg-neutral-950 border-neutral-800 text-white font-mono text-xs"
+              />
+            </div>
+            <div>
+              <label className="text-xs text-neutral-400 mb-1 block">
+                {t('webclient.serverKey', 'Public Key')}
+              </label>
+              <Input
+                value={editServerKey}
+                onChange={(e) => setEditServerKey(e.target.value)}
+                placeholder={serverConfigQuery.data?.public_key || t('webclient.serverKeyPlaceholder', 'Server public key (base64)')}
+                className="bg-neutral-950 border-neutral-800 text-white font-mono text-xs"
+              />
+            </div>
+          </div>
+          <DialogFooter className="flex justify-between items-center sm:justify-between">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                setEditIdServer('');
+                setEditRelayServer('');
+                setEditServerKey('');
+                saveStoredSettings({});
+                setServerSettings({});
+                toast.success(t('webclient.resetDefaults', 'Reset to Defaults'));
+              }}
+            >
+              {t('webclient.resetDefaults', 'Reset to Defaults')}
+            </Button>
+            <div className="flex gap-2">
+              <Button variant="ghost" size="sm" onClick={() => setSettingsDialogOpen(false)}>
+                {t('common.cancel', 'Cancel')}
+              </Button>
+              <Button
+                size="sm"
+                onClick={() => {
+                  const updated: CustomServerSettings = {
+                    idServer: editIdServer.trim() || undefined,
+                    relayServer: editRelayServer.trim() || undefined,
+                    serverKey: editServerKey.trim() || undefined,
+                  };
+                  saveStoredSettings(updated);
+                  setServerSettings(updated);
+                  setSettingsDialogOpen(false);
+                  toast.success(t('common.saved', 'Saved'));
+                }}
+              >
+                {t('common.save', 'Save')}
+              </Button>
+            </div>
           </DialogFooter>
         </DialogContent>
       </Dialog>

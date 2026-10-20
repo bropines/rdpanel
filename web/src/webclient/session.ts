@@ -405,10 +405,10 @@ export class WebClientSession {
 
     const passHash = await loginPasswordHash(password, this.authSalt, this.authChallenge);
     const loginReq = encodeLoginRequest(
-      this.config.myName || 'WebClient',
+      this.config.peerId,
       passHash,
       this.config.myId || 'web',
-      this.config.myName || 'WebClient',
+      this.config.myName || 'RD Panel Web',
     );
 
     this.sendEncrypted(loginReq);
