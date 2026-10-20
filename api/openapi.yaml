@@ -1088,6 +1088,27 @@ paths:
               schema: { $ref: "#/components/schemas/WebClientConfig" }
         "401": { $ref: "#/components/responses/Unauthorized" }
 
+  /webclient/credentials/{peer}:
+    get:
+      tags: [about]
+      operationId: getWebClientCredentials
+      summary: Saved login for a device from the caller's address books.
+      description: |
+        What a signed-in desktop client receives through the client API's address book: the personal book's
+        remembered password hash for the device, else the password of the first shared book (readable by the caller)
+        that lists it (the entry's password, else the book's default password). All fields are null when nothing is
+        saved. 404 when the web client is off or not offered to the caller.
+      parameters:
+        - { name: peer, in: path, required: true, schema: { type: string, maxLength: 64 }, description: RustDesk ID }
+      responses:
+        "200":
+          description: Saved credentials (may be all null).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/WebClientCredentials" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
   /lookup/users:
     get:
       tags: [lookup]
@@ -4834,6 +4855,14 @@ components:
         commit: { type: string }
         build_date: { type: string }
         go: { type: string }
+    WebClientCredentials:
+      type: object
+      required: [hash, password, book]
+      properties:
+        hash: { type: [string, "null"], description: "Base64 SHA256(password + salt) from the personal address book" }
+        password: { type: [string, "null"], description: "Plain password from a shared address book" }
+        book: { type: [string, "null"], description: "Shared book the password comes from" }
+
     WebClientConfig:
       type: object
       required: [enabled, rendezvous_url, relay_url, public_key, token, token_expires_at, display_name, my_id]

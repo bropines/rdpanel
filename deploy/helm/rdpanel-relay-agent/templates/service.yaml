@@ -2,9 +2,9 @@
 apiVersion: v1
 kind: Service
 metadata:
-  name: {{ include "rustdesk-relay-agent.fullname" . }}
+  name: {{ include "rdpanel-relay-agent.fullname" . }}
   labels:
-    {{- include "rustdesk-relay-agent.labels" . | nindent 4 }}
+    {{- include "rdpanel-relay-agent.labels" . | nindent 4 }}
   {{- with .Values.service.annotations }}
   annotations:
     {{- toYaml . | nindent 4 }}
@@ -20,5 +20,5 @@ spec:
       nodePort: {{ .Values.service.nodePort }}
       {{- end }}
   selector:
-    {{- include "rustdesk-relay-agent.selectorLabels" . | nindent 4 }}
+    {{- include "rdpanel-relay-agent.selectorLabels" . | nindent 4 }}
 {{- end }}

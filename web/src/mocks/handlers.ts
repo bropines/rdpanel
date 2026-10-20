@@ -708,6 +708,8 @@ export const handlers = [
     }),
   ),
 
+  http.get(`${B}/webclient/credentials/:peer`, () => HttpResponse.json({ hash: null, password: null, book: null })),
+
   http.get(`${B}/about`, () => {
     const u = requireAuth();
     if (u instanceof Response) return u;

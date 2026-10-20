@@ -1,8 +1,9 @@
 apiVersion: v2
-name: rustdesk-relay-agent
+name: rdpanel-relay-agent
 description: >-
-  Remote hbbr relay agent for RD Panel (RustDesk): manages a distributed hbbr relay,
-  auto-enrolled into and supervised by the central RD Panel.
+  Remote hbbr relay agent for RD Panel (for RustDesk): manages a distributed hbbr relay,
+  auto-enrolled into and supervised by the central RD Panel. Formerly published as
+  "rustdesk-relay-agent".
 type: application
 version: 0.1.0
 appVersion: "0.5.9"

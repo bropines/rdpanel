@@ -1,16 +1,16 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ include "rustdesk-relay-agent.fullname" . }}
+  name: {{ include "rdpanel-relay-agent.fullname" . }}
   labels:
-    {{- include "rustdesk-relay-agent.labels" . | nindent 4 }}
+    {{- include "rdpanel-relay-agent.labels" . | nindent 4 }}
 spec:
   replicas: 1
   strategy:
     type: Recreate
   selector:
     matchLabels:
-      {{- include "rustdesk-relay-agent.selectorLabels" . | nindent 6 }}
+      {{- include "rdpanel-relay-agent.selectorLabels" . | nindent 6 }}
   template:
     metadata:
       annotations:
@@ -18,7 +18,7 @@ spec:
         {{- toYaml . | nindent 8 }}
         {{- end }}
       labels:
-        {{- include "rustdesk-relay-agent.selectorLabels" . | nindent 8 }}
+        {{- include "rdpanel-relay-agent.selectorLabels" . | nindent 8 }}
         {{- with .Values.podLabels }}
         {{- toYaml . | nindent 8 }}
         {{- end }}
@@ -27,7 +27,7 @@ spec:
       imagePullSecrets:
         {{- toYaml . | nindent 8 }}
       {{- end }}
-      serviceAccountName: {{ include "rustdesk-relay-agent.serviceAccountName" . }}
+      serviceAccountName: {{ include "rdpanel-relay-agent.serviceAccountName" . }}
       securityContext:
         {{- toYaml .Values.podSecurityContext | nindent 8 }}
       hostNetwork: {{ .Values.hostNetwork }}
@@ -53,7 +53,7 @@ spec:
             - name: RDPANEL_AGENT_ENROLL_TOKEN
               valueFrom:
                 secretKeyRef:
-                  name: {{ include "rustdesk-relay-agent.secretName" . }}
+                  name: {{ include "rdpanel-relay-agent.secretName" . }}
                   key: enroll-token
                   optional: true
             {{- if .Values.panel.caSecret }}
@@ -90,7 +90,7 @@ spec:
         - name: data
           {{- if .Values.persistence.enabled }}
           persistentVolumeClaim:
-            claimName: {{ include "rustdesk-relay-agent.fullname" . }}-data
+            claimName: {{ include "rdpanel-relay-agent.fullname" . }}-data
           {{- else }}
           emptyDir: {}
           {{- end }}
