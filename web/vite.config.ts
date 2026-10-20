@@ -68,8 +68,9 @@ export default defineConfig(({ mode }) => {
             // Swagger UI: only the api-docs entry imports it; let Rollup keep it there
             // (a manual chunk would also capture shared CJS helpers the SPA imports).
             if (id.includes("swagger-ui-dist")) return undefined;
-            // xterm.js (web client terminal) and the Opus fallback decoder load on demand.
+            // xterm.js and its icon font (web client terminal) and the Opus fallback decoder load on demand.
             if (/[\\/]node_modules[\\/](@xterm|opus-decoder|@wasm-audio-decoders)[\\/]/.test(id)) return undefined;
+            if (/[\\/]node_modules[\\/]rdweb[\\/]dist[\\/]react[\\/]fonts[\\/]/.test(id)) return undefined;
             if (/[\\/]node_modules[\\/](react|react-dom|scheduler)[\\/]/.test(id)) return "react";
             if (id.includes("@tanstack")) return "tanstack";
             if (id.includes("@radix-ui") || id.includes("lucide-react")) return "ui";
