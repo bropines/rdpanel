@@ -290,7 +290,7 @@ Summary:
 | `RDPANEL_DATA_DIR` | panel, key-secret | `/data/panel` | panel.db, secret.key, jwt.key |
 | `RDPANEL_DB_TYPE` | panel | `sqlite` | database engine: `sqlite` (default) or `postgres` |
 | `RDPANEL_DB_PATH` | panel | `/data/panel/panel.db` | SQLite database file |
-| `RDPANEL_DATABASE_URL` | panel | — | PostgreSQL connection DSN (when using PostgreSQL) |
+| `RDPANEL_DATABASE_URL`, `RDPANEL_DATABASE_URL_FILE` | panel | — | PostgreSQL DSN, or a file holding it (see [PostgreSQL](#postgresql-database-optional)) |
 | `RDPANEL_SECRET_KEY`, `RDPANEL_SECRET_KEY_FILE`, `RDPANEL_JWT_KEY_FILE` | panel | derived from data dir | storage and keys |
 | `RDPANEL_TOKEN_LIFETIME`, `RDPANEL_JWT_LIFETIME`, `RDPANEL_SESSION_IDLE`, `RDPANEL_SESSION_ABSOLUTE` | panel | `4380h`, = token, `12h`, `168h` | token/session lifetimes |
 | `RDPANEL_WEBAUTHN_RP_ID`, `RDPANEL_WEBAUTHN_ORIGINS` | panel | admin URL host / origin | passkey relying party (see [Passkeys](#passkeys)) |
@@ -299,6 +299,7 @@ Summary:
 | `RDPANEL_METRICS_PER_DEVICE` | panel | `false` | per-device presence series (see [monitoring](monitoring.md)) |
 | `RDPANEL_HBB_REF` | panel | image `HBB_REF` build arg | hbbs/hbbr source ref shown in `rdpanel_build_info` |
 | `RDPANEL_HBBS_ID_SERVER`, `RDPANEL_HBBS_RELAY_SERVER`, `RDPANEL_HBBS_PUBLIC_KEY_FILE` | panel | `127.0.0.1:21116`, `127.0.0.1:21117`, `/data/id_ed25519.pub` | where hbbs/hbbr are |
+| `RDPANEL_HBBS_WEB_PROXY`, `RDPANEL_HBBS_WS_ID_SERVER`, `RDPANEL_HBBS_WS_RELAY_SERVER` | panel | `true`, `127.0.0.1:21118`, `127.0.0.1:21119` | web client WebSocket proxy at `/ws/id` and `/ws/relay` (targets default to the id/relay server port + 2) |
 | `RDPANEL_HBBS_RELAY_PUBLIC_HOST`, `RDPANEL_MODE`, `RDPANEL_AGENT_*` | panel, agent | first `RELAY` entry, `panel` | local relay host; `RDPANEL_MODE=agent` turns the image into a relay agent, see [relay-agents.md](relay-agents.md) |
 | `RDPANEL_LOG_LEVEL`, `RDPANEL_LOG_FORMAT`, `RDPANEL_CONFIG` | panel | `info`, `json`, — | logging, optional YAML file |
 | `RDPANEL_LOGS_BUFFER`, `RDPANEL_LOGS_DIR` | panel, log pipelines | `2000`, `/run/rdpanel/logs` | Server → Logs: lines kept per source (`0` = off) and the s6-log capture dir (see [Server logs](#server-logs)) |
@@ -335,14 +336,49 @@ Back up the whole `/data`: stop the container, or use `sqlite3 .backup` for the 
 
 ### PostgreSQL database (optional)
 
-By default, RD Panel uses an embedded SQLite database (`/data/panel/panel.db` with WAL mode enabled). For HA deployments, container orchestration or integration with existing managed database clusters, PostgreSQL 14+ is supported:
+By default RD Panel keeps its data in an embedded SQLite database
+(`/data/panel/panel.db`, WAL mode), which needs no setup and is what most
+installations should use. PostgreSQL is an alternative when you want the panel
+data in an existing (managed) database server:
 
 ```sh
-RDPANEL_DB_TYPE=postgres
-RDPANEL_DATABASE_URL=postgres://rdpanel:secret@postgres.internal:5432/rdpanel?sslmode=disable
+RDPANEL_DATABASE_URL=postgres://rdpanel:secret@postgres.internal:5432/rdpanel?sslmode=require
+# or keep the DSN out of the environment:
+RDPANEL_DATABASE_URL_FILE=/run/secrets/rdpanel_database_url
 ```
 
-When `RDPANEL_DATABASE_URL` starts with `postgres://` or `postgresql://`, `RDPANEL_DB_TYPE` is inferred automatically. Goose schema migrations run on startup against the target database.
+A `postgres://` or `postgresql://` URL selects `RDPANEL_DB_TYPE=postgres`
+(set it explicitly for a keyword/value DSN). The DSN is handled as a secret
+(`rdpanel config print` redacts it). Schema migrations run on startup.
+
+Requirements:
+
+- PostgreSQL 13 or newer (the panel refuses older servers). CI runs the
+  database test suites against PostgreSQL 16.
+- The role must own the database (or have `CREATE` on it and its schema): the
+  first migration creates the `citext` extension, which is trusted, so a
+  database owner may create it, and an ICU collation. If your provider does not
+  allow that, have an administrator run `CREATE EXTENSION citext;` first.
+- A server built with ICU (official images, Debian/Ubuntu/RHEL packages and
+  the major managed services are).
+
+What is and is not covered:
+
+- The same Go test suites that run on SQLite (repositories, admin API, client
+  API, OIDC, relays, federation, presence, LDAP, ...) also run on PostgreSQL in
+  CI, plus a check that the PostgreSQL schema matches the SQLite one table by
+  table, column by column and index by index.
+- `rdpanel migrate-legacy` only imports into SQLite and refuses a PostgreSQL
+  target. There is no SQLite to PostgreSQL migration tool: choose the engine
+  when you install.
+- Running several panel instances against one database is not tested: presence,
+  the hbbs/hbbr reconciler and relay-agent sessions live in each process.
+- Behaviour matches SQLite except text ordering, which follows the database
+  collation (SQLite sorts byte-wise). Write transactions are serialized, as on
+  SQLite.
+
+Back up the database with `pg_dump` and keep backing up the data directory:
+`secret.key` (and `jwt.key`) stay there and are needed to read stored secrets.
 
 ## Passkeys
 

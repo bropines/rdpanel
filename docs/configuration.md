@@ -33,7 +33,8 @@ Defaults are the binary's; the container image changes a few (for example
 | `RDPANEL_DATA_DIR` (`data_dir`) | `/data` | data directory |
 | `RDPANEL_DB_TYPE` (`db_type`) | `sqlite` | database engine: `sqlite` (default) or `postgres` |
 | `RDPANEL_DB_PATH` (`db_path`) | `<data>/panel.db` | SQLite database file |
-| `RDPANEL_DATABASE_URL` (`database_url`) | — | PostgreSQL connection DSN (e.g. `postgres://user:pass@host:5432/rdpanel`); automatically selects `db_type: postgres` |
+| `RDPANEL_DATABASE_URL` (`database_url`) | — | PostgreSQL DSN (e.g. `postgres://user:pass@host:5432/rdpanel?sslmode=require`); a `postgres://`/`postgresql://` URL selects `db_type: postgres`. A secret: redacted by `rdpanel config print`. See [deploy.md → PostgreSQL](deploy.md#postgresql-database-optional) |
+| `RDPANEL_DATABASE_URL_FILE` (`database_url_file`) | — | file holding the DSN (Docker/Kubernetes secrets), read when `RDPANEL_DATABASE_URL` is empty |
 | `RDPANEL_SECRET_KEY` (`secret_key`) | — | base64 32-byte key for secrets at rest; otherwise read/generated in the key file |
 | `RDPANEL_SECRET_KEY_FILE` (`secret_key_file`) | `<data>/secret.key` | generated with mode 0600 on first start — **back it up** |
 
@@ -76,6 +77,9 @@ See [deploy.md → Passkeys](deploy.md#passkeys) for how the RP id and origins a
 | `RDPANEL_HBBS_RELAY_PUBLIC_HOST` (`hbbs.relay_public_host`) | first entry of `RELAY` | public `host[:port]` of the co-located hbbr; seeds the local relay of Server → Relays ([relay agents](relay-agents.md)) |
 | `RDPANEL_HBBS_PUBLIC_KEY_FILE` (`hbbs.public_key_file`) | `<data>/id_ed25519.pub` | hbbs public key served to clients |
 | `RDPANEL_HBBS_ENABLED` (`hbbs.enabled`) | `true` | presence poller + hbbs/hbbr reconciler workers |
+| `RDPANEL_HBBS_WEB_PROXY` (`hbbs.web_proxy`) | `true` | serve `/ws/id` and `/ws/relay` and proxy the web client's WebSockets to the hbbs/hbbr WebSocket listeners below |
+| `RDPANEL_HBBS_WS_ID_SERVER` (`hbbs.ws_id_server`) | id server port + 2 (`127.0.0.1:21118`) | hbbs WebSocket address behind `/ws/id` |
+| `RDPANEL_HBBS_WS_RELAY_SERVER` (`hbbs.ws_relay_server`) | relay server port + 2 (`127.0.0.1:21119`) | hbbr WebSocket address behind `/ws/relay` |
 | `RDPANEL_HBBS_POLL_INTERVAL` (`hbbs.poll_interval`) | `5s` | presence poll period (batched `OnlineRequest`) |
 | `RDPANEL_HBBS_RECONCILE_INTERVAL` (`hbbs.reconcile_interval`) | `15s` | admin-channel probe / drift-correction period |
 | `RDPANEL_HBBS_LIST_DIR` (`hbbs.list_dir`) | empty | hbbr working dir; when set, `blacklist.txt`/`blocklist.txt` are kept in sync there (`/data` in the s6 image) |
