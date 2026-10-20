@@ -170,3 +170,63 @@ func TestLDAPAdminAPI(t *testing.T) {
 		t.Fatalf("expected is_ldap=true, got %v", userObj)
 	}
 }
+
+// enableTestLDAP turns LDAP on with a directory that knows every user in
+// entries (username -> sAMAccountName) and accepts any non-empty password.
+func enableTestLDAP(t *testing.T, e *b2env, entries map[string]string) {
+	t.Helper()
+	cfg, err := e.st.LDAPSettings.Get(e.ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg.Enabled, cfg.ServerURL, cfg.BaseDN, cfg.AutoRegister = true, "ldap://ad.example.corp", "dc=example,dc=corp", true
+	if err := e.st.LDAPSettings.Update(e.ctx, cfg); err != nil {
+		t.Fatal(err)
+	}
+	e.deps.LDAP.SetDialer(func(*store.LDAPSettings, string) (ldap.Client, error) {
+		return &mockLDAPClient{
+			bindFn: func(_, password string) error {
+				if password == "" {
+					return errors.New("empty password")
+				}
+				return nil
+			},
+			searchFn: func(req *ldapv3.SearchRequest) (*ldapv3.SearchResult, error) {
+				for typed, account := range entries {
+					if strings.Contains(req.Filter, "="+typed+")") {
+						return &ldapv3.SearchResult{Entries: []*ldapv3.Entry{{
+							DN:         "uid=" + account + ",ou=users,dc=example,dc=corp",
+							Attributes: []*ldapv3.EntryAttribute{{Name: "sAMAccountName", Values: []string{account}}},
+						}}}, nil
+					}
+				}
+				return &ldapv3.SearchResult{}, nil
+			},
+		}, nil
+	})
+}
+
+func TestLDAPLoginCannotTakeOverLocalAccount(t *testing.T) {
+	e := newB2Env(t, b2opts{})
+	root := e.user("root", testPassword, store.RoleAdmin)
+	// "root" exists in the directory too; "corp-root" maps to the
+	// sAMAccountName "ROOT" (a different spelling of the local username).
+	enableTestLDAP(t, e, map[string]string{"root": "root", "corp-root": "ROOT"})
+
+	for _, name := range []string{"root", "corp-root"} {
+		if code, m := e.client().login(name, "directory password"); code != http.StatusUnauthorized {
+			t.Fatalf("login %s with the directory password: %d %v", name, code, m)
+		}
+	}
+	got, err := e.st.Users.GetByID(e.ctx, root.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.IsLDAP || got.LDAPDN != "" || got.Role != store.RoleAdmin {
+		t.Fatalf("local admin linked to the directory: %+v", got)
+	}
+	// The local password keeps working.
+	if code, m := e.client().login("root", testPassword); code != http.StatusOK {
+		t.Fatalf("local login: %d %v", code, m)
+	}
+}

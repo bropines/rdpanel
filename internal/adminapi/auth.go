@@ -208,52 +208,41 @@ func (c *authCore) handleLogin(w http.ResponseWriter, r *http.Request) {
 	}
 	var ok bool
 	reason := "bad_credentials"
+	// The directory is asked only for unknown usernames and LDAP-provisioned
+	// users: a local account (is_ldap = 0) is never authenticated, or linked,
+	// through LDAP.
+	tryLDAP := func() bool {
+		if c.d.LDAP == nil || (user != nil && !user.IsLDAP) {
+			return false
+		}
+		ldapUser, err := c.d.LDAP.Authenticate(ctx, req.Username, req.Password)
+		if err != nil {
+			return false
+		}
+		user = ldapUser
+		return true
+	}
 	switch {
 	case user == nil:
-		if c.d.LDAP != nil {
-			if ldapUser, err := c.d.LDAP.Authenticate(ctx, req.Username, req.Password); err == nil {
-				if !ldapUser.IsActive() {
-					ok, reason = false, "disabled"
-				} else {
-					ok = true
-					user = ldapUser
-				}
-			}
-		}
+		ok = tryLDAP()
 		if !ok {
 			c.d.Hasher.Verify(c.dummyHash(), req.Password)
 			reason = "unknown_user"
 		}
 	case !user.HasPassword():
-		if c.d.LDAP != nil {
-			if ldapUser, err := c.d.LDAP.Authenticate(ctx, req.Username, req.Password); err == nil {
-				if !ldapUser.IsActive() {
-					ok, reason = false, "disabled"
-				} else {
-					ok = true
-					user = ldapUser
-				}
-			}
-		}
+		ok = tryLDAP()
 		if !ok {
 			c.d.Hasher.Verify(c.dummyHash(), req.Password)
 			reason = "no_password"
 		}
 	default:
 		ok = c.d.Hasher.Verify(user.PasswordHash, req.Password)
-		if !ok && c.d.LDAP != nil {
-			if ldapUser, err := c.d.LDAP.Authenticate(ctx, req.Username, req.Password); err == nil {
-				if !ldapUser.IsActive() {
-					ok, reason = false, "disabled"
-				} else {
-					ok = true
-					user = ldapUser
-				}
-			}
+		if !ok {
+			ok = tryLDAP()
 		}
-		if ok && !user.IsActive() {
-			ok, reason = false, "disabled"
-		}
+	}
+	if ok && !user.IsActive() {
+		ok, reason = false, "disabled"
 	}
 	if !ok {
 		c.fail(ipKey, uKey)

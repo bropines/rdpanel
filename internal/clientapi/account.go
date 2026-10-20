@@ -238,8 +238,12 @@ func (h *handler) checkPassword(r *http.Request, username, password string) (*st
 			return nil, false, err
 		}
 	}
+	// The directory is asked only for unknown usernames and LDAP-provisioned
+	// users: a local account (is_ldap = 0) is never authenticated, or linked,
+	// through LDAP.
+	ldapOK := h.LDAP != nil && (u == nil || u.IsLDAP)
 	if u == nil || !u.HasPassword() {
-		if h.LDAP != nil {
+		if ldapOK {
 			if ldapUser, err := h.LDAP.Authenticate(r.Context(), username, password); err == nil {
 				return ldapUser, true, nil
 			}
@@ -250,7 +254,7 @@ func (h *handler) checkPassword(r *http.Request, username, password string) (*st
 		return u, false, nil
 	}
 	if !h.Hasher.Verify(u.PasswordHash, password) {
-		if h.LDAP != nil {
+		if ldapOK {
 			if ldapUser, err := h.LDAP.Authenticate(r.Context(), username, password); err == nil {
 				return ldapUser, true, nil
 			}

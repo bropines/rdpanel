@@ -334,3 +334,103 @@ func TestSync(t *testing.T) {
 		t.Fatalf("settings sync result not updated: %+v", updatedCfg)
 	}
 }
+
+// directory is a fake LDAP server: entries by sAMAccountName, user passwords
+// by DN. It accepts every bind that has the right password.
+type directory struct {
+	entries   map[string]*ldapv3.Entry
+	passwords map[string]string
+}
+
+func newDirectory() *directory {
+	return &directory{entries: map[string]*ldapv3.Entry{}, passwords: map[string]string{}}
+}
+
+func (d *directory) add(username, dn, password string) {
+	d.entries[strings.ToLower(username)] = &ldapv3.Entry{DN: dn, Attributes: []*ldapv3.EntryAttribute{
+		{Name: "sAMAccountName", Values: []string{username}},
+		{Name: "displayName", Values: []string{"Directory " + username}},
+	}}
+	d.passwords[dn] = password
+}
+
+func (d *directory) dialer(*store.LDAPSettings, string) (Client, error) {
+	return &mockClient{
+		bindFn: func(dn, password string) error {
+			if want, ok := d.passwords[dn]; ok && want != password {
+				return errors.New("invalid credentials")
+			}
+			return nil
+		},
+		searchFn: func(req *ldapv3.SearchRequest) (*ldapv3.SearchResult, error) {
+			res := &ldapv3.SearchResult{}
+			for name, e := range d.entries {
+				if strings.Contains(req.Filter, "=*)") || strings.Contains(strings.ToLower(req.Filter), "="+name+")") {
+					res.Entries = append(res.Entries, e)
+				}
+			}
+			return res, nil
+		},
+	}, nil
+}
+
+func enableLDAP(t *testing.T, svc *Service, st *store.Store) {
+	t.Helper()
+	ctx := context.Background()
+	cfg, err := st.LDAPSettings.Get(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg.Enabled, cfg.ServerURL, cfg.BaseDN, cfg.AutoRegister = true, "ldap://127.0.0.1:389", "dc=example,dc=com", true
+	if err := st.LDAPSettings.Update(ctx, cfg); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// A directory entry whose username matches a local (non-LDAP) account must
+// never authenticate as, or be linked to, that account.
+func TestAuthenticateNeverLinksLocalAccount(t *testing.T) {
+	svc, st, _ := setupTestService(t)
+	ctx := context.Background()
+	enableLDAP(t, svc, st)
+	dir := newDirectory()
+	svc.SetDialer(dir.dialer)
+
+	admin := &store.User{Username: "admin", Role: store.RoleAdmin, PasswordHash: "x", PasswordAlgo: "argon2id"}
+	if err := st.Users.Create(ctx, admin); err != nil {
+		t.Fatal(err)
+	}
+	dir.add("Admin", "uid=admin,ou=users,dc=example,dc=com", "directory-pass")
+
+	if _, err := svc.Authenticate(ctx, "admin", "directory-pass"); !errors.Is(err, ErrLocalAccount) {
+		t.Fatalf("login as local admin through LDAP: %v", err)
+	}
+	got, err := st.Users.GetByID(ctx, admin.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.IsLDAP || got.LDAPDN != "" || got.DisplayName != "" || got.Role != store.RoleAdmin {
+		t.Fatalf("local admin was modified: %+v", got)
+	}
+
+	// A sync skips the entry and leaves the account alone too.
+	dir.add("eve", "uid=eve,ou=users,dc=example,dc=com", "eve-pass")
+	res, err := svc.Sync(ctx)
+	if err != nil || res.Status != "success" || res.SyncedCount != 1 {
+		t.Fatalf("sync: %+v %v", res, err)
+	}
+	if got, _ := st.Users.GetByID(ctx, admin.ID); got.IsLDAP || got.LDAPDN != "" {
+		t.Fatalf("sync linked the local admin: %+v", got)
+	}
+	if eve, err := st.Users.GetByUsername(ctx, "eve"); err != nil || !eve.IsLDAP {
+		t.Fatalf("eve not provisioned: %+v %v", eve, err)
+	}
+
+	// An LDAP user that moved in the directory (new DN) is still matched by
+	// username and relinked.
+	dir.add("eve", "uid=eve,ou=moved,dc=example,dc=com", "eve-pass")
+	u, err := svc.Authenticate(ctx, "eve", "eve-pass")
+	if err != nil || u.LDAPDN != "uid=eve,ou=moved,dc=example,dc=com" {
+		t.Fatalf("relink moved LDAP user: %+v %v", u, err)
+	}
+}
