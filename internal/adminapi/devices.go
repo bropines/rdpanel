@@ -142,8 +142,11 @@ func (a *resources) newDeviceDTO(d *store.Device, refs map[int64]store.UserRef, 
 		o.Strategy = &groupRefDTO{ID: *d.StrategyID, Name: d.StrategyName}
 	}
 	o.Online, o.OnlineSince = a.presenceOf(d, now)
+	// Only after a while offline: right after hbbs or the client restarts,
+	// the heartbeat comes back before the registration does.
 	o.NotRegistered = !o.Online && a.d.Presence != nil && d.LastHeartbeatAt != nil &&
-		!d.LastHeartbeatAt.Before(now.Add(-heartbeatOnlineWindow))
+		!d.LastHeartbeatAt.Before(now.Add(-heartbeatOnlineWindow)) &&
+		o.OnlineSince != nil && now.Sub(*o.OnlineSince) >= notRegisteredAfter
 	return o
 }
 

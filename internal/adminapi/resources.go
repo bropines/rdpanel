@@ -72,6 +72,11 @@ type EventPublisher interface {
 // heartbeatOnlineWindow is the presence fallback without hbbs (SPEC §5).
 const heartbeatOnlineWindow = 45 * time.Second
 
+// notRegisteredAfter is how long hbbs must report a device offline, while its
+// heartbeat is recent, before it is flagged not_registered (clients take a
+// moment to register again after hbbs or the client restarts).
+const notRegisteredAfter = 90 * time.Second
+
 // resources implements the resource endpoints (dashboard, devices, users,
 // groups, settings, lookups).
 type resources struct {
