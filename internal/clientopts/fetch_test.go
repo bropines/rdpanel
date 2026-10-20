@@ -5,11 +5,23 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 )
 
+// allowLoopbackProbes lets the fetched-candidate probe reach the loopback
+// fake STUN servers of these tests (production always applies the guard).
+func allowLoopbackProbes(t *testing.T) {
+	t.Helper()
+	orig := probeFetched
+	probeFetched = func(ctx context.Context, target string) ProbeResult { return ProbeOne(ctx, target, true) }
+	t.Cleanup(func() { probeFetched = orig })
+}
+
 func TestFetchPublicSTUNSuccess(t *testing.T) {
+	allowLoopbackProbes(t)
 	stunAddr, cleanupStun := startFakeSTUNServer(t)
 	defer cleanupStun()
 
@@ -22,7 +34,7 @@ func TestFetchPublicSTUNSuccess(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 
-	res, err := FetchPublicSTUN(ctx, ts.URL, 5, true)
+	res, err := FetchPublicSTUN(ctx, ts.URL, 5)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -40,7 +52,43 @@ func TestFetchPublicSTUNSuccess(t *testing.T) {
 	}
 }
 
+// TestFetchPublicSTUNGuardsCandidates: candidates from a downloaded list that
+// point at loopback/private addresses are refused, never probed.
+func TestFetchPublicSTUNGuardsCandidates(t *testing.T) {
+	stunAddr, cleanupStun := startFakeSTUNServer(t)
+	defer cleanupStun()
+	var probed atomic.Bool
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = fmt.Fprintf(w, "%s\n10.0.0.1:3478\n[::1]:3478\n169.254.169.254:3478\n", stunAddr)
+	}))
+	defer ts.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	orig := probeFetched
+	probeFetched = func(ctx context.Context, target string) ProbeResult {
+		res := orig(ctx, target)
+		if !strings.Contains(res.Error, "SSRF guard") {
+			probed.Store(true)
+		}
+		return res
+	}
+	t.Cleanup(func() { probeFetched = orig })
+
+	res, err := FetchPublicSTUN(ctx, ts.URL, 5)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.FetchedCount != 4 || res.WorkingCount != 0 || len(res.Items) != 0 {
+		t.Fatalf("private candidates were probed: %+v", res)
+	}
+	if probed.Load() {
+		t.Fatal("a private candidate got past the SSRF guard")
+	}
+}
+
 func TestFetchPublicSTUNFallbackOnHTTPError(t *testing.T) {
+	allowLoopbackProbes(t)
 	stunAddr, cleanupStun := startFakeSTUNServer(t)
 	defer cleanupStun()
 
@@ -57,7 +105,7 @@ func TestFetchPublicSTUNFallbackOnHTTPError(t *testing.T) {
 	CuratedFallbackSTUNs = []string{"stun:" + stunAddr}
 	defer func() { CuratedFallbackSTUNs = orig }()
 
-	res, err := FetchPublicSTUN(ctx, ts.URL, 5, true)
+	res, err := FetchPublicSTUN(ctx, ts.URL, 5)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

@@ -1925,6 +1925,8 @@ export interface paths {
          * Fetch and probe public STUN servers
          * @description Fetches open STUN servers from a public community list,
          *     probes candidates concurrently, and returns working servers sorted by lowest latency.
+         *     Candidates resolving to private, loopback or link-local addresses are never probed
+         *     (the list is third-party data; the relays "allow private hosts" option does not apply).
          */
         post: operations["fetchPublicStunServers"];
         delete?: never;

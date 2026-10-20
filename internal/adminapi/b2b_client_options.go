@@ -143,14 +143,9 @@ func (c *b2bCore) handlePostFetchPublicSTUN(w http.ResponseWriter, r *http.Reque
 			return
 		}
 	}
-	ctx := r.Context()
-	allowPrivate := false
-	if c.d.Relays != nil {
-		if opts, err := c.d.Relays.GetOptions(ctx); err == nil {
-			allowPrivate = opts.AllowPrivateHosts
-		}
-	}
-	res, err := clientopts.FetchPublicSTUN(ctx, in.SourceURL, in.Limit, allowPrivate)
+	// Candidates come from a third-party list: FetchPublicSTUN never probes
+	// private addresses, regardless of the relays "allow private hosts" option.
+	res, err := clientopts.FetchPublicSTUN(r.Context(), in.SourceURL, in.Limit)
 	if err != nil {
 		validationFailed(w, "invalid fetch parameters", map[string]string{"source_url": err.Error()})
 		return
