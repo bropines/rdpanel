@@ -1647,7 +1647,13 @@
     "capTCPTunneling": "TCP Tunneling",
     "capTerminal": "Remote Terminal",
     "capRestart": "Remote Restart",
-    "rolesInformational": "Control roles are informational for now: their session capabilities are not yet enforced on connections.",
+    "rolesEnforcement": {
+      "title": "How control roles are enforced",
+      "blocking": "Connections that the access rules deny are blocked before they start: the server asks the panel about every connection.",
+      "connTypes": "File transfer, TCP tunnel and terminal sessions that the role forbids are refused outright.",
+      "version": "The other limits are applied by the device itself: RustDesk {{version}} or newer on Windows, macOS and Linux. Older versions and Android devices only get the allow or deny decision.",
+      "restrictOnly": "Roles only take capabilities away: anything the device owner turned off locally stays off."
+    },
     "rulesReferencing_one": "{{count}} rule references this role",
     "rulesReferencing_other": "{{count}} rules reference this role",
     "setAsDefault": "Set as default",
