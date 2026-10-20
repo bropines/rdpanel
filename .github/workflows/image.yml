@@ -39,10 +39,10 @@ env:
   # The single pinned hbbs/hbbr source (push, tag and manual builds unless
   # server_ref overrides it); bump deliberately after testing a newer commit of
   # the bropines/rustdesk-server `rdpanel` branch.
-  # 35f675c: rdpanel branch head (hbbs WebSocket hardening: trusted proxies,
-  # per-connection send queues, registrations bound to RegisterPk, checked
-  # RequestRelay, message size caps; opt-in WS_PEERS and WS_RELAY_SERVERS).
-  SERVER_REF: ${{ inputs.server_ref || '35f675c21d6ea1cf0302901e50650d8847a1fc18' }}
+  # 98eb57c: rdpanel branch head (35f675c WebSocket hardening + a controller's
+  # control_permissions are never forwarded; opt-in AUTHZ_URL hook that asks
+  # the panel to allow/deny connections and restrict control permissions).
+  SERVER_REF: ${{ inputs.server_ref || '98eb57cea579cc1b7f5c97f455e2ccc35bbed6b4' }}
 
 jobs:
   hbb:
