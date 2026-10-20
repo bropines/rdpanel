@@ -106,7 +106,8 @@
     "no_passkeys": "No passkey is registered for this account.",
     "passkey_limit": "You have too many passkeys. Remove one first.",
     "reauth_failed": "The password or code is wrong.",
-    "reauth_required": "For your security, sign in again and retry."
+    "reauth_required": "For your security, sign in again and retry.",
+    "role_in_use": "This control role is used by access rules. Change or delete those rules first."
   },
   "validation": {
     "required": "Required",
@@ -1640,6 +1641,7 @@
     "capTCPTunneling": "TCP Tunneling",
     "capTerminal": "Remote Terminal",
     "capRestart": "Remote Restart",
+    "rolesInformational": "Control roles are informational for now: their session capabilities are not yet enforced on connections.",
     "rulesReferencing_one": "{{count}} rule references this role",
     "rulesReferencing_other": "{{count}} rules reference this role",
     "setAsDefault": "Set as default",

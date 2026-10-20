@@ -194,6 +194,9 @@ export const aclHandlers = [
     if (role.is_default) {
       return err(400, "validation_failed", "cannot delete default control role");
     }
+    if (mockConnectionACLs.some((a) => a.control_role_id === id)) {
+      return err(409, "role_in_use", "the control role is used by connection rules; change or delete those rules first");
+    }
     const idx = mockControlRoles.findIndex((r) => r.id === id);
     mockControlRoles.splice(idx, 1);
     return noContent();

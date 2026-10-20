@@ -264,6 +264,11 @@ func (a *resources) handleDeleteControlRole(w http.ResponseWriter, r *http.Reque
 			httpx.NotFound(w, r)
 			return
 		}
+		if errors.Is(err, store.ErrRoleInUse) {
+			// Deleting it would silently switch its rules to the default role.
+			conflict(w, "role_in_use", "the control role is used by connection rules; change or delete those rules first")
+			return
+		}
 		if errors.Is(err, store.ErrInvalid) {
 			validationFailed(w, err.Error(), map[string]string{"role_id": err.Error()})
 			return

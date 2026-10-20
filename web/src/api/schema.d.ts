@@ -1423,7 +1423,12 @@ export interface paths {
         get: operations["getControlRole"];
         put?: never;
         post?: never;
-        /** Delete control role. */
+        /**
+         * Delete control role.
+         * @description The default role cannot be deleted (400). A role referenced by any connection rule,
+         *     enabled or not, cannot be deleted either (409 `role_in_use`): its rules would
+         *     silently fall back to the default role. Change or delete those rules first.
+         */
         delete: operations["deleteControlRole"];
         options?: never;
         head?: never;
@@ -7535,6 +7540,15 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
+            /** @description The role is referenced by connection rules (`role_in_use`). */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
         };
     };
     updateControlRole: {
