@@ -27,6 +27,7 @@ import (
 	"github.com/bropines/rdpanel/internal/oidc"
 	"github.com/bropines/rdpanel/internal/store"
 	"github.com/bropines/rdpanel/internal/updatecheck"
+	"github.com/bropines/rdpanel/internal/websessions"
 )
 
 // Session cookie names shared with the web client (web/src/api/client.ts).
@@ -54,6 +55,8 @@ type Deps struct {
 
 	// LDAP manages directory synchronization and corporate authentication (nil: disabled).
 	LDAP *ldap.Service
+	// WebSessions issues web client session ids bound to panel users (nil: none).
+	WebSessions *websessions.Registry
 	// OIDC runs provider flows (nil disables OIDC login/linking).
 	OIDC *oidc.Service
 	// TOTP verifies second factors (default: NewTOTPService(Store, AEAD)).

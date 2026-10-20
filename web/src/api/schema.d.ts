@@ -898,6 +898,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/webclient/config": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Connection settings for the browser remote desktop client.
+         * @description Any signed-in user (admins only with `RDPANEL_WEBCLIENT_ADMIN_ONLY=true`). Empty URLs mean "same origin
+         *     as the panel" (`/ws/id`, `/ws/relay`). `token` is a short-lived hbbs login token for servers running with
+         *     `MUST_LOGIN=Y`; it is null when no JWT key is configured. `enabled` is false when the web client is off
+         *     or not offered to this user.
+         */
+        get: operations["getWebClientConfig"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/lookup/users": {
         parameters: {
             query?: never;
@@ -3495,6 +3518,23 @@ export interface components {
             commit?: string;
             build_date?: string;
             go?: string;
+        };
+        WebClientConfig: {
+            enabled: boolean;
+            /** @description hbbs WebSocket URL; empty = same origin /ws/id */
+            rendezvous_url: string;
+            /** @description hbbr WebSocket URL; empty = same origin /ws/relay */
+            relay_url: string;
+            /** @description Server public key (id_ed25519.pub); empty when unreadable */
+            public_key: string;
+            /** @description Short-lived hbbs login token (MUST_LOGIN) */
+            token: string | null;
+            /** Format: date-time */
+            token_expires_at: string | null;
+            /** @description Name shown to the remote user */
+            display_name: string;
+            /** @description Session id announced to the device (web-…); lets connection rules apply to this user. Valid 12 h. */
+            my_id: string;
         };
         About: {
             /** @description Product name (RD Panel). */
@@ -6287,6 +6327,27 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["About"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+        };
+    };
+    getWebClientConfig: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Web client settings. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WebClientConfig"];
                 };
             };
             401: components["responses"]["Unauthorized"];

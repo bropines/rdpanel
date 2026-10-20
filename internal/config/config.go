@@ -67,6 +67,21 @@ type Config struct {
 	Logs     LogsConfig     `yaml:"logs"`
 	SMTP     SMTPConfig     `yaml:"smtp"`
 	Webhook  WebhookConfig  `yaml:"webhook"`
+	// WebClient configures the browser remote desktop client (/connect).
+	WebClient WebClientConfig `yaml:"webclient"`
+}
+
+// WebClientConfig configures the browser remote desktop client.
+type WebClientConfig struct {
+	// Enabled offers the web client to signed-in users. Default: true.
+	Enabled bool `yaml:"enabled"`
+	// AdminOnly limits the web client to panel admins.
+	AdminOnly bool `yaml:"admin_only"`
+	// IDURL / RelayURL are the WebSocket URLs of hbbs (21118) and hbbr
+	// (21119) as seen by browsers. Empty: same origin as the panel,
+	// /ws/id and /ws/relay.
+	IDURL    string `yaml:"id_url"`
+	RelayURL string `yaml:"relay_url"`
 }
 
 // WebhookConfig specifies an optional webhook endpoint for critical alerts.
@@ -267,6 +282,7 @@ func Defaults() *Config {
 		DataDir:     "/data",
 		UpdateCheck: true,
 		APIDocs:     APIDocsAuth,
+		WebClient:   WebClientConfig{Enabled: true},
 		Auth: AuthConfig{
 			TokenLifetime:   4380 * time.Hour,
 			SessionIdle:     12 * time.Hour,
@@ -436,6 +452,10 @@ func (c *Config) envVars() []envVar {
 		{"RDPANEL_SMTP_INSECURE_SKIP_VERIFY", boolean(&c.SMTP.InsecureSkipVerify)},
 		{"RDPANEL_WEBHOOK_URL", str(&c.Webhook.URL)},
 		{"RDPANEL_WEBHOOK_SECRET", sec(&c.Webhook.Secret)},
+		{"RDPANEL_WEBCLIENT_ENABLED", boolean(&c.WebClient.Enabled)},
+		{"RDPANEL_WEBCLIENT_ADMIN_ONLY", boolean(&c.WebClient.AdminOnly)},
+		{"RDPANEL_WEBCLIENT_ID_URL", str(&c.WebClient.IDURL)},
+		{"RDPANEL_WEBCLIENT_RELAY_URL", str(&c.WebClient.RelayURL)},
 	}
 }
 

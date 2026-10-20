@@ -92,6 +92,10 @@ See [deploy.md → Passkeys](deploy.md#passkeys) for how the RP id and origins a
 | `RDPANEL_API_DOCS` (`api_docs`) | `auth` | interactive admin API docs at `/api/v1/docs` and the spec at `/api/v1/openapi.yaml` / `.json`: `auth` = signed-in panel users or API tokens (browsers are sent to the login), `public` = readable without login (calls still need auth), `off` = 404 ([api.md](api.md#interactive-docs)) |
 | `RDPANEL_WEBHOOK_URL` (`webhook.url`) | empty | HTTP/HTTPS endpoint for critical alerts (relay degraded/offline, hbbs down); empty = disabled |
 | `RDPANEL_WEBHOOK_SECRET` (`webhook.secret`) | empty | optional HMAC-SHA256 secret for webhook payload signing (`X-Signature-256`) |
+| `RDPANEL_WEBCLIENT_ENABLED` (`webclient.enabled`) | `true` | browser remote desktop client at `/connect` for signed-in users ([web-client.md](web-client.md)) |
+| `RDPANEL_WEBCLIENT_ADMIN_ONLY` (`webclient.admin_only`) | `false` | offer the web client to panel admins only |
+| `RDPANEL_WEBCLIENT_ID_URL` (`webclient.id_url`) | same origin `/ws/id` | WebSocket URL of hbbs (port 21118) as browsers reach it, e.g. `wss://rd.example.com/ws/id` |
+| `RDPANEL_WEBCLIENT_RELAY_URL` (`webclient.relay_url`) | same origin `/ws/relay` | WebSocket URL of hbbr (port 21119) as browsers reach it |
 
 ### E-mail (SMTP)
 
