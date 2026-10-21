@@ -158,7 +158,10 @@ on `/` or `-` for `\` or `|`) and more layers behind the pinned ▲ key (F1–F1
 ^C ^D ^Z ^L ^R, Paste, symbols); a swipe down over ▲ hides the bar. One finger
 scrolls with momentum, two fingers change the font size, and "Send letters as
 you type" (on by default on phones) sends every letter at once instead of
-waiting for the keyboard to commit a word. With "Keep shells after a disconnect" (on by
+waiting for the keyboard to commit a word (the keyboard's own cursor keys work
+as arrows). A long press selects a word and dragging extends it, with Copy,
+Paste and Select all in a small menu. Rendering uses WebGL where available, so
+frames and powerline prompts have no gaps. With "Keep shells after a disconnect" (on by
 default) the device keeps the shells when the connection drops: the terminal
 reconnects by itself, and the session is remembered in your account
 (`terminal_shells`, the service id sealed with the secret key), so opening the
