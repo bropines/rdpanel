@@ -1,7 +1,7 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { getRouteApi, useNavigate } from "@tanstack/react-router";
-import { ArrowLeft, Fingerprint, KeyRound, Loader2, Mail, MonitorCog } from "lucide-react";
+import { ArrowLeft, Fingerprint, KeyRound, Loader2, Mail } from "lucide-react";
 import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { useTranslation } from "react-i18next";
@@ -169,7 +169,7 @@ export function LoginPage() {
             {branding.data?.logo_url ? (
               <img src={branding.data.logo_url} alt="" className="mb-2 h-10 w-10 rounded object-contain" />
             ) : (
-              <MonitorCog className="mb-2 h-9 w-9 text-primary" aria-hidden />
+              <img src="/favicon.svg" alt="" className="mb-2 h-10 w-10" />
             )}
             <CardTitle className="text-xl">{headTitle}</CardTitle>
             <CardDescription>{headDesc}</CardDescription>

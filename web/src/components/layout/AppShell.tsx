@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, Outlet, useNavigate, useRouterState } from "@tanstack/react-router";
-import { BookOpen, Info, LogOut, Menu, MonitorCog, ShieldCheck, X } from "lucide-react";
+import { BookOpen, Info, LogOut, Menu, ShieldCheck, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -93,7 +93,7 @@ function Brand() {
       {data?.logo_url ? (
         <img src={data.logo_url} alt="" className="h-6 w-6 rounded object-contain" />
       ) : (
-        <MonitorCog className="h-5 w-5 shrink-0 text-primary" aria-hidden />
+        <img src="/favicon.svg" alt="" className="h-6 w-6 shrink-0" />
       )}
       <span className="truncate">{data?.title || t("app.title")}</span>
     </Link>
