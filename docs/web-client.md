@@ -146,7 +146,9 @@ Next to **Connect**, the connect form and the device drawer offer:
   elsewhere) for devices on RustDesk 1.4.1+. `/connect?id=<id>&mode=terminal`.
 
 Control roles apply to both: "File transfer" and "Terminal" must be allowed
-for the user's role, otherwise hbbs refuses the connection.
+for the user's role, otherwise hbbs refuses the connection. A recent device
+under the form fills in its ID, so any of the three can be chosen; devices
+opened in any mode show up there.
 
 The terminal has tabs (several shells over one connection), search
 (Ctrl+Shift+F, ⌘F), clickable links, copy on select and right-click paste,
@@ -181,7 +183,8 @@ applies.
 
 ## Remembered passwords
 
-"Remember in my account" stores the device's salted password hash in your
+"Remember in my account" (or "Remember password" when Files only or Terminal
+asks for the password) stores the device's salted password hash in your
 personal address book, exactly as the desktop client's address book does:
 afterwards neither the web client (in any browser) nor RustDesk apps signed in
 to the same account ask for that device's password. **⋯ → Forget saved

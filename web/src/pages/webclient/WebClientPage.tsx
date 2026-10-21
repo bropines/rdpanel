@@ -346,7 +346,7 @@ function ConnectForm({
             <div className="text-xs text-muted-foreground">{t("webclient.recent")}</div>
             <div className="flex flex-wrap gap-1.5">
               {recent.map((r) => (
-                <Button key={r.id} type="button" variant="outline" size="sm" className="max-w-full" onClick={() => onConnect(r.id, server)}>
+                <Button key={r.id} type="button" variant="outline" size="sm" className="max-w-full" onClick={() => setPeerId(r.id)}>
                   <span className="truncate">{r.name ? `${r.name} · ${r.id}` : r.id}</span>
                 </Button>
               ))}
