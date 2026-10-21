@@ -150,6 +150,14 @@ for the user's role, otherwise hbbs refuses the connection. A recent device
 under the form fills in its ID, so any of the three can be chosen; devices
 opened in any mode show up there.
 
+The sliders button next to the form's title opens **Connection settings**, the
+defaults for new connections (codec, image quality and frame rate, view, true
+color, cursor, pointer input, keyboard mode, sound, clipboard). What you change
+in a session's settings is kept for that device in this browser; the session
+settings' **Reset to the defaults** goes back to them. With the codec on
+"Auto" the browser does not offer H.265: Edge on Windows decodes it into a
+cropped corner of the screen; choose it explicitly where it works.
+
 The terminal has tabs (several shells over one connection), search
 (Ctrl+Shift+F, ⌘F), clickable links, copy on select and right-click paste,
 Shift+Enter as a newline for CLIs, Option as Alt on macOS, and font settings
