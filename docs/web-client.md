@@ -151,7 +151,11 @@ for the user's role, otherwise hbbs refuses the connection.
 The terminal has tabs (several shells over one connection), search
 (Ctrl+Shift+F, ⌘F), clickable links, copy on select and right-click paste,
 Shift+Enter as a newline for CLIs, Option as Alt on macOS, and font settings
-with built-in Nerd Font icons. With "Keep shells after a disconnect" (on by
+with built-in Nerd Font icons. On phones it stays above the on-screen
+keyboard and has Termux-style extra keys: two rows (Esc, Tab, arrows that
+repeat while held, sticky Ctrl, Alt and Shift, Home, End, PgUp, PgDn; swipe up
+on `/` or `-` for `\` or `|`) and more layers behind the pinned ▲ key (F1–F12,
+^C ^D ^Z ^L ^R, Paste, symbols). With "Keep shells after a disconnect" (on by
 default) the device keeps the shells when the connection drops: the terminal
 reconnects by itself, and the session is remembered in your account
 (`terminal_shells`, the service id sealed with the secret key), so opening the
@@ -190,7 +194,8 @@ quality monitor.
 Control: mouse, wheel and smooth touchpad scrolling; on touch screens a
 touchpad mode (relative pointer) or direct touch, pinch to zoom; keyboard in
 Map (physical keys), Translate (local layout) or Legacy mode, on-screen
-keyboard with an extra keys row; view only, mute, clipboard on/off, lock after
+keyboard with Termux-style extra keys (sticky Ctrl, Alt, Win, Shift that
+also apply to the next letter typed; F-keys behind the pinned ▲ key); view only, mute, clipboard on/off, lock after
 session end, privacy mode, block user input, Ctrl+Alt+Del, lock screen,
 restart, send/type text, chat, screenshot, 2FA and "accept on the remote side"
 logins.
