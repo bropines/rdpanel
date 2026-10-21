@@ -1858,6 +1858,7 @@
     "peerId": "Remote ID",
     "connect": "Connect",
     "recent": "Recent",
+    "connectionSettings": "Connection settings",
     "formHint": "The device must be online and allow incoming connections. You will be asked for its password unless someone accepts the request on the device.",
     "disabled": "The web client is turned off or not available for your account.",
     "noKey": "The server public key is not available, so connections cannot be verified. Ask an administrator to check RDPANEL_HBBS_PUBLIC_KEY_FILE.",

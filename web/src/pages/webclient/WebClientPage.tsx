@@ -1,10 +1,10 @@
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate, useSearch } from "@tanstack/react-router";
-import { ArrowLeft, FolderOpen, Loader2, ShieldAlert, SquareTerminal } from "lucide-react";
+import { ArrowLeft, FolderOpen, Loader2, ShieldAlert, SlidersHorizontal, SquareTerminal } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { decodeBase64, encodeBase64, isWebCodecsAvailable, RDWEB_VERSION, type ServerConfig } from "rdweb";
-import { RemoteDesktop, RDPANEL_STORAGE_KEY, loadRecent, migrateStorage, type RemoteDesktopCredentials, type ShellStore } from "rdweb/react";
+import { ConnectionSettingsDialog, RemoteDesktop, RDPANEL_STORAGE_KEY, loadRecent, migrateStorage, type RemoteDesktopCredentials, type ShellStore } from "rdweb/react";
 
 import { webClientApi, type WebClientConfig, type WebClientCredentials } from "@/api/system";
 import { Button } from "@/components/ui/button";
@@ -278,9 +278,10 @@ function ConnectForm({
   setServerId: (id: string) => void;
   onConnect: (id: string, server: OtherServer | null, mode?: Mode) => void;
 }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const navigate = useNavigate();
   const recent = useMemo(() => loadRecent(RDPANEL_STORAGE_KEY), []);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const [server, setServer] = useState<OtherServer | null>(null);
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -294,8 +295,24 @@ function ConnectForm({
           <Button type="button" variant="ghost" size="icon" aria-label={t("common.back")} onClick={() => void navigate({ to: "/" })}>
             <ArrowLeft className="h-4 w-4" />
           </Button>
-          <h1 className="min-w-0 truncate text-lg font-semibold">{t("webclient.title")}</h1>
+          <h1 className="min-w-0 flex-1 truncate text-lg font-semibold">{t("webclient.title")}</h1>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            aria-label={t("webclient.connectionSettings")}
+            title={t("webclient.connectionSettings")}
+            onClick={() => setSettingsOpen(true)}
+          >
+            <SlidersHorizontal className="h-4 w-4" />
+          </Button>
         </div>
+        <ConnectionSettingsDialog
+          open={settingsOpen}
+          onOpenChange={setSettingsOpen}
+          storageKey={RDPANEL_STORAGE_KEY}
+          lang={i18n.language.startsWith("ru") ? "ru" : "en"}
+        />
         {(adminServers.length > 0 || allowCustom) && (
           <ServerPicker
             adminServers={adminServers}
