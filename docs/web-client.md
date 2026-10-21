@@ -155,7 +155,10 @@ with built-in Nerd Font icons. On phones it stays above the on-screen
 keyboard and has Termux-style extra keys: two rows (Esc, Tab, arrows that
 repeat while held, sticky Ctrl, Alt and Shift, Home, End, PgUp, PgDn; swipe up
 on `/` or `-` for `\` or `|`) and more layers behind the pinned ▲ key (F1–F12,
-^C ^D ^Z ^L ^R, Paste, symbols). With "Keep shells after a disconnect" (on by
+^C ^D ^Z ^L ^R, Paste, symbols); a swipe down over ▲ hides the bar. One finger
+scrolls with momentum, two fingers change the font size, and "Send letters as
+you type" (on by default on phones) sends every letter at once instead of
+waiting for the keyboard to commit a word. With "Keep shells after a disconnect" (on by
 default) the device keeps the shells when the connection drops: the terminal
 reconnects by itself, and the session is remembered in your account
 (`terminal_shells`, the service id sealed with the secret key), so opening the

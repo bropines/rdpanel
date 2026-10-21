@@ -69,13 +69,13 @@ export function ServerPage() {
       {health.isError ? (
         <ErrorState error={health.error} onRetry={() => void health.refetch()} />
       ) : !h ? (
-        <div className="grid gap-3 md:grid-cols-3">
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
           {Array.from({ length: 3 }).map((_, i) => (
             <Skeleton key={i} className="h-28" />
           ))}
         </div>
       ) : (
-        <div className="grid gap-3 md:grid-cols-3">
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
           <HealthCard title={t("health.hbbs")} icon={Server} h={h.hbbs} />
           <HealthCard title={t("health.hbbr")} icon={Radio} h={h.hbbr} />
           <Card>

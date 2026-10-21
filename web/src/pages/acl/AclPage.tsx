@@ -791,7 +791,7 @@ function PolicyTab() {
             {validationResult.test_results && validationResult.test_results.length > 0 && (
               <div className="space-y-2">
                 <div className="text-sm font-semibold text-foreground">{t("acl.policy.assertionsBreakdown")}:</div>
-                <div className="grid gap-2 sm:grid-cols-2">
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                   {validationResult.test_results.map((tr, idx) => (
                     <div
                       key={idx}

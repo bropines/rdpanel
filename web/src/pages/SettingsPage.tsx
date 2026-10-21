@@ -293,7 +293,7 @@ export function SettingsPage() {
             </Field>
           </Section>
           <Section title={t("settings.welcome")} description={t("settings.welcomeHint", { username: "{{username}}" })}>
-            <div className="grid gap-4 lg:grid-cols-2">
+            <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
               <Field label={t("settings.markdown")} htmlFor="s-welcome" error={err("welcome_markdown")}>
                 <Textarea id="s-welcome" rows={12} className="font-mono text-xs" {...form.register("welcome_markdown")} />
               </Field>
@@ -342,14 +342,14 @@ export function SettingsPage() {
               hint={t("settings.requireEmail2faHint")}
               control={<Controller control={form.control} name="require_email_2fa" render={({ field }) => <Switch id="s-require_email_2fa" checked={field.value} onCheckedChange={field.onChange} />} />}
             />
-            <div className="grid gap-4 sm:grid-cols-3">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
               {num("session_idle_hours", t("settings.sessionIdle"), t("settings.hours"))}
               {num("session_absolute_days", t("settings.sessionAbsolute"), t("settings.days"))}
               {num("client_token_lifetime_hours", t("settings.clientToken"), t("settings.hours"))}
             </div>
           </Section>
           <Section title={t("settings.rateLimits")} description={t("settings.rateLimitsHint")}>
-            <div className="grid gap-4 sm:grid-cols-2">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <ConfigValue label={t("settings.loginBackoff")} env={t("settings.serverConfig")}>
                 {t("settings.loginBackoffValue", {
                   free: q.data.rate_limits.login_free_attempts,
@@ -374,7 +374,7 @@ export function SettingsPage() {
 
         <TabsContent value="retention" className="space-y-4">
           <Section title={t("settings.retention")} description={t("settings.retentionHint")}>
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
               {RETENTION.map((k) => num(k, t(`settings.retentionKeys.${k}`), t("settings.daysZeroForever")))}
             </div>
           </Section>

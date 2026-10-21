@@ -323,7 +323,7 @@ function ManualCard({ d }: { d: ClientDownloads }) {
           <pre className="max-h-28 overflow-auto whitespace-pre-wrap break-all rounded-md border bg-muted/50 p-2.5 pr-10 font-mono text-xs">{d.config_string}</pre>
           <CopyButton value={d.config_string} label={t("install.manual.copyConfig")} className="absolute right-2 top-2" />
         </div>
-        <div className="grid gap-2 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
           {rows.map(([label, value]) => (
             <div key={label} className={cn("min-w-0 space-y-1 rounded-md border p-2.5")}>
               <div className="flex items-center justify-between gap-2 text-xs font-medium">

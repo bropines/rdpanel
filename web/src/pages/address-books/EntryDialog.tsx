@@ -119,7 +119,7 @@ export function EntryDialog({
             <DialogTitle>{entry ? t("books.editEntry") : t("books.newEntry")}</DialogTitle>
             <DialogDescription>{book.name}</DialogDescription>
           </DialogHeader>
-          <fieldset disabled={readOnly} className="grid gap-3 sm:grid-cols-2">
+          <fieldset disabled={readOnly} className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <Field label={t("devices.rustdeskId")} htmlFor="e-id" error={err("rustdesk_id")}>
               <Input id="e-id" className="font-mono" autoFocus={!entry} {...form.register("rustdesk_id")} />
             </Field>
@@ -212,7 +212,7 @@ export function EntryDialog({
             {t("books.advanced")}
           </button>
           {advanced && (
-            <fieldset disabled={readOnly} className="grid gap-3 sm:grid-cols-2">
+            <fieldset disabled={readOnly} className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <Field label={t("books.loginName")} htmlFor="e-login" error={err("login_name")}>
                 <Input id="e-login" {...form.register("login_name")} />
               </Field>

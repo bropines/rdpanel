@@ -55,7 +55,7 @@ export function UserFields({
   const err = (k: string) => (errors[k]?.message ? t(errors[k]!.message!) : undefined);
   const [gLabel, setGLabel] = useState(groupLabel);
   return (
-    <div className="grid gap-3 sm:grid-cols-2">
+    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
       <Field label={t("users.username")} htmlFor="u-username" error={err("username")}>
         <Input id="u-username" autoComplete="off" {...form.register("username")} />
       </Field>

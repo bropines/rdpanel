@@ -313,8 +313,10 @@ function ConnectForm({
             id="wc-peer"
             value={peerId}
             onChange={(e) => setPeerId(e.target.value)}
-            inputMode="numeric"
             autoComplete="off"
+            autoCapitalize="off"
+            autoCorrect="off"
+            spellCheck={false}
             autoFocus
             placeholder="123 456 789"
           />

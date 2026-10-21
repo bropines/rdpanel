@@ -152,7 +152,7 @@ function OptionsCard() {
   const o = q.data;
   return (
     <Card>
-      <CardContent className="grid gap-4 p-4 md:grid-cols-3">
+      <CardContent className="grid grid-cols-1 gap-4 p-4 md:grid-cols-3">
         <label className="flex items-start justify-between gap-3 text-sm">
           <span>
             <span className="font-medium">{t("relays.options.requireApproval")}</span>
@@ -834,7 +834,7 @@ function EditSection({ r }: { r: Relay }) {
   return (
     <div className="space-y-3">
       <SectionTitle>{t("relays.drawer.settings")}</SectionTitle>
-      <div className="grid gap-3 sm:grid-cols-2">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <Field label={t("relays.name")} htmlFor="rd-name">
           <Input id="rd-name" maxLength={64} value={name} onChange={(e) => setName(e.target.value)} />
         </Field>
@@ -931,7 +931,7 @@ function OverridesSection({ r }: { r: Relay }) {
     <div className="space-y-3">
       <SectionTitle>{t("relays.overrides.title")}</SectionTitle>
       <p className="text-xs text-muted-foreground">{t("relays.overrides.hint")}</p>
-      <div className="grid gap-3 sm:grid-cols-2">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         {RELAY_NUM_KEYS.map((k) => (
           <Field key={k} label={t(`server.keys.${k}`)} htmlFor={`ov-${k}`} hint={`${t("relays.overrides.global")}: ${fmtGlobal(g[k])}`}>
             <Input

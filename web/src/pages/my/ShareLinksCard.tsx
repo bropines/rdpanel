@@ -126,7 +126,7 @@ function CreateForm({ onCreated }: { onCreated: (l: ShareLink) => void }) {
         submit();
       }}
     >
-      <div className="grid gap-3 sm:grid-cols-2">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <Field label={t("share.card.validity")}>
           <div className="flex rounded-md border bg-background p-0.5" role="radiogroup" aria-label={t("share.card.validity")}>
             {(["permanent", "temporary"] as const).map((k) => {

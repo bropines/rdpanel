@@ -83,7 +83,7 @@ function CreateDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (o:
             <Field label={t("apiTokens.name")} htmlFor="at-name" hint={t("apiTokens.nameHint")}>
               <Input id="at-name" maxLength={64} value={name} onChange={(e) => setName(e.target.value)} autoFocus />
             </Field>
-            <div className="grid gap-3 sm:grid-cols-2">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <Field label={t("apiTokens.scope")} htmlFor="at-scope">
                 <Select value={scope} onValueChange={(v) => setScope(v as "read" | "write")}>
                   <SelectTrigger id="at-scope">

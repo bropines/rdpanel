@@ -564,7 +564,7 @@ function RetentionDialog({ open, onOpenChange }: { open: boolean; onOpenChange: 
           <DialogTitle>{t("audit.retention")}</DialogTitle>
           <DialogDescription>{t("settings.retentionHint")}</DialogDescription>
         </DialogHeader>
-        <div className="grid gap-3 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           {RETENTION_KEYS.map((k) => (
             <Field key={k} label={t(`settings.retentionKeys.${k}`)} htmlFor={`ret-${k}`}>
               <Input

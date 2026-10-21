@@ -135,7 +135,7 @@ function ShareContent({ info, token, title }: { info: SharePublicInfo; token: st
         </CardContent>
       </Card>
 
-      <div className="grid gap-4 md:grid-cols-[auto_minmax(0,1fr)]">
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-[auto_minmax(0,1fr)]">
         <Card className={onPhone ? "order-last md:order-first" : undefined}>
           <CardHeader className="pb-3">
             <CardTitle className="flex items-center gap-2 text-base">
@@ -318,7 +318,7 @@ function ManualSettings({ info }: { info: SharePublicInfo }) {
           </div>
           <pre className="max-h-28 overflow-auto whitespace-pre-wrap break-all rounded-md border bg-muted/50 p-2.5 font-mono text-xs">{info.config_string}</pre>
         </div>
-        <div className="grid gap-2 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
           {rows.map(([label, value]) => (
             <div key={label} className="min-w-0 space-y-1 rounded-md border p-2.5">
               <div className="flex items-center justify-between gap-2 text-xs font-medium">
