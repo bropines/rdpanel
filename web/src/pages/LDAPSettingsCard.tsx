@@ -251,7 +251,7 @@ export function LDAPSettingsCard() {
           <CardDescription>{t("settings.ldapServerAndAuthDesc")}</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="grid gap-4 sm:grid-cols-2">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <Field label={t("settings.ldapServerUrl")} hint={t("settings.ldapServerUrlHint")}>
               <Input
                 placeholder="ldaps://ldap.example.com:636"
@@ -269,7 +269,7 @@ export function LDAPSettingsCard() {
             </Field>
           </div>
 
-          <div className="grid gap-4 sm:grid-cols-2">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <Field
               label={t("settings.ldapBindPassword")}
               hint={
@@ -330,7 +330,7 @@ export function LDAPSettingsCard() {
           <CardDescription>{t("settings.ldapSearchAndFilterDesc")}</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="grid gap-4 sm:grid-cols-2">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <Field label={t("settings.ldapBaseDn")} hint={t("settings.ldapBaseDnHint")}>
               <Input
                 placeholder="DC=example,DC=com"
@@ -365,7 +365,7 @@ export function LDAPSettingsCard() {
           <CardDescription>{t("settings.ldapAttributesDesc")}</CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <Field label={t("settings.ldapUsernameAttr")} hint="sAMAccountName / uid">
               <Input
                 value={d.username_attribute}
@@ -404,7 +404,7 @@ export function LDAPSettingsCard() {
           <CardDescription>{t("settings.ldapProvisioningDesc")}</CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
-          <div className="grid gap-6 sm:grid-cols-3">
+          <div className="grid grid-cols-1 gap-6 sm:grid-cols-3">
             <div className="flex flex-col justify-between rounded-lg border p-3">
               <div>
                 <div className="text-sm font-medium">{t("settings.ldapAutoRegister")}</div>
@@ -643,7 +643,7 @@ function LDAPTestDialog({
         </DialogHeader>
 
         <div className="space-y-4 py-2">
-          <div className="grid gap-3 sm:grid-cols-2">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <Field label={t("settings.ldapTestUsername")} hint={t("settings.ldapTestUsernameHint")}>
               <Input
                 placeholder="johndoe"
@@ -673,7 +673,7 @@ function LDAPTestDialog({
                 <span className="font-semibold text-sm">{result.message}</span>
               </div>
 
-              <div className="grid gap-2 sm:grid-cols-2 text-xs">
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 text-xs">
                 <div className="flex items-center justify-between border-b pb-1">
                   <span className="text-muted-foreground">{t("settings.ldapServerConnected")}:</span>
                   <span className="font-medium">{result.connected ? "✓" : "✗"}</span>

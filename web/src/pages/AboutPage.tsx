@@ -44,7 +44,7 @@ const isSha = (s: string | null | undefined): s is string => !!s && /^[0-9a-f]{7
 
 function Ext({ href, children }: { href: string; children: ReactNode }) {
   return (
-    <a href={href} target="_blank" rel="noreferrer noopener" className="inline-flex items-center gap-1 text-primary hover:underline">
+    <a href={href} target="_blank" rel="noreferrer noopener" className="inline-flex items-center gap-1 break-all text-primary hover:underline">
       {children}
       <ExternalLink className="h-3 w-3 shrink-0" aria-hidden />
     </a>
@@ -123,13 +123,13 @@ export function AboutPage() {
     <div>
       <PageHeader title={t("about.title")} description={t("about.subtitle")} />
       {!d ? (
-        <div className="grid gap-4 lg:grid-cols-2">
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
           {Array.from({ length: 4 }).map((_, i) => (
             <Skeleton key={i} className="h-44" />
           ))}
         </div>
       ) : (
-        <div className="grid gap-4 lg:grid-cols-2">
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
           <Card>
             <CardIconTitle icon={Info}>{d.name}</CardIconTitle>
             <CardContent className="space-y-4">
@@ -233,7 +233,7 @@ export function AboutPage() {
           <Card>
             <CardIconTitle icon={BookOpen}>{t("about.links.title")}</CardIconTitle>
             <CardContent>
-              <ul className="grid gap-2 text-sm sm:grid-cols-2">
+              <ul className="grid grid-cols-1 gap-2 text-sm sm:grid-cols-2">
                 {LINKS.map(({ key, href, icon: Icon }) => (
                   <li key={key} className="flex items-center gap-2">
                     <Icon className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />

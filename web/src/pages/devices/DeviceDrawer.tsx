@@ -109,7 +109,7 @@ function EditForm({ device, isAdmin }: { device: DeviceDetail; isAdmin: boolean 
         save.mutate();
       }}
     >
-      <div className="grid gap-3 sm:grid-cols-2">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <Field label={t("devices.alias")} htmlFor="dev-alias">
           <Input id="dev-alias" value={alias} maxLength={128} onChange={(e) => setAlias(e.target.value)} />
         </Field>

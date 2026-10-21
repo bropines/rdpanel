@@ -108,7 +108,7 @@ export function ClientConfigCard() {
         </div>
 
         {/* CLI command and Windows exe naming */}
-        <div className="grid gap-3 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <div className="rounded-md border p-3 space-y-1.5">
             <div className="flex items-center justify-between gap-2 text-xs font-medium">
               <span className="flex items-center gap-1.5">
@@ -150,7 +150,7 @@ export function ClientConfigCard() {
           </Button>
 
           {showManual && (
-            <div className="mt-3 grid gap-2.5 rounded-md border bg-muted/20 p-3 sm:grid-cols-2">
+            <div className="mt-3 grid grid-cols-1 gap-2.5 rounded-md border bg-muted/20 p-3 sm:grid-cols-2">
               <div className="space-y-1">
                 <div className="flex items-center justify-between gap-2">
                   <span className="text-xs font-medium">{t("server.clientConfig.idServer")}</span>

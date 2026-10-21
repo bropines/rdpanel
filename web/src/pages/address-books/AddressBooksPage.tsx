@@ -471,7 +471,7 @@ function AddressBooksView({ my }: { my: boolean }) {
   return (
     <div>
       <PageHeader title={my ? t("nav.myAddressBooks") : t("nav.addressBooks")} description={my ? t("books.myDescription") : t("books.description")} />
-      <div className="grid min-h-[70vh] overflow-hidden rounded-lg border bg-card lg:grid-cols-[18rem_1fr]">
+      <div className="grid grid-cols-1 min-h-[70vh] overflow-hidden rounded-lg border bg-card lg:grid-cols-[18rem_1fr]">
         <aside className={cn("border-b lg:border-b-0 lg:border-r", selectedId !== undefined && "hidden lg:block")}>
           <BookList scope={scope} selectedId={selectedId} onSelect={select} onCreate={() => setCreating(true)} />
         </aside>

@@ -115,7 +115,7 @@ export function EmailSettingsCard() {
         <CardDescription>{t("emailSettings.description")}</CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
-        <div className="grid gap-4 sm:grid-cols-3">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
           <Field label={t("emailSettings.host")} htmlFor="smtp-host" error={errors.host} hint={fromConfig ? undefined : t("emailSettings.hostHint")}>
             <Input id="smtp-host" value={d.host} disabled={fromConfig} placeholder="smtp.example.com" onChange={(e) => set({ host: e.target.value })} />
           </Field>

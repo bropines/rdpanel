@@ -174,7 +174,7 @@ export function ClientOptionsCard() {
         <CardDescription>{t("server.clientOptions.hint")}</CardDescription>
       </CardHeader>
       <CardContent>
-        <div className="grid gap-2 border-b py-4 md:grid-cols-[minmax(12rem,16rem)_1fr]">
+        <div className="grid grid-cols-1 gap-2 border-b py-4 md:grid-cols-[minmax(12rem,16rem)_1fr]">
           <div className="space-y-1">
             <label htmlFor="srv-ice_servers" className="text-sm font-medium">
               {t("server.clientOptions.iceServers")}
@@ -259,7 +259,7 @@ export function ClientOptionsCard() {
             )}
           </div>
         </div>
-        <div className="grid gap-2 py-4 md:grid-cols-[minmax(12rem,16rem)_1fr]">
+        <div className="grid grid-cols-1 gap-2 py-4 md:grid-cols-[minmax(12rem,16rem)_1fr]">
           <div className="space-y-1">
             <label htmlFor="srv-webrtc_cc" className="text-sm font-medium">
               {t("server.clientOptions.congestion")}

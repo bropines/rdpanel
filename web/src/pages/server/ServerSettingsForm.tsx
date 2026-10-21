@@ -137,7 +137,7 @@ function Row({
   const status = state.keys.find((s) => s.key === k);
   const applied = state.applied[k];
   return (
-    <div className={cn("grid gap-2 border-b py-4 last:border-0 md:grid-cols-[minmax(12rem,16rem)_1fr]", dirty && "bg-primary/[0.03]")}>
+    <div className={cn("grid grid-cols-1 gap-2 border-b py-4 last:border-0 md:grid-cols-[minmax(12rem,16rem)_1fr]", dirty && "bg-primary/[0.03]")}>
       <div className="space-y-1">
         <label htmlFor={`srv-${k}`} className="flex flex-wrap items-center gap-2 text-sm font-medium">
           {label}

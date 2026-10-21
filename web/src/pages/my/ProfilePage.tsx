@@ -63,7 +63,7 @@ function ProfileForm() {
   const e = form.formState.errors;
   return (
     <form onSubmit={form.handleSubmit((v) => save.mutate(v))} noValidate className="space-y-3">
-      <div className="grid gap-3 sm:grid-cols-2">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <Field label={t("users.username")}>
           <Input value={me.user.username} disabled />
         </Field>
@@ -120,7 +120,7 @@ function PasswordForm() {
   return (
     <form onSubmit={form.handleSubmit((v) => save.mutate(v))} noValidate className="space-y-3">
       <input type="text" autoComplete="username" value={me.user.username} readOnly hidden />
-      <div className="grid gap-3 sm:grid-cols-3">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
         <Field label={t("security.currentPassword")} htmlFor="pw-cur" error={e.current_password?.message && t(e.current_password.message)}>
           <Input id="pw-cur" type="password" autoComplete="current-password" {...form.register("current_password")} />
         </Field>

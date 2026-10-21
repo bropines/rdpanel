@@ -70,7 +70,7 @@ export function Console() {
   const byTarget = (target: "hbbs" | "hbbr") => (commands.data?.items ?? []).filter((c) => c.target === target);
 
   return (
-    <div className="grid gap-4 xl:grid-cols-[1fr_22rem]">
+    <div className="grid grid-cols-1 gap-4 xl:grid-cols-[1fr_22rem]">
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-base">
@@ -84,7 +84,7 @@ export function Console() {
         </CardHeader>
         <CardContent className="space-y-3">
           <form
-            className="grid gap-2 sm:grid-cols-[16rem_1fr_auto] sm:items-end"
+            className="grid grid-cols-1 gap-2 sm:grid-cols-[16rem_1fr_auto] sm:items-end"
             onSubmit={(e) => {
               e.preventDefault();
               if (cmd && !parsed.error) run.mutate();

@@ -151,7 +151,7 @@ function ProviderDialog({ provider, open, onOpenChange }: { provider: IdentityPr
             <DialogTitle>{editing ? t("idp.edit", { name: provider.display_name }) : t("idp.add")}</DialogTitle>
             <DialogDescription>{t("idp.dialogHint")}</DialogDescription>
           </DialogHeader>
-          <div className="grid gap-3 sm:grid-cols-2">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <Field label={t("idp.kind")} htmlFor="idp-kind">
               <Controller
                 control={form.control}
@@ -216,7 +216,7 @@ function ProviderDialog({ provider, open, onOpenChange }: { provider: IdentityPr
               <Input id="idp-scopes" className="font-mono" {...form.register("scopes")} />
             </Field>
           </div>
-          <div className="grid gap-2 sm:grid-cols-2">
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
             {sw("enabled", t("idp.enabled"))}
             <div className="flex items-center justify-between gap-3 rounded-md border px-3 py-2">
               <label htmlFor="idp-pkce_enabled" className="text-sm">
@@ -273,7 +273,7 @@ function ProviderCard({ p, onEdit, onDelete }: { p: IdentityProvider; onEdit: ()
   const [result, setResult] = useState<IdentityProviderTestResult | null>(null);
   const test = useMutation({ mutationFn: () => identityProviders.test(p.id), onSuccess: setResult, onError: toastError });
   return (
-    <Card>
+    <Card className="min-w-0">
       <CardContent className="space-y-3 p-4">
         <div className="flex flex-wrap items-start gap-3">
           <div className="rounded-md bg-muted p-2">
@@ -287,7 +287,7 @@ function ProviderCard({ p, onEdit, onDelete }: { p: IdentityProvider; onEdit: ()
               </Badge>
               {p.enabled ? <Badge variant="success">{t("idp.enabledBadge")}</Badge> : <Badge variant="secondary">{t("idp.disabledBadge")}</Badge>}
             </div>
-            <div className="mt-0.5 text-xs text-muted-foreground">
+            <div className="mt-0.5 break-all text-xs text-muted-foreground">
               <Mono>{p.slug}</Mono>
               {p.issuer && ` · ${p.issuer}`}
             </div>
@@ -310,13 +310,13 @@ function ProviderCard({ p, onEdit, onDelete }: { p: IdentityProvider; onEdit: ()
           {p.auto_register && <Badge variant="secondary" className="font-normal">{t("idp.autoRegister")}</Badge>}
           {p.link_by_verified_email && <Badge variant="secondary" className="font-normal">{t("idp.linkByEmail")}</Badge>}
           <Badge variant="secondary" className="font-normal">{p.has_client_secret ? t("idp.secretSet") : t("idp.secretMissing")}</Badge>
-          <span className="text-muted-foreground">{p.scopes.join(" ")}</span>
+          <span className="break-all text-muted-foreground">{p.scopes.join(" ")}</span>
         </div>
         <div className="flex items-center gap-1 rounded-md bg-muted/50 px-2 py-1.5 text-xs">
           <span className="shrink-0 text-muted-foreground">{t("idp.callbackUrl")}:</span>
           {p.callback_url ? (
             <>
-              <Mono className="truncate text-xs">{p.callback_url}</Mono>
+              <Mono className="min-w-0 truncate text-xs">{p.callback_url}</Mono>
               <CopyButton value={p.callback_url} className="ml-auto" />
             </>
           ) : (
@@ -376,7 +376,7 @@ export function IdentityProvidersPage() {
       {q.isError ? (
         <ErrorState error={q.error} onRetry={() => void q.refetch()} />
       ) : q.isLoading ? (
-        <div className="grid gap-3 lg:grid-cols-2">
+        <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
           <Skeleton className="h-40" />
           <Skeleton className="h-40" />
         </div>
@@ -385,7 +385,7 @@ export function IdentityProvidersPage() {
           <EmptyState icon={KeyRound} title={t("idp.empty")} description={t("idp.emptyHint")} />
         </Card>
       ) : (
-        <div className="grid gap-3 lg:grid-cols-2">
+        <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
           {items.map((p) => (
             <ProviderCard
               key={p.id}
