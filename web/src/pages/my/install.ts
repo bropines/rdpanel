@@ -24,23 +24,73 @@ export function findAsset(assets: ClientAsset[], id: string): ClientAsset | unde
   return assets.find((a) => a.id === id);
 }
 
-/** Silent install for Windows (PowerShell as administrator), as RustDesk's own deployment script does. */
+/**
+ * Silent install for Windows, as RustDesk's own deployment script does, with
+ * two differences that matter when a person pastes it into a console.
+ *
+ * It is one script block. Pasted line by line, each line runs on its own, so a
+ * `throw` ends only the line it is on and everything after it still runs — a
+ * refused rights check went on to install anyway and then quietly did nothing.
+ * A block is a single statement and stops where it fails.
+ *
+ * And it asks for administrator rights instead of needing them. RustDesk
+ * applies `--config` only when it is installed and the process is elevated
+ * (core_main.rs); unelevated it prints one line and exits, which looks exactly
+ * like success. The block writes itself to a file and runs that elevated, so
+ * the settings are actually applied.
+ */
 export function windowsCommand(asset: ClientAsset, configString: string): string {
-  const lines = [
+  const body = [
     "$ErrorActionPreference = 'Stop'",
     "[Net.ServicePointManager]::SecurityProtocol = 'Tls12'",
-    '$f = "$env:TEMP\\rustdesk-setup.exe"',
-    `Invoke-WebRequest -UseBasicParsing -Uri '${asset.url}' -OutFile $f`,
+    `$url = '${asset.url}'`,
+    ...(asset.sha256 ? [`$sha = '${asset.sha256.toUpperCase()}'`] : []),
+    `$cfg = '${configString}'`,
+    "# Any existing installation will do, whoever made it: the EXE installer, the",
+    "# MSI (which is also what winget installs) or a per-user copy. They all land",
+    "# in one of these folders or leave an uninstall entry behind, and --config",
+    "# only needs the exe. Installing over an MSI is refused by RustDesk itself.",
+    "function Find-RustDesk {",
+    '  $try = @("$env:ProgramW6432\\RustDesk\\rustdesk.exe", "$env:ProgramFiles\\RustDesk\\rustdesk.exe", "${env:ProgramFiles(x86)}\\RustDesk\\rustdesk.exe", "$env:LOCALAPPDATA\\Programs\\RustDesk\\rustdesk.exe")',
+    "  $roots = @('HKLM:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\*','HKLM:\\SOFTWARE\\WOW6432Node\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\*','HKCU:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\*')",
+    "  foreach ($e in (Get-ItemProperty $roots -ErrorAction SilentlyContinue | Where-Object { $_.DisplayName -like 'RustDesk*' })) {",
+    "    if ($e.InstallLocation) { $try += (Join-Path $e.InstallLocation 'rustdesk.exe') }",
+    "    if ($e.DisplayIcon) { $try += ($e.DisplayIcon -replace '^\"|\"$|,\\d+$', '') }",
+    "  }",
+    "  $try | Where-Object { $_ -and (Test-Path -LiteralPath $_ -PathType Leaf) } | Select-Object -First 1",
+    "}",
+    "$exe = Find-RustDesk",
+    "$install = -not $exe",
+    "if ($install -and $args -notcontains 'install' -and [Environment]::UserInteractive) {",
+    "  if ((Read-Host 'RustDesk is not installed. Download and install it now? [y/N]') -notmatch '^[yYдД]') { throw 'Cancelled' }",
+    "}",
+    "$me = New-Object Security.Principal.WindowsPrincipal([Security.Principal.WindowsIdentity]::GetCurrent())",
+    "if (-not $me.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {",
+    "  $ps1 = Join-Path $env:TEMP 'rustdesk-install.ps1'",
+    "  Set-Content -LiteralPath $ps1 -Encoding utf8 -Value $MyInvocation.MyCommand.ScriptBlock.ToString()",
+    "  $a = @('-NoProfile','-ExecutionPolicy','Bypass','-File',$ps1)",
+    "  if ($install) { $a += 'install' }",
+    "  try {",
+    "    $p = Start-Process -FilePath (Get-Process -Id $PID).Path -Verb RunAs -Wait -PassThru -ArgumentList $a",
+    "  } catch {",
+    "    Remove-Item -LiteralPath $ps1 -ErrorAction SilentlyContinue",
+    "    throw 'Administrator rights are required and were not granted'",
+    "  }",
+    "  Remove-Item -LiteralPath $ps1 -ErrorAction SilentlyContinue",
+    "  if ($p.ExitCode -ne 0) { throw \"The elevated run failed (exit code $($p.ExitCode)); run this from an elevated PowerShell to see why\" }",
+    "  return",
+    "}",
+    "if ($install) {",
+    "  $f = Join-Path $env:TEMP 'rustdesk-setup.exe'",
+    "  Invoke-WebRequest -UseBasicParsing -Uri $url -OutFile $f",
+    ...(asset.sha256 ? ["  if ((Get-FileHash $f -Algorithm SHA256).Hash -ne $sha) { throw 'Checksum mismatch' }"] : []),
+    "  Start-Process $f -ArgumentList '--silent-install' -Wait",
+    "  $exe = Find-RustDesk",
+    "  if (-not $exe) { throw 'RustDesk did not install' }",
+    "}",
+    "& $exe --config $cfg",
   ];
-  if (asset.sha256) {
-    lines.push(`if ((Get-FileHash $f -Algorithm SHA256).Hash -ne '${asset.sha256.toUpperCase()}') { throw 'Checksum mismatch' }`);
-  }
-  lines.push(
-    "Start-Process $f -ArgumentList '--silent-install'",
-    "Start-Sleep -Seconds 20",
-    `& "$env:ProgramFiles\\RustDesk\\rustdesk.exe" --config '${configString}'`,
-  );
-  return lines.join("\n");
+  return ["& {", ...body.map((l) => `  ${l}`), "}"].join("\n");
 }
 
 /** Applies the settings to an installed macOS client (Terminal). */

@@ -141,7 +141,7 @@ server {
     location = /api/oidc/callback { include rdpanel-proxy.conf; }
     location /api/ { include rdpanel-proxy.conf; }      # RustDesk client API
     # Relay agents: /agent/v1/ (WebSocket) and /agent/install.sh, see relay-agents.md.
-    # Share links (RDPANEL_SHARE_LINKS_ENABLED), see share-links.md:
+    # Share links (Settings, or RDPANEL_SHARE_LINKS_ENABLED to start on), see share-links.md:
     # location /s/ { include rdpanel-proxy.conf; access_log off; }
     location = /metrics { return 404; }
     location / { return 302 https://desk-admin.internal.example.com$request_uri; }
@@ -321,7 +321,7 @@ Summary:
 | `RDPANEL_UPDATE_CHECK` | panel | `true` | About page release check against the GitHub API (see [below](#about-page-and-update-check)); `false` = no outbound request |
 | `RDPANEL_API_DOCS` | panel | `auth` | Swagger UI at `/api/v1/docs` + spec: `auth`, `public` or `off` (see [api.md](api.md#interactive-docs)); being under `/api/v1/`, a public vhost that 404s `/api/v1/*` keeps it internal |
 | `RDPANEL_CLIENT_DOWNLOADS_ENABLED`, `_VERSION` | panel | `true`, latest | "Install client" page with official RustDesk downloads set up for this server (see [install-client.md](install-client.md)); `false` = no request to GitHub |
-| `RDPANEL_SHARE_LINKS_ENABLED` | panel | `false` | public share links `<public_url>/s/<token>`: the client set up for this server and its settings for anyone with the link; on a split setup the public host must forward `/s/` (see [share-links.md](share-links.md)) |
+| `RDPANEL_SHARE_LINKS_ENABLED` | panel | `false` | public share links `<public_url>/s/<token>`: the client set up for this server and its settings for anyone with the link; on a split setup the public host must forward `/s/` (see [share-links.md](share-links.md)). Only the starting value — the switch in Settings decides once it has been used |
 | `RDPANEL_WEBCLIENT_ENABLED`, `_ADMIN_ONLY`, `_ID_URL`, `_RELAY_URL`, `_SERVERS`, `_CUSTOM_SERVERS` | panel | on, off, same origin `/ws/id`, `/ws/relay`, none, off | browser web client (see [web-client.md](web-client.md)); the reverse proxy must forward `/ws/id` → 21118 and `/ws/relay` → 21119 with WebSocket upgrade |
 | `RDPANEL_FEDERATION_ENABLED`, `RDPANEL_FEDERATION_TOKEN` | panel | off, — | opt-in panel federation; the token (≥ 16 characters) is what peers present to this panel (see [Panel federation](#panel-federation)) |
 | `RDPANEL_WEBHOOK_URL`, `_SECRET` | panel | off | alerts for critical events (relay degraded/offline, hbbs down) sent via HTTP POST with optional HMAC-SHA256 signature over timestamp and body ([configuration.md → Webhooks](configuration.md#webhooks)) |

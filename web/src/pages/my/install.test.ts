@@ -15,10 +15,31 @@ describe("install client helpers", () => {
   it("builds verified install commands", () => {
     const sha = "ab".repeat(32);
     const ps = windowsCommand(asset("rustdesk-1.5.0-x86_64.exe", sha), "CFG");
-    expect(ps).toContain(`-ne '${sha.toUpperCase()}'`);
+    expect(ps).toContain(`$sha = '${sha.toUpperCase()}'`);
     expect(ps).toContain("--silent-install");
-    expect(ps).toContain("--config 'CFG'");
+    expect(ps).toContain("$cfg = 'CFG'");
     expect(windowsCommand(asset("rustdesk-1.5.0-x86_64.exe"), "CFG")).not.toContain("Get-FileHash");
+
+    // One statement, so a paste that fails the rights check stops there instead
+    // of running the rest line by line.
+    expect(ps.startsWith("& {")).toBe(true);
+    expect(ps.trimEnd().endsWith("\n}")).toBe(true);
+    // Asks for rights rather than needing them: RustDesk ignores --config unelevated.
+    expect(ps).toContain("-Verb RunAs");
+    expect(ps).toContain("IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)");
+    // Waits for the installer instead of guessing how long it takes.
+    expect(ps).toContain("'--silent-install' -Wait");
+    expect(ps).not.toContain("Start-Sleep");
+    // Finds an installation made by anyone — the EXE, the MSI, winget, per-user —
+    // and only installs when there is none, having asked first.
+    expect(ps).toContain("function Find-RustDesk");
+    expect(ps).toContain("CurrentVersion\\Uninstall\\*");
+    expect(ps).toContain("$install = -not $exe");
+    expect(ps).toContain("if ($install) {");
+    expect(ps).toContain("Read-Host");
+    expect(ps).toContain("[Environment]::UserInteractive");
+    // The settings are applied either way, which is the point of the command.
+    expect(ps.trimEnd().endsWith("& $exe --config $cfg\n}")).toBe(true);
 
     const deb = linuxCommand(asset("rustdesk-1.5.0-x86_64.deb", sha), "CFG");
     expect(deb).toContain(`echo '${sha}  /tmp/rustdesk.deb' | sha256sum -c -`);

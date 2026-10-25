@@ -6,7 +6,7 @@ platform and offers:
 
 | platform | what users get |
 |---|---|
-| Windows | **Download for Windows**: the official installer, served by the panel as `rustdesk-licensed-<config string>.exe`. RustDesk reads its server settings from that file name, applies them on start and keeps them when it installs, so users just run it. For administrators: a PowerShell silent install (GPO, Intune, RMM) that downloads from GitHub, checks the SHA-256, installs and applies `--config`. |
+| Windows | **Download for Windows**: the official installer, served by the panel as `rustdesk-licensed-<config string>.exe`. RustDesk reads its server settings from that file name, applies them on start and keeps them when it installs, so users just run it. For administrators: a PowerShell silent install (GPO, Intune, RMM) that downloads from GitHub, checks the SHA-256, installs and applies `--config`. It is one script block and asks for administrator rights when it has none: RustDesk applies `--config` only when it is installed and elevated, and unelevated it prints a line and exits, which looks like success. It installs only when RustDesk is not there yet, and asks before it does; an existing installation of any kind — the EXE, the MSI, winget, a per-user copy — just gets the settings. |
 | macOS | DMG links (Apple silicon, Intel), import steps and the `--config` command. |
 | Linux | one command per family (deb: apt, rpm: dnf) that downloads, verifies, installs and configures; AppImage link. |
 | Android, iPhone/iPad | APK / App Store link and a QR code (`config=<config string>`) for the app's scanner (Settings → QR icon). |
