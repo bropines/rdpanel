@@ -92,12 +92,12 @@ func TestWindowsFileNameBudgetEdge(t *testing.T) {
 	t.Fatal("never refused")
 }
 
-// A normal deployment (host, relay, https API, 44-character key) is refused,
-// not squeezed into a name Windows may cut. The name below is 240 characters:
-// it fits the 255 that NTFS allows for one name, which is what used to let it
-// through, but not a path in an ordinary Downloads folder (the broken download
-// that prompted this limit arrived as 230 of these 240 characters).
-func TestWindowsFileNameRealisticDeploymentRefused(t *testing.T) {
+// The deployment this limit came from: carrying its relay the name is 240
+// characters, which fits the 255 NTFS allows for one name — what used to let it
+// through — but not a path in an ordinary Downloads folder. The broken download
+// that prompted all this arrived as 230 of those 240. Without the relay the same
+// settings fit, and what comes back carries the rest of them.
+func TestWindowsFileNameRealisticDeployment(t *testing.T) {
 	s := ServerSettings{
 		Host:  "desk-ru-api.bropinus.ru",
 		Relay: "desk-ru.bropines.ru:21117",
@@ -105,14 +105,37 @@ func TestWindowsFileNameRealisticDeploymentRefused(t *testing.T) {
 		API:   "https://desk-ru-api.bropinus.ru",
 	}
 	if got := len(plainFileName(t, s)); got != 240 {
-		t.Fatalf("example encodes to %d characters, the test assumes 240", got)
+		t.Fatalf("with the relay the example encodes to %d characters, the test assumes 240", got)
 	}
 	name, err := WindowsFileName(s)
-	if !errors.Is(err, ErrFileName) {
-		t.Fatalf("err = %v, name = %q", err, name)
+	if err != nil {
+		t.Fatalf("refused: %v", err)
 	}
-	if name != "" {
-		t.Fatalf("a name came back with the error: %q", name)
+	if len(name) > maxFileName {
+		t.Fatalf("name is %d characters, budget %d", len(name), maxFileName)
+	}
+	got, ok := ParseWindowsFileName(name)
+	if !ok {
+		t.Fatalf("name does not read back: %q", name)
+	}
+	if want := (ServerSettings{Host: s.Host, Key: s.Key, API: s.API}); got != want {
+		t.Fatalf("read back %+v, want %+v (the relay is left out on purpose)", got, want)
+	}
+}
+
+// The relay never reaches the name, however short everything else is: hbbs
+// tells the client which relay to use, and the characters are worth more here.
+func TestWindowsFileNameLeavesOutRelay(t *testing.T) {
+	with, err := WindowsFileName(ServerSettings{Host: "d.example.org", Relay: "r.example.org:21117", Key: testKey})
+	if err != nil {
+		t.Fatal(err)
+	}
+	without, err := WindowsFileName(ServerSettings{Host: "d.example.org", Key: testKey})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if with != without {
+		t.Fatalf("the relay changed the name:\n with: %s\n without: %s", with, without)
 	}
 }
 

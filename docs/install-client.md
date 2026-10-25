@@ -25,12 +25,18 @@ and messengers still enforce the limit. When a name is too long the end of it is
 which is where the settings begin — and RustDesk then starts with no server configured and
 says nothing about it.
 
-The key alone takes about 60 characters of the name. An ordinary deployment (ID server,
-relay, an `https://` API server and a key) comes to roughly 180, and fits. Long host names
-push it past the limit: the panel then does not offer the installer, and the download
-answers 409, rather than handing out a name that may be damaged on the way. It does not
-drop the API server to make it fit: without one the client guesses
-`http://<host>:21114`, the wrong scheme and port for an HTTPS deployment.
+The name carries the ID server, the API server and the key, but **not the relay**: hbbs
+tells every client which relay to use when it answers a connection attempt, so a client
+without one of its own behaves the same, and leaving it out buys about 48 characters of a
+budget that decides whether the installer can be offered at all. The relay is still shown
+on this page and on a share page, and is part of the config string for a manual import.
+
+The key alone takes about 60 characters of the name, so an ordinary deployment comes to
+roughly 160 to 190 and fits. Long host names push it past the limit: the panel then does
+not offer the installer, and the download answers 409, rather than handing out a name that
+may be damaged on the way. The API server is never dropped to make it fit — without one
+the client guesses `http://<host>:21114`, the wrong scheme and port for an HTTPS
+deployment.
 
 If your settings do not fit, use the **Manual setup** card: the user installs the
 official client from rustdesk.com or GitHub and imports the config string, or fills in

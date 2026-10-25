@@ -57,8 +57,16 @@ var ErrFileName = errors.New("server settings do not fit into a Windows file nam
 // JSON whitespace, which RustDesk's parser skips. A shift that leaves "--" or
 // makes the name longer than maxFileName is skipped, and every shift is tried
 // before ErrFileName is returned: the result is never a cut name or one that
-// does not read back as s.
+// does not read back as the settings it carries.
+//
+// The relay is deliberately left out of the name. hbbs hands every client the
+// relay to use when it answers a connection attempt, so a client that has none
+// of its own works the same — while carrying it costs around 48 characters of
+// a budget that decides whether the installer can be offered at all. The relay
+// is still shown on the Install client and share pages, and is part of the
+// config string for a manual import; only the file name goes without it.
 func WindowsFileName(s ServerSettings) (string, error) {
+	s.Relay = ""
 	raw, err := json.Marshal(s)
 	if err != nil {
 		return "", err
