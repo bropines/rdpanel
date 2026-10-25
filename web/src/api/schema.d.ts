@@ -4958,7 +4958,7 @@ export interface components {
             };
             /** @description Public server share links and the texts of their page (plain text, shown escaped). */
             share_links: {
-                /** @description Read-only (RDPANEL_SHARE_LINKS_ENABLED). */
+                /** @description Off until turned on here; RDPANEL_SHARE_LINKS_ENABLED is the starting value. */
                 enabled: boolean;
                 /** @description Empty = "Connect to <host>" */
                 page_title: string;
@@ -5010,6 +5010,8 @@ export interface components {
                 web_client_url?: string | null;
             };
             share_links?: {
+                /** @description While off, everything under /s answers 404 and no link can be created. */
+                enabled?: boolean;
                 page_title?: string;
                 description?: string;
             };

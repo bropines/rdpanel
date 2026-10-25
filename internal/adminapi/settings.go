@@ -172,7 +172,7 @@ func (a *resources) loadSettings(ctx context.Context) (panelSettingsDTO, error) 
 	errs(e)
 	s.Branding.HasLogo, _, e = a.d.Store.Assets().Exists(ctx, store.AssetLogo)
 	errs(e)
-	s.ShareLinks.Enabled = shareLinksEnabled(a.d)
+	s.ShareLinks.Enabled = shareLinksEnabled(ctx, a.d)
 	s.ShareLinks.PageTitle, e = store.GetOr(ctx, st, SettingSharePageTitle, "")
 	errs(e)
 	s.ShareLinks.Description, e = store.GetOr(ctx, st, SettingShareDescription, "")
@@ -216,9 +216,9 @@ type panelSettingsPatch struct {
 		WebClientURL    opt[string] `json:"web_client_url"`
 	} `json:"branding"`
 	ShareLinks *struct {
-		Enabled     json.RawMessage `json:"enabled"`
-		PageTitle   *string         `json:"page_title"`
-		Description *string         `json:"description"`
+		Enabled     *bool   `json:"enabled"`
+		PageTitle   *string `json:"page_title"`
+		Description *string `json:"description"`
 	} `json:"share_links"`
 	Auth *struct {
 		PasswordLoginEnabled     *bool `json:"password_login_enabled"`
@@ -309,7 +309,7 @@ func (a *resources) handleUpdateSettings(w http.ResponseWriter, r *http.Request)
 	}
 	if sl := in.ShareLinks; sl != nil {
 		if sl.Enabled != nil {
-			f["share_links.enabled"] = "read-only: set via RDPANEL_SHARE_LINKS_ENABLED"
+			set[SettingShareLinksEnabled] = *sl.Enabled
 		}
 		if sl.PageTitle != nil {
 			t := strings.TrimSpace(*sl.PageTitle)
