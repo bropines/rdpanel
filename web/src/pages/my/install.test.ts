@@ -30,6 +30,16 @@ describe("install client helpers", () => {
     // Waits for the installer instead of guessing how long it takes.
     expect(ps).toContain("'--silent-install' -Wait");
     expect(ps).not.toContain("Start-Sleep");
+    // Finds an installation made by anyone — the EXE, the MSI, winget, per-user —
+    // and only installs when there is none, having asked first.
+    expect(ps).toContain("function Find-RustDesk");
+    expect(ps).toContain("CurrentVersion\\Uninstall\\*");
+    expect(ps).toContain("$install = -not $exe");
+    expect(ps).toContain("if ($install) {");
+    expect(ps).toContain("Read-Host");
+    expect(ps).toContain("[Environment]::UserInteractive");
+    // The settings are applied either way, which is the point of the command.
+    expect(ps.trimEnd().endsWith("& $exe --config $cfg\n}")).toBe(true);
 
     const deb = linuxCommand(asset("rustdesk-1.5.0-x86_64.deb", sha), "CFG");
     expect(deb).toContain(`echo '${sha}  /tmp/rustdesk.deb' | sha256sum -c -`);
