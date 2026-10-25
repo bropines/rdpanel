@@ -111,7 +111,7 @@ func tooManyShareRequests(w http.ResponseWriter, _ *http.Request) {
 // public share response.
 func (h *sharePublic) gate(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if !shareLinksEnabled(h.d) {
+		if !shareLinksEnabled(r.Context(), h.d) {
 			httpx.NotFound(w, r)
 			return
 		}

@@ -248,8 +248,24 @@ func TestSharePublicEndpoints(t *testing.T) {
 	if sl := m["share_links"].(map[string]any); sl["enabled"] != true || sl["description"] != "Call us\nanytime" {
 		t.Fatalf("settings: %v", sl)
 	}
+	// The switch is a panel setting: turning it off takes the public pages with it,
+	// and turning it back on brings them back, whatever the environment said.
 	code, m, _ = admin.do(http.MethodPatch, "/settings", map[string]any{"share_links": map[string]any{"enabled": false}})
-	wantErr(t, "enabled is read-only", code, 400, m, "validation_failed")
+	want(t, "turn off", code, 200, m)
+	if sl := m["share_links"].(map[string]any); sl["enabled"] != false {
+		t.Fatalf("turn off: %v", sl)
+	}
+	if code, _, _ := e.get("/s/whatever", nil); code != 404 {
+		t.Fatalf("public page while off: %d", code)
+	}
+	if code, m, _ := admin.do(http.MethodPost, "/share-links", map[string]any{"label": "while-off"}); code != 404 {
+		t.Fatalf("create while off: %d %v", code, m)
+	}
+	code, m, _ = admin.do(http.MethodPatch, "/settings", map[string]any{"share_links": map[string]any{"enabled": true}})
+	want(t, "turn on", code, 200, m)
+	if sl := m["share_links"].(map[string]any); sl["enabled"] != true {
+		t.Fatalf("turn on: %v", sl)
+	}
 
 	code, link, _ := admin.do(http.MethodPost, "/share-links", map[string]any{"label": "secret-label", "max_downloads": 2})
 	want(t, "create", code, 201, link)

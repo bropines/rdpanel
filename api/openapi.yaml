@@ -6436,7 +6436,7 @@ components:
           description: Public server share links and the texts of their page (plain text, shown escaped).
           required: [enabled, page_title, description]
           properties:
-            enabled: { type: boolean, description: "Read-only (RDPANEL_SHARE_LINKS_ENABLED)." }
+            enabled: { type: boolean, description: "Off until turned on here; RDPANEL_SHARE_LINKS_ENABLED is the starting value." }
             page_title: { type: string, maxLength: 80, description: "Empty = \"Connect to <host>\"" }
             description: { type: string, maxLength: 500 }
         auth:
@@ -6494,6 +6494,7 @@ components:
           type: object
           additionalProperties: false
           properties:
+            enabled: { type: boolean, description: "While off, everything under /s answers 404 and no link can be created." }
             page_title: { type: string, maxLength: 80 }
             description: { type: string, maxLength: 500 }
         auth:

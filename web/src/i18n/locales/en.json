@@ -943,6 +943,8 @@
     }
   },
   "settings": {
+      "enabled": "Share links",
+      "enabledHint": "Lets anyone with a link reach a page at /s/<token> that offers the preconfigured client, a QR code and this server's settings, without a panel account. While off, every such page answers 404 and no link can be created.",
     "description": "Panel configuration: public address, branding, authentication and retention.",
     "tabs": {
       "general": "General",

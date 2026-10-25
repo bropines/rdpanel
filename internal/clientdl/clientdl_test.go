@@ -21,11 +21,12 @@ import (
 )
 
 func TestWindowsFileName(t *testing.T) {
+	// Short on purpose: with a 44-character key this is about what fits into
+	// maxFileName (see filename_test.go for the budget and what does not fit).
 	s := ServerSettings{
-		Host:  "desk.example.com",
-		Relay: "desk.example.com",
-		Key:   "MEbIUN8NZFq0Vu80BjNNIGDbQKdXxcg8QTbo69qrH+A=",
-		API:   "https://panel.example.com",
+		Host: "d.example.org",
+		Key:  "MEbIUN8NZFq0Vu80BjNNIGDbQKdXxcg8QTbo69qrH+A=",
+		API:  "https://p.example",
 	}
 	name, err := WindowsFileName(s)
 	if err != nil {
@@ -47,7 +48,7 @@ func TestWindowsFileNameAnyKey(t *testing.T) {
 	for i := 0; i < 2000; i++ {
 		k := make([]byte, 32)
 		_, _ = rand.Read(k)
-		s := ServerSettings{Host: fmt.Sprintf("h%d.example.org", i), Relay: "relay.example.org", Key: base64.StdEncoding.EncodeToString(k), API: "https://panel.example.org"}
+		s := ServerSettings{Host: fmt.Sprintf("h%d.ex.org", i), Key: base64.StdEncoding.EncodeToString(k), API: "https://p.ex.org"}
 		name, err := WindowsFileName(s)
 		if err != nil {
 			t.Fatalf("%+v: %v", s, err)

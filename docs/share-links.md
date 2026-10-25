@@ -12,9 +12,15 @@ possible: whoever opens `<public_url>/s/<token>` gets
 
 Nothing else is on the page: no owner, label, counters or expiry, and no other files.
 
-Share links are **off by default**. Turn them on with `RDPANEL_SHARE_LINKS_ENABLED=true`
-(YAML `share_links.enabled: true`); while off, everything under `/s/` answers 404 and the
-panel does not show the feature.
+Share links are **off by default**. Turn them on in **Settings → Branding → Share page**;
+while off, everything under `/s/` answers 404, no link can be created, and the rest of the
+section is hidden.
+
+`RDPANEL_SHARE_LINKS_ENABLED=true` (YAML `share_links.enabled: true`) is the starting
+value, for a deployment that wants them on from the first boot. Once the switch has been
+touched in the panel it decides, and the environment no longer does — so a deployment
+started with the variable on can be turned off without a redeploy, and the other way
+round.
 
 ## Creating links
 

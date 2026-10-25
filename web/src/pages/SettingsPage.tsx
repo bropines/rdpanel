@@ -44,6 +44,7 @@ export const settingsSchema = z.object({
   web_client_url: httpUrl,
   title: z.string().trim().min(1, "validation.required").max(64, "validation.tooLong"),
   welcome_markdown: z.string().max(20000, "validation.tooLong"),
+  share_links_enabled: z.boolean(),
   share_page_title: z.string().trim().max(80, "validation.tooLong"),
   share_description: z.string().max(500, "validation.tooLong"),
   password_login_enabled: z.boolean(),
@@ -75,6 +76,7 @@ function toValues(s: PanelSettings): SettingsValues {
     web_client_url: s.branding.web_client_url ?? "",
     title: s.branding.title,
     welcome_markdown: s.branding.welcome_markdown,
+    share_links_enabled: s.share_links.enabled,
     share_page_title: s.share_links.page_title,
     share_description: s.share_links.description,
     password_login_enabled: s.auth.password_login_enabled,
@@ -94,7 +96,7 @@ function toValues(s: PanelSettings): SettingsValues {
 export function toPatch(v: SettingsValues): PanelSettingsPatch {
   return {
     branding: { title: v.title.trim(), welcome_markdown: v.welcome_markdown, web_client_url: v.web_client_url.trim() || null },
-    share_links: { page_title: v.share_page_title.trim(), description: v.share_description.trim() },
+    share_links: { enabled: v.share_links_enabled, page_title: v.share_page_title.trim(), description: v.share_description.trim() },
     auth: {
       password_login_enabled: v.password_login_enabled,
       require_admin_2fa: v.require_admin_2fa,
@@ -305,21 +307,36 @@ export function SettingsPage() {
               </div>
             </div>
           </Section>
-          {q.data.share_links.enabled && (
-            <Section title={t("share.settings.title")} description={t("share.settings.hint")}>
-              <Field label={t("share.settings.pageTitle")} htmlFor="s-share_page_title" error={err("share_page_title")}>
-                <Input
-                  id="s-share_page_title"
-                  maxLength={80}
-                  placeholder={t("share.public.defaultTitle", { host: hostOf(q.data.public_url) })}
-                  {...form.register("share_page_title")}
+          <Section title={t("share.settings.title")} description={t("share.settings.hint")}>
+            <SwitchRow
+              id="s-share_links_enabled"
+              label={t("share.settings.enabled")}
+              hint={t("share.settings.enabledHint")}
+              control={
+                <Controller
+                  control={form.control}
+                  name="share_links_enabled"
+                  render={({ field }) => <Switch id="s-share_links_enabled" checked={field.value} onCheckedChange={field.onChange} />}
                 />
-              </Field>
-              <Field label={t("share.settings.description")} htmlFor="s-share_description" error={err("share_description")} hint={t("share.settings.descriptionHint")}>
-                <Textarea id="s-share_description" rows={3} maxLength={500} {...form.register("share_description")} />
-              </Field>
-            </Section>
-          )}
+              }
+            />
+            {/* the page texts are only worth filling in once the pages exist */}
+            {form.watch("share_links_enabled") && (
+              <>
+                <Field label={t("share.settings.pageTitle")} htmlFor="s-share_page_title" error={err("share_page_title")}>
+                  <Input
+                    id="s-share_page_title"
+                    maxLength={80}
+                    placeholder={t("share.public.defaultTitle", { host: hostOf(q.data.public_url) })}
+                    {...form.register("share_page_title")}
+                  />
+                </Field>
+                <Field label={t("share.settings.description")} htmlFor="s-share_description" error={err("share_description")} hint={t("share.settings.descriptionHint")}>
+                  <Textarea id="s-share_description" rows={3} maxLength={500} {...form.register("share_description")} />
+                </Field>
+              </>
+            )}
+          </Section>
         </TabsContent>
 
         <TabsContent value="security" className="space-y-4">

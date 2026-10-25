@@ -15,8 +15,35 @@ type ServerSettings struct {
 	API   string `json:"api,omitempty"`
 }
 
-// maxFileName is the longest file name Windows (NTFS) accepts.
-const maxFileName = 255
+// maxFileName is the longest file name WindowsFileName will produce, ".exe"
+// included. It is deliberately far below the 255 characters NTFS allows for a
+// single name, because the name does not travel alone: the classic Windows
+// MAX_PATH of 260 characters (terminating NUL included) limits the whole path,
+// directory and name together, and Explorer, many browsers, messengers and
+// archivers still enforce it. The arithmetic:
+//
+//	260  MAX_PATH
+//	 -1  terminating NUL, so 259 usable characters
+//	-56  the download directory: C:\Users\<30 characters>\Downloads\. A profile
+//	     redirected to OneDrive is longer still, which the slack below covers
+//	 -4  the " (1)" a browser inserts before ".exe" when the file already
+//	     exists (RustDesk's own parser expects that form)
+//	199  what is left for the name; 192 keeps a few characters of slack
+//
+// The number is a compromise, not a guarantee. Lower, and an ordinary
+// deployment (a host, a relay, an https API URL and a 44-character key runs to
+// about 185) loses the preconfigured installer altogether; higher, and names
+// start to break on the machines that receive them.
+//
+// The settings live in the name itself, and the END of the name is the START of
+// the JSON. When something shortens a name that is too long, the JSON no longer
+// parses and RustDesk silently ignores it: the user ends up with a client that
+// has no server. So a name that merely fits 255 is not safe. A name that does
+// not fit here is refused, and the callers fall back to a share link or the
+// manual settings instead of handing out a name that may be cut. Do not make it
+// fit by dropping fields: without api the client derives http://<host>:21114,
+// the wrong scheme and port for an HTTPS deployment.
+const maxFileName = 192
 
 // ErrFileName is returned when the settings cannot be put into a file name.
 var ErrFileName = errors.New("server settings do not fit into a Windows file name")
@@ -27,8 +54,19 @@ var ErrFileName = errors.New("server settings do not fit into a Windows file nam
 // reversed URL-safe base64 of the settings JSON. RustDesk splits the name at
 // "--", which the encoding of non-ASCII JSON (an IDN host name) can contain;
 // such encodings are avoided by shifting the base64 alignment with leading
-// JSON whitespace, which RustDesk's parser skips.
+// JSON whitespace, which RustDesk's parser skips. A shift that leaves "--" or
+// makes the name longer than maxFileName is skipped, and every shift is tried
+// before ErrFileName is returned: the result is never a cut name or one that
+// does not read back as the settings it carries.
+//
+// The relay is deliberately left out of the name. hbbs hands every client the
+// relay to use when it answers a connection attempt, so a client that has none
+// of its own works the same — while carrying it costs around 48 characters of
+// a budget that decides whether the installer can be offered at all. The relay
+// is still shown on the Install client and share pages, and is part of the
+// config string for a manual import; only the file name goes without it.
 func WindowsFileName(s ServerSettings) (string, error) {
+	s.Relay = ""
 	raw, err := json.Marshal(s)
 	if err != nil {
 		return "", err

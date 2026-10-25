@@ -33,10 +33,14 @@ const SharePath = "/s"
 
 // Panel settings of the public share page (plain text, rendered escaped).
 const (
-	SettingSharePageTitle   = "share.page_title"
-	SettingShareDescription = "share.description"
-	maxSharePageTitle       = 80
-	maxShareDescription     = 500
+	// SettingShareLinksEnabled turns the feature on. Unset, the configured
+	// RDPANEL_SHARE_LINKS_ENABLED decides, so an existing deployment keeps
+	// whatever it had until someone touches the switch in the panel.
+	SettingShareLinksEnabled = "share_links.enabled"
+	SettingSharePageTitle    = "share.page_title"
+	SettingShareDescription  = "share.description"
+	maxSharePageTitle        = 80
+	maxShareDescription      = 500
 )
 
 const (
@@ -90,13 +94,26 @@ func (c *b2bCore) registerShareLinks(r chi.Router) {
 	})
 }
 
-// shareLinksEnabled reports RDPANEL_SHARE_LINKS_ENABLED.
-func shareLinksEnabled(d Deps) bool { return d.Config != nil && d.Config.ShareLinks.Enabled }
+// shareLinksEnabled reports whether the feature is on: the panel setting when
+// it has been set, otherwise RDPANEL_SHARE_LINKS_ENABLED. A store that cannot
+// be read leaves the configured value in charge rather than opening the
+// feature on its own.
+func shareLinksEnabled(ctx context.Context, d Deps) bool {
+	cfg := d.Config != nil && d.Config.ShareLinks.Enabled
+	if d.Store == nil || d.Store.Settings == nil {
+		return cfg
+	}
+	on, err := store.GetOr(ctx, d.Store.Settings, SettingShareLinksEnabled, cfg)
+	if err != nil {
+		return cfg
+	}
+	return on
+}
 
 // canShareLinks reports whether user may create share links (feature on, and
 // an admin or in a user group with can_share_links).
 func canShareLinks(ctx context.Context, d Deps, user *store.User) (bool, error) {
-	if user == nil || !shareLinksEnabled(d) {
+	if user == nil || !shareLinksEnabled(ctx, d) {
 		return false, nil
 	}
 	if user.IsAdmin() {
@@ -109,8 +126,8 @@ func canShareLinks(ctx context.Context, d Deps, user *store.User) (bool, error) 
 // may not share.
 func (c *b2bCore) requireShare(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if !shareLinksEnabled(c.d) {
-			httpx.WriteError(w, http.StatusNotFound, "not_found", "share links are disabled (RDPANEL_SHARE_LINKS_ENABLED)")
+		if !shareLinksEnabled(r.Context(), c.d) {
+			httpx.WriteError(w, http.StatusNotFound, "not_found", "share links are turned off")
 			return
 		}
 		ok, err := canShareLinks(r.Context(), c.d, CurrentUser(r.Context()))
