@@ -14,6 +14,30 @@ platform and offers:
 A **Manual setup** card shows the config string and the ID, relay, API and key fields for
 any other case ("Import server config" in the client's ID/Relay Server settings).
 
+### When the Windows installer is not offered
+
+The server settings travel in the file name, so the preconfigured installer is only
+offered when they fit into one of at most 192 characters, `.exe` included. The reason is
+Windows' path limit. Classic Windows allows 260 characters for the whole path, folder and
+file name together; a download folder such as `C:\Users\<name>\Downloads\` takes 40 to 60
+of them, a browser adds ` (1)` to a name that already exists, and Explorer, some browsers
+and messengers still enforce the limit. When a name is too long the end of it is cut off —
+which is where the settings begin — and RustDesk then starts with no server configured and
+says nothing about it.
+
+The key alone takes about 60 characters of the name. An ordinary deployment (ID server,
+relay, an `https://` API server and a key) comes to roughly 180, and fits. Long host names
+push it past the limit: the panel then does not offer the installer, and the download
+answers 409, rather than handing out a name that may be damaged on the way. It does not
+drop the API server to make it fit: without one the client guesses
+`http://<host>:21114`, the wrong scheme and port for an HTTPS deployment.
+
+If your settings do not fit, use the **Manual setup** card: the user installs the
+official client from rustdesk.com or GitHub and imports the config string, or fills in
+the ID, relay, API and key fields. A [share link](share-links.md) works the same way: its
+page shows the same settings and config string for the people you send it to, and it
+offers the preconfigured installer under the same rule.
+
 ## How downloads work
 
 - The panel looks up the latest RustDesk release (or `RDPANEL_CLIENT_DOWNLOADS_VERSION`)
