@@ -20,7 +20,7 @@ Product spec: [`SPEC.md`](SPEC.md). User-facing docs: [`README.md`](README.md),
 | `internal/hbbs` | hbbs/hbbr loopback admin channel (`control`), presence poller, reconciler, relay stats, wire format |
 | `internal/legacy` | importer for lejianwen/rustdesk-api v2.7 (`rdpanel migrate-legacy`) |
 | `internal/metrics`, `internal/httpx` | Prometheus metrics, HTTP middleware |
-| `web/` | React + TS + Vite, shadcn/ui, TanStack Query/Router, i18n en/ru, MSW mocks, Playwright |
+| `web/` | React + TS + Vite, shadcn/ui, TanStack Query/Router, i18n en/ru/de, MSW mocks, Playwright |
 | `api/openapi.yaml` | admin API contract; `web/src/api/schema.d.ts` is generated from it |
 | `deploy/` | Dockerfile (s6), compose example, env example, Helm chart, monitoring |
 | `docs/research` | client API and hbbs protocol notes, legacy schema |
@@ -60,7 +60,7 @@ scripts/e2e-server.sh && (cd web && npm run e2e:real)   # Playwright against a r
   ([bropines/rustdesk-server](https://github.com/bropines/rustdesk-server)) and must be
   **opt-in** with upstream behaviour as the default. The image pins the fork by commit
   SHA in `.github/workflows/image.yml` (`SERVER_REF`); bump it deliberately.
-- **UI:** every string in both `en` and `ru` locales (a parity test enforces it); reuse
+- **UI:** every string in the `en`, `ru` and `de` locales (a parity test enforces it); reuse
   existing cards/tables/drawers; check light, dark and mobile.
 - **Metrics:** low-cardinality labels only (no users, IPs, device ids unless opt-in).
   Grafana dashboard and alert rules exist twice (`deploy/monitoring` and the Helm chart's

@@ -20,6 +20,12 @@ func TestResultPage(t *testing.T) {
 			[]string{`lang="en"`, "Signed in", `href="rustdesk://"`, "Return to RustDesk"}, []string{"<script"}},
 		{"success ru", "ru-RU,ru;q=0.9,en;q=0.8", "", 200,
 			[]string{`lang="ru"`, "Вход выполнен", "Вернуться в RustDesk"}, nil},
+		{"success de", "de-DE,de;q=0.9,en;q=0.8", "", 200,
+			[]string{`lang="de"`, "Angemeldet", "Zurück zu RustDesk"}, nil},
+		{"failure de", "de", "nope", 400,
+			[]string{`lang="de"`, "Anmeldung fehlgeschlagen", "nope"}, nil},
+		{"unsupported language falls back to en", "fr-FR,fr;q=0.9", "", 200,
+			[]string{`lang="en"`, "Signed in"}, nil},
 		{"failure escapes message", "en", `<img src=x onerror=alert(1)>`, 400,
 			[]string{"Sign-in failed", "&lt;img src=x onerror=alert(1)&gt;"}, []string{"<img"}},
 	}

@@ -3193,7 +3193,7 @@ export interface components {
              * @description Language of e-mails; null = panel default.
              * @enum {string|null}
              */
-            locale?: "en" | "ru" | null;
+            locale?: "en" | "ru" | "de" | null;
         };
         AuthOptions: {
             /** @description "Forgot password?" is available (SMTP and the panel URL are configured). */
@@ -3231,7 +3231,7 @@ export interface components {
             encryption: components["schemas"]["EmailEncryption"];
             insecure_skip_verify: boolean;
             /** @enum {string} */
-            default_locale: "en" | "ru";
+            default_locale: "en" | "ru" | "de";
             password_reset_available: boolean;
         };
         EmailSettingsInput: {
@@ -3247,13 +3247,13 @@ export interface components {
             encryption?: components["schemas"]["EmailEncryption"];
             insecure_skip_verify?: boolean;
             /** @enum {string} */
-            default_locale?: "en" | "ru";
+            default_locale?: "en" | "ru" | "de";
         };
         TestEmailRequest: {
             /** @description Recipient (default: my address). */
             to?: string;
             /** @enum {string} */
-            locale?: "en" | "ru";
+            locale?: "en" | "ru" | "de";
         };
         TestEmailResult: {
             to: string;
@@ -3373,7 +3373,7 @@ export interface components {
             /** @description SMTP is configured. */
             email_available: boolean;
             /** @enum {string|null} */
-            locale: "en" | "ru" | null;
+            locale: "en" | "ru" | "de" | null;
         };
         PasskeyCeremony: {
             /** @description Opaque single-use id to post back to the matching finish call. */

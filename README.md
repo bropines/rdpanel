@@ -49,7 +49,7 @@ A Go backend + React UI for [RustDesk](https://rustdesk.com), and a drop-in repl
     public share links (`/s/<token>`) that give anyone the same without an account
     ([share links](docs/share-links.md));
   - audit logs, identity providers, hbbs/hbbr control;
-  - English and Russian, light and dark themes, mobile layout.
+  - English, Russian and German, light and dark themes, mobile layout.
 - **Sign-in & Directory:**
   - password, TOTP 2FA with recovery codes, passkeys (WebAuthn) for the panel;
   - LDAP / Active Directory integration with auto-provisioning, group mapping and periodic background sync;

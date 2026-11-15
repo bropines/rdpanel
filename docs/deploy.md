@@ -469,7 +469,7 @@ Details:
   login backoff applies to wrong codes.
 - Failed codes appear in the sign-in audit (`email_code_invalid`); the
   `rdpanel_auth_login_attempts_total` metric uses `method="email"`.
-- E-mails are plain text + minimal HTML, in English or Russian (the user's choice in the
+- E-mails are plain text + minimal HTML, in English, Russian or German (the user's choice in the
   profile, else Settings → E-mail → default language).
 
 </details>

@@ -42,7 +42,7 @@ export const deviceGroups: S["DeviceGroup"][] = [
   { id: 3, name: "Home", note: "", device_count: 0, created_at: iso(90 * DAY), updated_at: iso(90 * DAY) },
 ];
 
-export type MockUser = S["UserDetail"] & { password: string; locale?: "en" | "ru" | null };
+export type MockUser = S["UserDetail"] & { password: string; locale?: "en" | "ru" | "de" | null };
 
 const userBase = (u: Partial<MockUser> & Pick<MockUser, "id" | "username" | "display_name" | "role">): MockUser => ({
   email: null,

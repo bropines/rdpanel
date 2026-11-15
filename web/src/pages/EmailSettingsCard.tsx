@@ -26,7 +26,7 @@ export interface EmailDraft {
   from: string;
   encryption: Encryption;
   insecure_skip_verify: boolean;
-  default_locale: "en" | "ru";
+  default_locale: "en" | "ru" | "de";
 }
 
 export function emailDraft(s: EmailSettings): EmailDraft {
@@ -162,13 +162,14 @@ export function EmailSettingsCard() {
           <Switch id="smtp-insecure" checked={d.insecure_skip_verify} disabled={fromConfig} onCheckedChange={(v) => set({ insecure_skip_verify: v })} />
         </div>
         <Field label={t("emailSettings.defaultLocale")} hint={t("emailSettings.defaultLocaleHint")}>
-          <Select value={d.default_locale} onValueChange={(v) => set({ default_locale: v as "en" | "ru" })}>
+          <Select value={d.default_locale} onValueChange={(v) => set({ default_locale: v as "en" | "ru" | "de" })}>
             <SelectTrigger className="w-48" aria-label={t("emailSettings.defaultLocale")}>
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="en">English</SelectItem>
               <SelectItem value="ru">Русский</SelectItem>
+              <SelectItem value="de">Deutsch</SelectItem>
             </SelectContent>
           </Select>
         </Field>

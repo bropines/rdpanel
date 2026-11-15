@@ -23,10 +23,11 @@ const (
 const (
 	LocaleEN      = "en"
 	LocaleRU      = "ru"
+	LocaleDE      = "de"
 	DefaultLocale = LocaleEN
 )
 
-// NormalizeLocale maps "ru-RU", "RU" etc. to a supported locale ("" when
+// NormalizeLocale maps "ru-RU", "DE" etc. to a supported locale ("" when
 // unsupported).
 func NormalizeLocale(s string) string {
 	s = strings.ToLower(strings.TrimSpace(s))
@@ -34,7 +35,7 @@ func NormalizeLocale(s string) string {
 		s = s[:i]
 	}
 	switch s {
-	case LocaleEN, LocaleRU:
+	case LocaleEN, LocaleRU, LocaleDE:
 		return s
 	}
 	return ""
@@ -112,6 +113,32 @@ var templates = map[string]map[Kind]tmpl{
 			"{{link .Link}}",
 			"Ссылка одноразовая и действует {{.Minutes}} минут. После сброса все сеансы будут завершены.",
 			"Если вы не запрашивали сброс, проигнорируйте письмо: пароль останется прежним.",
+		}},
+	},
+	LocaleDE: {
+		KindTest: {"Test-E-Mail von {{.Title}}", []string{
+			"Dies ist eine Testnachricht von {{.Title}}.",
+			"Wenn Sie sie erhalten haben, ist der E-Mail-Versand richtig eingerichtet.",
+		}},
+		KindVerifyEmail: {"{{.Code}} ist Ihr Bestätigungscode für {{.Title}}", []string{
+			"Hallo {{.Username}},",
+			"mit diesem Code bestätigen Sie Ihre E-Mail-Adresse:",
+			"{{code .Code}}",
+			"Der Code ist {{.Minutes}} Minuten gültig. Wenn Sie ihn nicht angefordert haben, ignorieren Sie diese Nachricht.",
+		}},
+		KindLoginCode: {"{{.Code}} ist Ihr Anmeldecode für {{.Title}}", []string{
+			"Hallo {{.Username}},",
+			"Ihr Anmeldecode:",
+			"{{code .Code}}",
+			"Der Code ist {{.Minutes}} Minuten gültig.{{if .IP}} Angefordert von {{.IP}}.{{end}}",
+			"Waren Sie das nicht, ändern Sie Ihr Passwort: Jemand kennt es.",
+		}},
+		KindPasswordReset: {"Passwort für {{.Title}} zurücksetzen", []string{
+			"Hallo {{.Username}},",
+			"jemand (hoffentlich Sie) möchte das Passwort Ihres Kontos zurücksetzen{{if .IP}}, angefordert von {{.IP}}{{end}}. Über diesen Link wählen Sie ein neues Passwort:",
+			"{{link .Link}}",
+			"Der Link funktioniert einmal und ist {{.Minutes}} Minuten gültig. Nach dem Zurücksetzen werden alle Sitzungen abgemeldet.",
+			"Haben Sie das nicht angefordert, ignorieren Sie diese Nachricht: Ihr Passwort bleibt unverändert.",
 		}},
 	},
 }

@@ -52,7 +52,7 @@ func (c *authCore) registerSecurity(r chi.Router) {
 type profileRequest struct {
 	DisplayName *string     `json:"display_name"`
 	Email       opt[string] `json:"email"`
-	// Locale of e-mails: "en", "ru" or null (panel default).
+	// Locale of e-mails: "en", "ru", "de" or null (panel default).
 	Locale opt[string] `json:"locale"`
 }
 
@@ -88,8 +88,8 @@ func (c *authCore) handleUpdateProfile(w http.ResponseWriter, r *http.Request) {
 		if !req.Locale.Null {
 			u.Locale = req.Locale.V
 		}
-		if u.Locale != "" && u.Locale != "en" && u.Locale != "ru" {
-			f["locale"] = "must be en, ru or null"
+		if u.Locale != "" && u.Locale != "en" && u.Locale != "ru" && u.Locale != "de" {
+			f["locale"] = "must be en, ru, de or null"
 		}
 	}
 	if len(f) > 0 {

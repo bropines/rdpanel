@@ -36,7 +36,8 @@
   "language": {
     "label": "Language",
     "en": "English",
-    "ru": "Русский"
+    "ru": "Русский",
+    "de": "Deutsch"
   },
   "user": {
     "menu": "Account menu",

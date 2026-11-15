@@ -4542,7 +4542,7 @@ components:
       properties:
         display_name: { type: string, maxLength: 128 }
         email: { type: [string, "null"], format: email, description: '"" or null clears it. A new address is unverified (e-mail 2FA turns off).' }
-        locale: { type: [string, "null"], enum: [en, ru, null], description: Language of e-mails; null = panel default. }
+        locale: { type: [string, "null"], enum: [en, ru, de, null], description: Language of e-mails; null = panel default. }
     AuthOptions:
       type: object
       required: [password_reset]
@@ -4588,7 +4588,7 @@ components:
         from: { type: string }
         encryption: { $ref: "#/components/schemas/EmailEncryption" }
         insecure_skip_verify: { type: boolean }
-        default_locale: { type: string, enum: [en, ru] }
+        default_locale: { type: string, enum: [en, ru, de] }
         password_reset_available: { type: boolean }
     EmailSettingsInput:
       type: object
@@ -4601,13 +4601,13 @@ components:
         from: { type: string, description: 'Sender, e.g. "Panel <panel@example.com>".' }
         encryption: { $ref: "#/components/schemas/EmailEncryption" }
         insecure_skip_verify: { type: boolean }
-        default_locale: { type: string, enum: [en, ru] }
+        default_locale: { type: string, enum: [en, ru, de] }
     TestEmailRequest:
       type: object
       additionalProperties: false
       properties:
         to: { type: string, description: "Recipient (default: my address)." }
-        locale: { type: string, enum: [en, ru] }
+        locale: { type: string, enum: [en, ru, de] }
     TestEmailResult:
       type: object
       required: [to]
@@ -4756,7 +4756,7 @@ components:
         email_2fa_enabled: { type: boolean, description: E-mailed sign-in codes are on (used when TOTP is off). }
         email_2fa_required: { type: boolean, description: Admin policy requires e-mail codes for accounts without TOTP (verified address). }
         email_available: { type: boolean, description: SMTP is configured. }
-        locale: { type: [string, "null"], enum: [en, ru, null] }
+        locale: { type: [string, "null"], enum: [en, ru, de, null] }
     PasskeyCeremony:
       type: object
       required: [ceremony_id, options]

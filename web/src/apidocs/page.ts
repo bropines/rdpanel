@@ -3,19 +3,25 @@
  * (web/api-docs.html, a separate Vite entry: nothing here lands in the SPA bundle).
  */
 import { apiDocs as enStrings } from "@/i18n/locales/en.json";
+import { apiDocs as deStrings } from "@/i18n/locales/de.json";
 import { apiDocs as ruStrings } from "@/i18n/locales/ru.json";
 import { applyTheme, readStoredTheme } from "@/lib/theme";
 
 export type DocsStrings = typeof enStrings;
+export type DocsLanguage = "en" | "ru" | "de";
 
 /** Panel language: the stored choice (i18next key), else the browser language. */
-export function docsLanguage(stored: string | null, navigatorLang: string): "en" | "ru" {
+export function docsLanguage(stored: string | null, navigatorLang: string): DocsLanguage {
   const lang = (stored || navigatorLang || "en").toLowerCase();
-  return lang.startsWith("ru") ? "ru" : "en";
+  if (lang.startsWith("ru")) return "ru";
+  if (lang.startsWith("de")) return "de";
+  return "en";
 }
 
-export function docsStrings(lang: "en" | "ru"): DocsStrings {
-  return lang === "ru" ? ruStrings : enStrings;
+export function docsStrings(lang: DocsLanguage): DocsStrings {
+  if (lang === "ru") return ruStrings;
+  if (lang === "de") return deStrings;
+  return enStrings;
 }
 
 export function readCookie(name: string, cookie: string = document.cookie): string | null {

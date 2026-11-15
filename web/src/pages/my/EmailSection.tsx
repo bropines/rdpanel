@@ -63,7 +63,7 @@ export function EmailSection() {
     onError: toastError,
   });
   const locale = useMutation({
-    mutationFn: (l: string) => security.updateProfile({ locale: l === "default" ? null : (l as "en" | "ru") }),
+    mutationFn: (l: string) => security.updateProfile({ locale: l === "default" ? null : (l as "en" | "ru" | "de") }),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: passkeyKeys.overview });
       toast.success(t("common.saved"));
@@ -175,6 +175,7 @@ export function EmailSection() {
             <SelectItem value="default">{t("email.languageDefault")}</SelectItem>
             <SelectItem value="en">English</SelectItem>
             <SelectItem value="ru">Русский</SelectItem>
+            <SelectItem value="de">Deutsch</SelectItem>
           </SelectContent>
         </Select>
       </Field>

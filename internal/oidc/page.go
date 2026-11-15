@@ -56,39 +56,46 @@ type resultPageData struct {
 	OK                              bool
 }
 
-// prefersRussian reports whether the browser lists Russian before English.
-func prefersRussian(r *http.Request) bool {
+// preferredLang returns the first of ru, de or en the browser lists in
+// Accept-Language ("en" when none of them is listed).
+func preferredLang(r *http.Request) string {
 	for _, part := range strings.Split(r.Header.Get("Accept-Language"), ",") {
 		tag := strings.ToLower(strings.TrimSpace(strings.SplitN(part, ";", 2)[0]))
-		switch {
-		case strings.HasPrefix(tag, "ru"):
-			return true
-		case strings.HasPrefix(tag, "en"):
-			return false
+		for _, lang := range []string{"ru", "de", "en"} {
+			if strings.HasPrefix(tag, lang) {
+				return lang
+			}
 		}
 	}
-	return false
+	return "en"
+}
+
+// pageTexts holds the result page strings per language: success texts and
+// the title and hint shown on failure.
+var pageTexts = map[string]struct {
+	resultPageData
+	failTitle, failHint string
+}{
+	"en": {resultPageData{Lang: "en", Title: "Signed in", Body: "You are signed in to RustDesk.",
+		Button: "Return to RustDesk", Hint: "You can close this tab."},
+		"Sign-in failed", "Go back to RustDesk and try again."},
+	"ru": {resultPageData{Lang: "ru", Title: "Вход выполнен", Body: "Вы вошли в RustDesk.",
+		Button: "Вернуться в RustDesk", Hint: "Эту вкладку можно закрыть."},
+		"Не удалось войти", "Вернитесь в RustDesk и попробуйте ещё раз."},
+	"de": {resultPageData{Lang: "de", Title: "Angemeldet", Body: "Sie sind bei RustDesk angemeldet.",
+		Button: "Zurück zu RustDesk", Hint: "Sie können diesen Tab schließen."},
+		"Anmeldung fehlgeschlagen", "Kehren Sie zu RustDesk zurück und versuchen Sie es erneut."},
 }
 
 // page renders the client-login result page. errMsg is shown verbatim
 // (escaped); an empty errMsg means success.
 func (s *Service) page(w http.ResponseWriter, r *http.Request, status int, errMsg string) {
-	d := resultPageData{Lang: "en", OK: errMsg == "",
-		Title: "Signed in", Body: "You are signed in to RustDesk.",
-		Button: "Return to RustDesk", Hint: "You can close this tab."}
-	ru := prefersRussian(r)
-	if ru {
-		d = resultPageData{Lang: "ru", OK: errMsg == "",
-			Title: "Вход выполнен", Body: "Вы вошли в RustDesk.",
-			Button: "Вернуться в RustDesk", Hint: "Эту вкладку можно закрыть."}
-	}
+	texts := pageTexts[preferredLang(r)]
+	d := texts.resultPageData
+	d.OK = errMsg == ""
 	if errMsg != "" {
 		d.Body = errMsg
-		if ru {
-			d.Title, d.Hint = "Не удалось войти", "Вернитесь в RustDesk и попробуйте ещё раз."
-		} else {
-			d.Title, d.Hint = "Sign-in failed", "Go back to RustDesk and try again."
-		}
+		d.Title, d.Hint = texts.failTitle, texts.failHint
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-store")

@@ -100,7 +100,11 @@ func TestRenderTemplates(t *testing.T) {
 			}
 		}
 	}
-	if mail.NormalizeLocale("ru-RU") != "ru" || mail.NormalizeLocale("fr") != "" {
+	if mail.NormalizeLocale("ru-RU") != "ru" || mail.NormalizeLocale("de-DE") != "de" || mail.NormalizeLocale("fr") != "" {
 		t.Error("NormalizeLocale")
+	}
+	m, err := mail.Render(mail.KindLoginCode, "de", mail.Data{Title: "Panel", Username: "u", Code: "123456", Minutes: 10})
+	if err != nil || !strings.Contains(m.Subject, "Anmeldecode") {
+		t.Errorf("de login code subject %q (%v)", m.Subject, err)
 	}
 }

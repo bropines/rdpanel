@@ -77,7 +77,10 @@ describe("api docs page", () => {
 
   it("picks the panel language", () => {
     expect(docsLanguage(null, "ru-RU")).toBe("ru");
+    expect(docsLanguage(null, "de-DE")).toBe("de");
+    expect(docsLanguage(null, "fr-FR")).toBe("en");
     expect(docsLanguage("en", "ru-RU")).toBe("en");
-    expect(docsLanguage(null, "de")).toBe("en");
+    expect(docsLanguage(null, "de")).toBe("de");
+    expect(docsLanguage("de", "ru-RU")).toBe("de");
   });
 });

@@ -365,8 +365,8 @@ func (c *authCore) handleUpdateEmailSettings(w http.ResponseWriter, r *http.Requ
 	if smtpTouched && cur.Source == mailauth.SourceConfig {
 		f["host"] = "read-only: set via RDPANEL_SMTP_* (server configuration)"
 	}
-	if in.DefaultLocale != nil && *in.DefaultLocale != "en" && *in.DefaultLocale != "ru" {
-		f["default_locale"] = "must be en or ru"
+	if in.DefaultLocale != nil && *in.DefaultLocale != "en" && *in.DefaultLocale != "ru" && *in.DefaultLocale != "de" {
+		f["default_locale"] = "must be en, ru or de"
 	}
 	si := mailauth.SMTPInput{Host: cur.Host, Port: cur.Port, Username: cur.Username, From: cur.From,
 		Encryption: cur.Encryption, InsecureSkipVerify: cur.InsecureSkipVerify, Password: in.Password}
